@@ -1,77 +1,100 @@
-# Qwen 业务智能体开发环境
+# Qwen 业务智能体 API
 
-提供工作日志总结、意图识别、自由对话和业务步骤规划 API。项目使用 Python 3.12、uv、FastAPI、Pydantic 和 OpenAI Python SDK；Mac 连接 Ollama，Linux 可连接 vLLM。
+基于 LangChain 1.x、FastAPI 和 Pydantic 的业务智能体开发项目。Mac 使用 Ollama + Qwen3.5 9B Q4_K_M，业务 API 通过 OpenAI 兼容协议调用模型；后续可将模型服务切换到 Linux + vLLM。
 
-新增三个智能体的请求、返回结构和 curl 示例见 [智能体 API 文档](docs/agents-api.md)：
+当前版本 `0.3.0`。四个业务均通过 `langchain.agents.create_agent()` 执行，保留原有 HTTP 请求和返回结构。
 
-| 业务 | 接口 |
-| --- | --- |
-| 根据结构化文字或 JSON 生成工作日志 | `POST /api/agents/log-summary` |
-| 识别文字意图，支持自定义候选标签 | `POST /api/agents/intent` |
-| 普通对话及携带历史的多轮对话 | `POST /api/agents/chat` |
+| 功能 | 接口 | 输入与输出 |
+| --- | --- | --- |
+| 工作日志总结 | `POST /api/agents/log-summary` | 文字或 JSON 对象 → 结构化日志 |
+| 意图识别 | `POST /api/agents/intent` | 文字、可选候选标签 → 意图、判断分数、澄清标记 |
+| 自由对话 | `POST /api/agents/chat` | 当前消息、可选历史 → 回答和模型名称 |
+| 业务步骤规划 | `POST /api/business/plan` | 自然语言业务指令 → 目标、步骤、假设、待确认问题 |
 
-业务代码在 `app/agents/`，统一模型通信在 `app/llm.py`。原有 `POST /api/business/plan` 保持可用。当前版本为 `0.2.0`，未增加运行依赖。
+服务默认监听 `127.0.0.1:8000`，交互文档为 <http://127.0.0.1:8000/docs>。这些接口生成内容和计划，尚未连接审批、订单或消息发送等业务系统。
 
-新增业务验收通过：20 项自动化测试，以及 8 次真实 HTTP / Qwen 调用。覆盖文字与 JSON 日志、自定义与默认意图、不明确意图、普通及多轮对话、原有业务规划回归。实测结果见 [智能体验收记录](verification/agents-live-result.json)。
+## 环境与安装
 
-部署已完成：Ollama 0.40.5 和 FastAPI 已作为 macOS 用户会话服务运行，Qwen3.5 9B Q4_K_M 已下载并验证。真实 SDK 推理、ASGI 路由、实际 HTTP 接口和 GPU 验证全部通过；`ollama ps` 显示 `100% GPU`，上下文为 8192。本次 HTTP 业务请求耗时约 17.44 秒，返回 4 个结构化步骤。完整结果见 [验收状态](verification/STATUS.md)、[验收数据](verification/deployment-result.json) 和 [实际 JSON 返回](verification/http-response.json)。
+本机已验证：Apple M5 / 24GB、macOS 26.7.1、Ollama 0.40.5、Qwen3.5 9B Q4_K_M、Metal GPU。项目固定 Python 3.12；`uv.lock` 锁定完整依赖，虚拟环境位于 `.venv/`，与其他 Python 项目隔离。
 
-## 本机检查
+主要依赖：LangChain `1.4.6`、langchain-core `1.6.12`、langchain-openai `1.7.2`、FastAPI `0.136.3`、Pydantic `2.13.4`。OpenAI SDK 由 LangChain 模型适配器使用；LangSmith 已安装，默认关闭追踪。`create_agent()` 内部依赖 LangGraph 运行时，项目没有自行维护图工作流或引入 Dify。
 
-- macOS 26.7.1，Apple M5，24GB，Metal 支持。
-- 复用 Homebrew 7.0.9、uv 0.11.19、uv 管理的 Python 3.12.13。
-- 现有 Python 3.14 和 3.15 环境保持原样。
-- Ollama CLI 0.40.5 已通过 Homebrew 安装；未改动 `.zshrc`、系统代理或已有服务配置。
-- Homebrew 的 Ollama 配方自动安装 Python 3.15 和 MLX 依赖；业务项目继续使用隔离的 Python 3.12 环境。
-- 模型选择 `qwen3.5:9b-q4_K_M`，Q4_K_M 混合 4-bit 量化，下载约 6.6GB。
-- 默认 Ollama 上下文设为 8192，单模型、单并发，适合先在 24GB Mac 上验证业务流程。
-
-## 安装与启动
-
-在本机 Terminal/iTerm 中执行。若代理或执行权限限制下载，先参考下方代理和网络检查说明。
+新机器获取代码：
 
 ```zsh
-cd /Users/zinnia/project/project-agent/qwen-business-dev
+git clone https://github.com/TonyZhang128/agent-dev.git
+cd agent-dev
+```
+
+现有工作目录为 `qwen-business-dev/`；仓库克隆后的目录名可以不同。以下命令均在项目根目录执行。
+
+Mac 已安装 Homebrew 时，可使用完整安装脚本：
+
+```zsh
 zsh scripts/setup.sh
 zsh scripts/services.sh status
 ```
 
-`setup.sh` 会检查并复用工具，必要时通过 Homebrew 安装 uv/Ollama，通过 uv 复用或安装 Python 3.12，创建 `.venv`、安装锁定依赖、运行离线测试、复用或启动用户会话服务、拉取模型，并进行真实推理、ASGI 接口、已运行的 TCP HTTP 接口和 GPU 分配验证。完成后两个服务已在后台运行。真实测试需要生成三次业务计划，首次加载可能较慢。
+脚本检查并复用 uv、Ollama、Python 3.12 和模型层；缺少工具时使用 Homebrew / uv 安装。随后安装锁定依赖、运行自动化测试、启动用户会话服务、拉取约 6.6GB 模型并验证真实推理。已有 `.env` 保留；模型默认保存在 `~/.ollama/models`，已有 `OLLAMA_MODELS` 配置会被保留。
 
-脚本仅在 `.env` 不存在时从 `.env.example` 创建它；不会覆盖已有配置。Ollama 复用默认模型目录 `~/.ollama/models` 和已有模型层；如已设置 `OLLAMA_MODELS`，保留该设置。启动失败时会退出并给出错误，不会删除现有文件。
-
-已有 Ollama 服务会直接复用，其启动参数保持原样。`start-api.sh` 在前台运行，按 Ctrl-C 停止。需要服务在终端命令退出后持续运行时，使用 macOS 用户会话服务：
+已有工具和模型、只需准备项目时：
 
 ```zsh
-HTTPS_PROXY=http://127.0.0.1:10808 zsh scripts/services.sh start
+export UV_CACHE_DIR="$PWD/.cache/uv"
+uv sync --locked --group dev
+test -f .env || cp .env.example .env
+```
+
+`setup.sh` 需要已有 Homebrew，缺少时会提示安装地址并退出。缓存齐全时 uv 命令可追加 `--offline`。
+
+## 配置与启动
+
+配置读取顺序：进程环境变量优先，然后是项目根目录 `.env`，最后是代码默认值。API key 使用 `SecretStr`，不应提交到 Git。
+
+| 变量 | 默认值 | 用途 |
+| --- | --- | --- |
+| `LLM_BASE_URL` | `http://127.0.0.1:11434/v1` | OpenAI 兼容模型 API，包含 `/v1` |
+| `LLM_MODEL` | `qwen3.5:9b-q4_K_M` | 服务端模型名称 |
+| `LLM_API_KEY` | `ollama` | Ollama 占位值；远端服务按需填写真实 key |
+| `LLM_TIMEOUT_SECONDS` | `180` | 一次 Agent 调用的总超时，也用于模型 HTTP 超时 |
+| `LLM_MAX_TOKENS` | `2048` | 模型输出长度限制 |
+| `LLM_REASONING_EFFORT` | `none` | 关闭当前 Qwen 服务的思考输出；不支持的服务可设为空 |
+| `AGENT_RECURSION_LIMIT` | `8` | Agent 运行步数上限，包含工具调用循环 |
+| `LANGSMITH_TRACING` | `false` | 是否开启 LangSmith 追踪 |
+
+开启 LangSmith 时，还需在进程环境提供其凭据；追踪可能包含业务输入和模型输出。项目默认不会上传追踪。
+
+Mac 后台运行：
+
+```zsh
+zsh scripts/services.sh start
 zsh scripts/services.sh status
-# 修改业务代码后，仅重启 API：
+# 修改代码或 .env 后：
 zsh scripts/services.sh restart-api
-# 停止本项目注册的服务：
+# 停止本项目注册的两个任务：
 zsh scripts/services.sh stop
 ```
 
-这会注册 `local.qwen-business-dev.ollama` 和 `local.qwen-business-dev.api` 两个用户会话任务；已有服务会复用。日志位于 `.logs/ollama-service.*.log`、`.logs/api-service.*.log`。不会写入 shell profile、创建开机登录项或替换已有服务配置，任务持续到停止或用户退出登录。`stop` 只移除这两个项目任务，不会停止其他方式启动的 Ollama。
+脚本注册 `local.qwen-business-dev.ollama`、`local.qwen-business-dev.api` 用户会话任务，复用已运行的服务，不修改 shell profile。任务持续到停止或退出登录；重新登录后运行 `start`。日志在 `.logs/*-service.*.log`。其他方式启动的进程不会被脚本停止。
 
-重新登录 Mac 后，可用 `zsh scripts/services.sh start` 恢复两个后台服务。如果需要以前台方式开发，先用 `zsh scripts/services.sh stop` 停止本项目后台任务，然后在一个终端执行：
+前台开发时，先停止本项目后台任务，再在两个终端分别执行：
 
 ```zsh
 zsh scripts/start-ollama.sh
 ```
 
-再在另一个终端执行 `zsh scripts/start-api.sh`。开发时可追加 `--reload`。使用上述后台服务时，无需同时执行前台启动命令。
+```zsh
+zsh scripts/start-api.sh --reload
+```
 
-## v2rayN 代理
+如 Ollama 已由其他方式启动，直接复用。默认 Ollama 上下文 `8192`、单模型、单并发；Apple Silicon 的 GPU 由 Ollama 自动选择，使用 `ollama ps` 查看 `PROCESSOR` 列。不要同时在端口 8000 启动前台和后台 API。
 
-本机 v2rayN 配置记录的本地端口是 `10808`，TUN 已启用。CLI 未读取到系统代理或终端代理环境变量。先在普通终端验证实际连通性：
+## 代理与下载
+
+本机代理示例为 `http://127.0.0.1:10808`，端口以实际代理配置为准。TUN 开启后仍建议验证终端和模型下载服务的连通性：
 
 ```zsh
 zsh scripts/check-network.sh http://127.0.0.1:10808
-```
-
-如直连失败而代理成功，可仅对安装命令设置 HTTPS 代理及本地绕过规则：
-
-```zsh
 HTTPS_PROXY=http://127.0.0.1:10808 \
 https_proxy=http://127.0.0.1:10808 \
 NO_PROXY=localhost,127.0.0.1,::1 \
@@ -79,95 +102,93 @@ no_proxy=localhost,127.0.0.1,::1 \
 zsh scripts/setup.sh
 ```
 
-不必改动 `.zshrc`。模型下载由 Ollama 服务进程发起；脚本新启动的服务会继承上述代理。如果复用的 Ollama 服务无法下载，需要在它自己的启动环境中配置代理。`check-network.sh` 的 HTTP 401/403 表示已收到服务端响应，并不等同于下载授权成功。
+下载由 Ollama 服务进程发起；新启动的服务继承代理，复用的服务需要自身具有可用网络配置。安装命令的代理设置不修改 `.zshrc`。HTTP 401/403 只表示收到响应，不能证明有下载权限。
 
-本次部署初期，受限执行环境的 socket 返回 `PermissionError: Operation not permitted`，端口监听同样被拒绝。在允许扩展执行权限后，Homebrew 和 Qwen 模型清单均返回 HTTP 200，下载及本地服务已正常运行。TUN 连接状况与执行进程的沙箱权限需要分别检查。
-
-## 测试接口
-
-本节演示原有业务规划接口；三个新增业务请参考 [智能体 API 文档](docs/agents-api.md)。
-
-API 启动后，打开 http://127.0.0.1:8000/docs，或执行：
+## 调用与验证
 
 ```zsh
 curl --noproxy '*' -fsS http://127.0.0.1:8000/health
 curl --noproxy '*' -fsS http://127.0.0.1:8000/ready
+curl --noproxy '*' -fsS http://127.0.0.1:8000/api/agents/log-summary \
+  -H 'Content-Type: application/json' \
+  -d '{"content":{"completed":["完成订单接口"],"pending":["等待验收"],"issues":[]}}'
+curl --noproxy '*' -fsS http://127.0.0.1:8000/api/agents/intent \
+  -H 'Content-Type: application/json' -d '{"text":"查询订单 A100 的状态"}'
+curl --noproxy '*' -fsS http://127.0.0.1:8000/api/agents/chat \
+  -H 'Content-Type: application/json' -d '{"message":"你好，请解释业务智能体。"}'
 curl --noproxy '*' -fsS http://127.0.0.1:8000/api/business/plan \
   -H 'Content-Type: application/json' \
-  -d '{"instruction":"员工提交报销申请后，检查发票是否齐全，齐全则提交部门经理审批，否则通知员工补齐。"}'
+  -d '{"instruction":"检查报销发票，齐全则提交经理审批，否则通知员工补齐。"}'
 ```
 
-示意返回（仅展示结构，具体内容由真实模型生成）：
+完整字段、返回示例、意图标签及历史消息限制见 [智能体 API 文档](docs/agents-api.md)。`/health` 检查 API 存活，`/ready` 检查上游列出配置模型；只有业务调用会实际推理。
 
-```json
-{
-  "goal": "处理员工报销申请",
-  "steps": [
-    {
-      "step": 1,
-      "action": "检查报销发票是否齐全",
-      "responsible_role": "报销受理人员",
-      "condition": "收到报销申请",
-      "expected_output": "发票完整性检查结果"
-    },
-    {
-      "step": 2,
-      "action": "提交部门经理审批",
-      "responsible_role": "报销受理人员",
-      "condition": "发票齐全",
-      "expected_output": "审批申请"
-    },
-    {
-      "step": 3,
-      "action": "通知员工补齐发票",
-      "responsible_role": "报销受理人员",
-      "condition": "发票不齐全",
-      "expected_output": "补件通知"
-    }
-  ],
-  "assumptions": ["报销受理人员的实际岗位待企业确认"],
-  "questions": []
-}
-```
-
-`/health` 只检测 API 进程；`/ready` 检查上游服务是否列出配置的模型，不代表已经完成一次推理。业务接口才会实际调用模型。该接口只生成计划，步骤中的 `condition` 表达分支条件，不会执行报销、审批或通知操作。
-
-输入缺失、空白、超出 2000 字符或含多余字段返回 422；服务不可达返回 503；推理超时返回 504；上游错误、截断或 JSON 校验失败返回 502。不会以默认业务计划掩盖模型失败。
-
-## 验证命令
+错误状态：输入校验失败 `422`，模型服务不可达 `503`，调用超时 `504`，上游错误、拒绝、截断或不合法结果 `502`。模型失败不会返回伪造的成功结果。
 
 ```zsh
 export UV_CACHE_DIR="$PWD/.cache/uv"
-uv sync --locked
+uv run --locked ruff check app tests scripts
+uv run --locked ruff format --check app tests scripts
 uv run --locked python -m unittest discover -s tests -v
-uv run --locked python -m scripts.verify_live
+# 需要运行中的 API 和真实模型：
 uv run --locked python -m scripts.verify_agents
-ollama show qwen3.5:9b-q4_K_M
+# 额外验证模型直调、ASGI、TCP 接口和 Ollama GPU：
+uv run --locked python -m scripts.verify_live
 ollama ps
 ```
 
-离线环境可加 `--offline`，例如 `uv sync --locked --offline`。项目已复用本机缓存，不依赖其他项目的虚拟环境。`uv.lock` 包含跨平台 wheel 信息；两个精确版本的编译包元数据记录在 `pyproject.toml`，使本次离线解析可以完成。升级这两个包时应删除对应 `dependency-metadata` 条目，联网重新生成锁文件。
+自动化测试运行真实 LangChain Agent 和模拟模型 HTTP 传输，不需要 Ollama、联网或云端凭据。26 项测试覆盖既有 API、结构化输出、并发标签隔离、消息隔离、超时、异常以及工具调用循环。真实验收脚本覆盖 8 个业务案例，记录写入本地 `verification/agents-live-result.json`；验收记录、日志和缓存不提交 Git。GitHub Actions 在 Linux 上执行锁定依赖安装、Ruff 和自动化测试，不执行模型下载和真实推理。
 
-真实验证结果写入 `verification/live-result.json`：`real_inference`、`asgi_api`、`http_api`、`gpu_verified` 和 `passed` 用来区分各层验证。失败同样保留记录。可通过 `BUSINESS_API_URL=http://127.0.0.1:8000 uv run --locked python -m scripts.verify_live` 验证已运行的 API；未指定时脚本在临时本地端口启动并关闭测试 API。
+## 项目结构与 Agent 开发
 
-Mac 的 GPU 由 Ollama 通过 Metal 自动选择，无需 CUDA。用 `ollama ps` 查看 PROCESSOR 列，并检查真实测试记录里的 `size_vram` 和 `quantization_level`。本次实测为 `100% GPU`，33/33 层加载到 GPU，模型 GPU 分配约 5.04GB；日志生成速度约 21–22 token/s。最终三次请求分别约 19.09 秒、16.53 秒、17.44 秒。模型默认空闲约 5 分钟后释放资源，下次请求会重新加载。
-
-## 切换 Linux + vLLM
-
-业务 API 与模型服务分开运行。Linux 上先根据 GPU/CUDA 环境按 vLLM 官方文档安装模型服务；不要把 vLLM 加入 Mac 的业务项目依赖。官方 Qwen3.5 部署命令可参考：
-
-```bash
-vllm serve Qwen/Qwen3.5-9B \
-  --served-model-name qwen-business \
-  --host 127.0.0.1 --port 8001 \
-  --max-model-len 8192 \
-  --reasoning-parser qwen3 \
-  --default-chat-template-kwargs '{"enable_thinking": false}'
+```text
+app/
+  main.py                 # FastAPI 路由、生命周期、错误到 HTTP 状态的映射
+  config.py               # .env 配置与默认值
+  schemas.py              # 请求、响应的 Pydantic 模型和校验
+  llm.py                  # ChatOpenAI 工厂、共享 HTTP 客户端、模型就绪检查
+  errors.py               # 与 HTTP 无关的模型输出错误
+  agents/
+    runtime.py            # create_agent / ProviderStrategy / 超时 / 运行步数限制
+    middleware.py         # 拒绝、截断、空输出及工具响应检查
+    base.py               # 可复用的类型化结构化业务 Agent
+    business_plan.py      # 业务步骤规划
+    log_summary.py        # 工作日志总结
+    intent.py             # 请求级候选标签、意图识别及低分澄清
+    chat.py               # 对话消息组织和文本回答
+  prompts/
+    __init__.py           # 按模块路径加载提示词，不依赖当前工作目录
+    business_plan.md     # 各业务独立维护的系统提示词
+    log_summary.md
+    intent.md
+    chat.md
+tests/                    # API、错误处理、Agent 运行时与工具调用测试
+scripts/                  # 网络检查、安装、启动、真实模型验证
+docs/agents-api.md        # 对外 API 约定和示例
+.github/workflows/ci.yml # Linux 自动检查
+pyproject.toml / uv.lock  # 直接依赖与完整锁文件
+.env.example             # 可提交的配置模板；实际 .env 不提交
+AGENTS.md                 # 后续编码 Agent 的仓库约定
 ```
 
-这是未来部署参考，本机尚未执行。该示例使用 Hugging Face 模型权重，与 Mac 的 Q4_K_M 文件格式及内存需求不同；正式服务器的精度、量化和并发参数需要根据实际显存验证。
+调用链：`FastAPI → 业务 Agent → runtime.create_agent → ChatOpenAI → Ollama/vLLM`。结构化业务显式使用 `ProviderStrategy(JSON Schema, strict=True)`，最后再通过 Pydantic 校验；自由对话使用同一 Agent 运行时返回文本。业务代码不直接调用 OpenAI SDK。
 
-在 `.env` 中调整配置，然后重启业务 API：
+新增结构化业务通常修改四处：
+
+1. 在 `app/schemas.py` 定义请求与结果类型，在 `app/prompts/` 添加同名 `.md` 提示词。
+2. 在 `app/agents/` 继承 `StructuredAgent[请求类型, 结果类型]`，定义 `name`、`result_type` 和 `user_content()`。日志总结模块可作为起点。
+3. 在 `app/main.py` 生命周期中创建实例，增加携带 `response_model` 的路由。
+4. 为正常、非法输入和模型失败增加测试，更新 API 文档并运行检查。
+
+动态候选标签参考 `IntentAgent.response_schema()`，每次请求单独构建带枚举的 Agent，避免并发污染。系统提示词修改后需重启 API，以刷新缓存。
+
+需要调用真实业务系统时，用 LangChain `@tool` 定义工具，通过 `build_agent(..., tools=(... ,))` 注册；统一调用 `invoke_agent()` 保留超时、追踪和步数控制。现有业务未注册工具，测试中已覆盖完整工具循环。会改变业务状态的工具应先设计身份、权限、幂等和确认机制，再接入对应业务 API。
+
+目前无服务端持久记忆：聊天历史由调用方传入，每次 Agent 调用使用独立消息状态，未配置 checkpointer。新增会话持久化时需明确用户隔离及存储生命周期。
+
+## Linux + vLLM
+
+在 Linux 独立环境中安装和启动 vLLM，业务 API 仍使用本仓库 uv 环境。Mac 的 GGUF 模型文件不直接复用为 vLLM 权重，服务器显存、量化和并发参数应单独验证。按 [Qwen3.5 vLLM 部署说明](https://github.com/vllm-project/recipes/blob/main/Qwen/Qwen3.5.md)准备模型服务后，修改 `.env`：
 
 ```dotenv
 LLM_BASE_URL=http://127.0.0.1:8001/v1
@@ -176,38 +197,38 @@ LLM_API_KEY=your-server-key-or-placeholder
 LLM_REASONING_EFFORT=none
 ```
 
-若模型服务位于另一台主机，将地址换成它的可访问地址。需要认证时填服务端配置的 key。如果某个服务版本不接受 `reasoning_effort`，可设 `LLM_REASONING_EFFORT=`，并在服务端用模板参数关闭思考模式。前台启动时可用环境变量覆盖 `.env`；后台用户会话服务从 `.env` 读取配置，无须改动业务代码。
+`LLM_MODEL` 必须匹配服务的 `--served-model-name`。不接受 `reasoning_effort` 的服务可设为空，并按服务端模板配置关闭思考。服务需支持 Chat Completions 和原生 JSON Schema 输出；上线前重新运行相同业务验收，验证具体 vLLM / 模型组合。本机未执行 Linux GPU 部署。
 
 Linux 业务 API 启动：
 
 ```bash
-UV_CACHE_DIR="$PWD/.cache/uv" uv sync --locked
-UV_CACHE_DIR="$PWD/.cache/uv" uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 8000
+uv sync --locked
+uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-重新运行相同的接口和真实推理验证，以检查服务端 JSON Schema 兼容性。
+## Git 版本管理
 
-## 文件说明
+远端：<https://github.com/TonyZhang128/agent-dev>。提交 `app/`、测试、文档、脚本、依赖锁文件与 CI；忽略 `.env`、虚拟环境、模型、缓存、日志、验收输出和本地 `skills/`。
 
-- `app/main.py`：HTTP 路由、生命周期和上游错误处理。
-- `app/agents/log_summary.py`：日志总结提示词和业务入口。
-- `app/agents/intent.py`：意图分类、默认候选和不确定结果处理。
-- `app/agents/chat.py`：对话提示词及本次请求的历史消息组织。
-- `app/llm.py`：共享 OpenAI 兼容客户端、结构化及普通文本生成、原有业务规划。
-- `app/schemas.py`：四个业务的输入、返回结构和校验规则。
-- `app/config.py`：`.env` 配置，API key 使用 `SecretStr`。
-- `scripts/`：检查网络、安装、启动及真实推理验证；`verify_agents.py` 验证三个新增业务。
-- `tests/test_api.py`：真实 SDK + 模拟 HTTP 传输的离线测试。
-- `tests/test_agents.py`：三个新增业务的接口、校验、历史隔离和错误处理测试。
-- `docs/agents-api.md`：三个新增智能体的接口约定、调用示例和开发位置。
-- `verification/`：本次实际验证结果和后续真实验证记录。
+后续开发可从 `main` 创建功能分支，运行检查后提交：
+
+```zsh
+git switch -c feature/your-agent
+# 开发并运行上述检查
+git add app tests docs README.md pyproject.toml uv.lock
+git commit -m "feat: add a business agent"
+git push -u origin feature/your-agent
+```
+
+升级依赖时使用 `uv add` / `uv lock` 同步更新 `pyproject.toml` 和 `uv.lock`，通过测试后一起提交，不手改锁文件。
 
 ## 官方资料
 
-- [Ollama Qwen3.5 量化标签](https://registry.ollama.com/library/qwen3.5/tags)
-- [Ollama Metal 支持](https://docs.ollama.com/gpu)
+- [LangChain Agents](https://docs.langchain.com/oss/python/langchain/agents)
+- [LangChain 结构化输出](https://docs.langchain.com/oss/python/langchain/structured-output)
+- [ChatOpenAI](https://docs.langchain.com/oss/python/integrations/chat/openai)
+- [uv 项目管理](https://docs.astral.sh/uv/guides/projects/)
 - [Ollama OpenAI 兼容接口](https://docs.ollama.com/api/openai-compatibility)
 - [Ollama 结构化输出](https://docs.ollama.com/capabilities/structured-outputs)
-- [Homebrew Ollama](https://formulae.brew.sh/formula/ollama)
-- [vLLM Qwen3.5 部署](https://github.com/vllm-project/recipes/blob/main/Qwen/Qwen3.5.md)
-- [vLLM JSON Schema 输出](https://docs.vllm.ai/en/latest/features/structured_outputs/)
+- [Ollama GPU 支持](https://docs.ollama.com/gpu)
+- [vLLM 结构化输出](https://docs.vllm.ai/en/latest/features/structured_outputs/)

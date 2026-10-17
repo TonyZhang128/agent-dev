@@ -1,24 +1,23 @@
+from langchain_core.messages import AIMessage, HumanMessage
+
+from app.agents.runtime import build_agent, invoke_agent
 from app.llm import ModelService
+from app.prompts import load_prompt
 from app.schemas import ChatRequest, ChatResponse
 
 
 class ChatAgent:
-    def __init__(self, model: ModelService):
-        self.model = model
+    def __init__(self, models: ModelService):
+        self.models = models
+        self.agent = build_agent(models, name="chat", prompt=load_prompt("chat"), temperature=0.7)
 
     async def run(self, request: ChatRequest) -> ChatResponse:
         messages = [
-            {
-                "role": "system",
-                "content": (
-                    "你是友好、可靠的中文对话助手，可以自然聊天、回答问题和讨论想法。"
-                    "根据用户语言作答，默认中文，回答简洁清楚；不确定的事情坦诚说明。"
-                    "你没有执行外部业务操作的工具，不声称已操作业务系统。"
-                    "结合本次提供的历史对话理解上下文，不声称记得未提供的历史。"
-                ),
-            },
-            *[item.model_dump() for item in request.history],
-            {"role": "user", "content": request.message},
+            (HumanMessage if item.role == "user" else AIMessage)(content=item.content)
+            for item in request.history
         ]
-        reply = await self.model.generate_text(messages)
-        return ChatResponse(reply=reply, model=self.model.settings.llm_model)
+        messages.append(HumanMessage(content=request.message))
+        state = await invoke_agent(self.agent, self.models, messages)
+        return ChatResponse(
+            reply=state["messages"][-1].text.strip(), model=self.models.settings.llm_model
+        )

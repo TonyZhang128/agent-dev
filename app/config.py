@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = Field(default=180, gt=0, le=600)
     llm_max_tokens: int = Field(default=2048, ge=256, le=8192)
     llm_reasoning_effort: str = "none"
+    agent_recursion_limit: int = Field(default=8, ge=3, le=50)
+    langsmith_tracing: bool = False
 
     @field_validator("llm_base_url")
     @classmethod

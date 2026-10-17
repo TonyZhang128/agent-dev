@@ -10,10 +10,11 @@ import httpx
 import uvicorn
 from fastapi.testclient import TestClient
 
+from app.agents.business_plan import BusinessPlanAgent
 from app.config import ROOT, Settings
 from app.llm import ModelService
 from app.main import create_app
-from app.schemas import BusinessPlan
+from app.schemas import BusinessPlan, PlanRequest
 
 INSTRUCTION = "员工提交报销申请后，先检查发票是否齐全，齐全则提交部门经理审批，否则通知员工补齐。"
 
@@ -23,7 +24,7 @@ async def direct():
     try:
         if not await service.ready():
             raise RuntimeError("配置的模型未在服务端列出")
-        return await service.plan(INSTRUCTION)
+        return await BusinessPlanAgent(service).run(PlanRequest(instruction=INSTRUCTION))
     finally:
         await service.close()
 
@@ -53,10 +54,13 @@ def main():
             report["asgi_api"] = True
         # Independently verify actual TCP HTTP, not just an ASGI test transport.
         import os
+
         api_url = os.environ.get("BUSINESS_API_URL")
         http_started = time.monotonic()
         if api_url:
-            with httpx.Client(base_url=api_url, timeout=settings.llm_timeout_seconds, trust_env=False) as client:
+            with httpx.Client(
+                base_url=api_url, timeout=settings.llm_timeout_seconds, trust_env=False
+            ) as client:
                 response = client.post("/api/business/plan", json={"instruction": INSTRUCTION})
                 response.raise_for_status()
                 BusinessPlan.model_validate(response.json())
@@ -67,7 +71,9 @@ def main():
                 sock.listen(16)
                 port = sock.getsockname()[1]
                 server = uvicorn.Server(uvicorn.Config(create_app(), log_level="warning"))
-                thread = threading.Thread(target=server.run, kwargs={"sockets": [sock]}, daemon=True)
+                thread = threading.Thread(
+                    target=server.run, kwargs={"sockets": [sock]}, daemon=True
+                )
                 thread.start()
                 try:
                     deadline = time.monotonic() + 10
@@ -75,8 +81,14 @@ def main():
                         if not thread.is_alive() or time.monotonic() > deadline:
                             raise RuntimeError("测试 HTTP 服务启动失败")
                         time.sleep(0.05)
-                    with httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=settings.llm_timeout_seconds, trust_env=False) as client:
-                        response = client.post("/api/business/plan", json={"instruction": INSTRUCTION})
+                    with httpx.Client(
+                        base_url=f"http://127.0.0.1:{port}",
+                        timeout=settings.llm_timeout_seconds,
+                        trust_env=False,
+                    ) as client:
+                        response = client.post(
+                            "/api/business/plan", json={"instruction": INSTRUCTION}
+                        )
                         response.raise_for_status()
                         BusinessPlan.model_validate(response.json())
                         report["http_api"] = True
@@ -87,7 +99,9 @@ def main():
         # Query GPU allocation only for local Ollama, independently of business code.
         if "11434" in settings.llm_base_url:
             with httpx.Client(timeout=10, trust_env=False) as client:
-                response = client.post("http://127.0.0.1:11434/api/show", json={"model": settings.llm_model})
+                response = client.post(
+                    "http://127.0.0.1:11434/api/show", json={"model": settings.llm_model}
+                )
                 response.raise_for_status()
                 details = response.json()["details"]
                 report["model_details"] = details
@@ -98,10 +112,13 @@ def main():
                 loaded = response.json()["models"]
                 report["loaded_models"] = loaded
                 report["gpu_verified"] = any(
-                    m.get("name") == settings.llm_model and m.get("size_vram", 0) > 0 for m in loaded
+                    m.get("name") == settings.llm_model and m.get("size_vram", 0) > 0
+                    for m in loaded
                 )
                 if not report["gpu_verified"]:
-                    raise RuntimeError("推理成功，但未能确认模型 GPU 分配；请查看 ollama ps 和服务日志")
+                    raise RuntimeError(
+                        "推理成功，但未能确认模型 GPU 分配；请查看 ollama ps 和服务日志"
+                    )
         report["passed"] = True
     except Exception as exc:
         report["passed"] = False
@@ -109,7 +126,9 @@ def main():
         raise
     finally:
         report["elapsed_seconds"] = round(time.monotonic() - started, 2)
-        (destination / "live-result.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+        (destination / "live-result.json").write_text(
+            json.dumps(report, ensure_ascii=False, indent=2) + "\n"
+        )
         print(json.dumps(report, ensure_ascii=False, indent=2))
 
 

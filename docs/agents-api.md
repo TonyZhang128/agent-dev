@@ -8,7 +8,7 @@
 | 意图识别 | `POST /api/agents/intent` | `app/agents/intent.py` |
 | 自由对话 | `POST /api/agents/chat` | `app/agents/chat.py` |
 
-三个智能体共享 `app/llm.py` 的模型客户端和 `.env` 配置。日志总结、意图识别使用 JSON Schema 约束生成；对话使用普通文本生成，再包装为 JSON 返回。接口只处理传入内容，不执行外部业务操作，不将用户消息保存为服务端会话。
+当前版本 `0.3.0`。三个智能体均通过 LangChain `create_agent()` 执行，共享 `app/llm.py` 的 `ChatOpenAI` 模型工厂和 `.env` 配置。日志总结、意图识别使用 `ProviderStrategy` 和 JSON Schema 约束生成，最后经过 Pydantic 校验；对话返回普通文本，再包装为 JSON。接口只处理传入内容，不执行外部业务操作，不将用户消息保存为服务端会话。
 
 ## 1. 工作日志总结
 
@@ -115,15 +115,15 @@ curl --noproxy '*' -fsS http://127.0.0.1:8000/api/agents/chat \
 - `history` 最多 10 条消息，也就是 5 个完整回合。
 - 历史消息按 `user`、`assistant` 交替排列，以 `user` 开头、`assistant` 结束。
 - 每条历史内容最多 2000 字符，当前消息和全部历史合计最多 4000 字符。
-- 不接收调用方的 `system` 消息；系统提示词在 `app/agents/chat.py` 中维护。
+- 不接收调用方的 `system` 消息；系统提示词在 `app/prompts/chat.md` 中维护。
 - 每次返回完整回答，不使用流式响应。不同请求不会自动共享历史。
 
 ## 开发位置与验证
 
-业务规则和提示词在 `app/agents/`；请求及返回类型在 `app/schemas.py`；路由在 `app/main.py`；OpenAI 兼容模型通信在 `app/llm.py`。
+业务规则在 `app/agents/`，系统提示词在 `app/prompts/`，请求及返回类型在 `app/schemas.py`，路由在 `app/main.py`。`app/agents/base.py` 提供可复用的结构化 Agent，`runtime.py` 统一创建和调用 LangChain Agent，`middleware.py` 检查异常模型响应，`app/llm.py` 负责 OpenAI 兼容模型适配。新增业务的步骤见 [README](../README.md#项目结构与-agent-开发)。
 
 ```zsh
-cd /Users/zinnia/project/project-agent/qwen-business-dev
+# 在项目根目录执行：
 UV_CACHE_DIR="$PWD/.cache/uv" uv run --locked python -m unittest discover -s tests -v
 UV_CACHE_DIR="$PWD/.cache/uv" uv run --locked python -m scripts.verify_agents
 ```
