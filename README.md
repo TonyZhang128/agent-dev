@@ -1,6 +1,6 @@
 # Qwen 业务智能体 API
 
-基于 LangChain 1.x、FastAPI 和 Pydantic 的业务智能体开发项目。Mac 使用 Ollama + Qwen3.5 9B Q4_K_M，业务 API 通过 OpenAI 兼容协议调用模型；后续可将模型服务切换到 Linux + vLLM。
+基于 LangChain 1.x、FastAPI 和 Pydantic 的业务智能体开发项目。开发环境为 macOS + Ollama + Qwen3.5 9B Q4_K_M，上线环境为 Linux + NVIDIA + 独立 vLLM；业务 API 统一通过 OpenAI 兼容协议调用模型。
 
 当前版本 `0.3.0`。四个业务均通过 `langchain.agents.create_agent()` 执行，保留原有 HTTP 请求和返回结构。
 
@@ -31,8 +31,8 @@ cd agent-dev
 Mac 已安装 Homebrew 时，可使用完整安装脚本：
 
 ```zsh
-zsh scripts/setup.sh
-zsh scripts/services.sh status
+zsh scripts/dev/setup.sh
+zsh scripts/dev/services.sh status
 ```
 
 脚本检查并复用 uv、Ollama、Python 3.12 和模型层；缺少工具时使用 Homebrew / uv 安装。随后安装锁定依赖、运行自动化测试、启动用户会话服务、拉取约 6.6GB 模型并验证真实推理。已有 `.env` 保留；模型默认保存在 `~/.ollama/models`，已有 `OLLAMA_MODELS` 配置会被保留。
@@ -45,7 +45,7 @@ uv sync --locked --group dev
 test -f .env || cp .env.example .env
 ```
 
-`setup.sh` 需要已有 Homebrew，缺少时会提示安装地址并退出。缓存齐全时 uv 命令可追加 `--offline`。
+`scripts/dev/setup.sh` 需要已有 Homebrew，缺少时会提示安装地址并退出。缓存齐全时 uv 命令可追加 `--offline`。
 
 ## 配置与启动
 
@@ -67,12 +67,12 @@ test -f .env || cp .env.example .env
 Mac 后台运行：
 
 ```zsh
-zsh scripts/services.sh start
-zsh scripts/services.sh status
+zsh scripts/dev/services.sh start
+zsh scripts/dev/services.sh status
 # 修改代码或 .env 后：
-zsh scripts/services.sh restart-api
+zsh scripts/dev/services.sh restart-api
 # 停止本项目注册的两个任务：
-zsh scripts/services.sh stop
+zsh scripts/dev/services.sh stop
 ```
 
 脚本注册 `local.qwen-business-dev.ollama`、`local.qwen-business-dev.api` 用户会话任务，复用已运行的服务，不修改 shell profile。任务持续到停止或退出登录；重新登录后运行 `start`。日志在 `.logs/*-service.*.log`。其他方式启动的进程不会被脚本停止。
@@ -80,11 +80,11 @@ zsh scripts/services.sh stop
 前台开发时，先停止本项目后台任务，再在两个终端分别执行：
 
 ```zsh
-zsh scripts/start-ollama.sh
+zsh scripts/dev/start-ollama.sh
 ```
 
 ```zsh
-zsh scripts/start-api.sh --reload
+zsh scripts/dev/start-api.sh --reload
 ```
 
 如 Ollama 已由其他方式启动，直接复用。默认 Ollama 上下文 `8192`、单模型、单并发；Apple Silicon 的 GPU 由 Ollama 自动选择，使用 `ollama ps` 查看 `PROCESSOR` 列。不要同时在端口 8000 启动前台和后台 API。
@@ -94,12 +94,12 @@ zsh scripts/start-api.sh --reload
 本机代理示例为 `http://127.0.0.1:10808`，端口以实际代理配置为准。TUN 开启后仍建议验证终端和模型下载服务的连通性：
 
 ```zsh
-zsh scripts/check-network.sh http://127.0.0.1:10808
+zsh scripts/dev/check-network.sh http://127.0.0.1:10808
 HTTPS_PROXY=http://127.0.0.1:10808 \
 https_proxy=http://127.0.0.1:10808 \
 NO_PROXY=localhost,127.0.0.1,::1 \
 no_proxy=localhost,127.0.0.1,::1 \
-zsh scripts/setup.sh
+zsh scripts/dev/setup.sh
 ```
 
 下载由 Ollama 服务进程发起；新启动的服务继承代理，复用的服务需要自身具有可用网络配置。安装命令的代理设置不修改 `.zshrc`。HTTP 401/403 只表示收到响应，不能证明有下载权限。
@@ -131,13 +131,13 @@ uv run --locked ruff check app tests scripts
 uv run --locked ruff format --check app tests scripts
 uv run --locked python -m unittest discover -s tests -v
 # 需要运行中的 API 和真实模型：
-uv run --locked python -m scripts.verify_agents
+uv run --locked python -m scripts.common.verify_agents
 # 额外验证模型直调、ASGI、TCP 接口和 Ollama GPU：
-uv run --locked python -m scripts.verify_live
+uv run --locked python -m scripts.dev.verify_live
 ollama ps
 ```
 
-自动化测试运行真实 LangChain Agent 和模拟模型 HTTP 传输，不需要 Ollama、联网或云端凭据。26 项测试覆盖既有 API、结构化输出、并发标签隔离、消息隔离、超时、异常以及工具调用循环。真实验收脚本覆盖 8 个业务案例，记录写入本地 `verification/agents-live-result.json`；验收记录、日志和缓存不提交 Git。GitHub Actions 在 Linux 上执行锁定依赖安装、Ruff 和自动化测试，不执行模型下载和真实推理。
+自动化测试运行真实 LangChain Agent 和模拟模型 HTTP 传输，不需要 Ollama、联网或云端凭据。测试覆盖脚本分流、生产启动限制、配置保留，以及既有 API、结构化输出、并发标签隔离、消息隔离、超时、异常以及工具调用循环。真实验收脚本覆盖 8 个业务案例，记录写入本地 `verification/agents-live-result.json`；验收记录、日志和缓存不提交 Git。GitHub Actions 在 Linux 上执行锁定依赖安装、Ruff 和自动化测试，不执行模型下载和真实推理。
 
 ## 项目结构与 Agent 开发
 
@@ -163,7 +163,12 @@ app/
     intent.md
     chat.md
 tests/                    # API、错误处理、Agent 运行时与工具调用测试
-scripts/                  # 网络检查、安装、启动、真实模型验证
+scripts/
+  dev/                    # macOS：Homebrew、Ollama、launchd、Metal GPU 验收
+  prod/                   # Linux：运行依赖、API、独立 vLLM、NVIDIA 验收
+  common/                 # 两种环境共用的业务与模型真实推理验收
+  README.md               # 脚本入口和迁移说明
+  *.sh / verify_*.py      # 原路径兼容入口
 docs/agents-api.md        # 对外 API 约定和示例
 .github/workflows/ci.yml # Linux 自动检查
 pyproject.toml / uv.lock  # 直接依赖与完整锁文件
@@ -186,25 +191,51 @@ AGENTS.md                 # 后续编码 Agent 的仓库约定
 
 目前无服务端持久记忆：聊天历史由调用方传入，每次 Agent 调用使用独立消息状态，未配置 checkpointer。新增会话持久化时需明确用户隔离及存储生命周期。
 
-## Linux + vLLM
+## Linux + NVIDIA 上线
 
-在 Linux 独立环境中安装和启动 vLLM，业务 API 仍使用本仓库 uv 环境。Mac 的 GGUF 模型文件不直接复用为 vLLM 权重，服务器显存、量化和并发参数应单独验证。按 [Qwen3.5 vLLM 部署说明](https://github.com/vllm-project/recipes/blob/main/Qwen/Qwen3.5.md)准备模型服务后，修改 `.env`：
+开发和上线使用同一份业务代码及 `uv.lock`，通过脚本目录与模型配置区分。Linux 不执行 Homebrew、launchd 或 Ollama 安装；vLLM 独立于业务 `.venv`。脚本清单见 [scripts/README.md](scripts/README.md)，后台托管示例见 [Linux 部署说明](docs/deployment-linux.md)。
+
+先在 Linux 安装 uv，再准备业务环境：
+
+```bash
+bash scripts/prod/setup.sh
+```
+
+脚本使用 Python 3.12 和 `uv sync --locked --no-dev`，不安装 dev 依赖、不启动服务、不下载模型。根目录 `.env` 不存在时，从 `scripts/prod/api.env.example` 创建；已有 `.env` 保留。将 `LLM_API_KEY` 的占位值改为模型服务密钥，并确认以下配置：
 
 ```dotenv
 LLM_BASE_URL=http://127.0.0.1:8001/v1
 LLM_MODEL=qwen-business
-LLM_API_KEY=your-server-key-or-placeholder
-LLM_REASONING_EFFORT=none
+LLM_API_KEY=your-server-key
+LLM_REASONING_EFFORT=
 ```
 
-`LLM_MODEL` 必须匹配服务的 `--served-model-name`。不接受 `reasoning_effort` 的服务可设为空，并按服务端模板配置关闭思考。服务需支持 Chat Completions 和原生 JSON Schema 输出；上线前重新运行相同业务验收，验证具体 vLLM / 模型组合。本机未执行 Linux GPU 部署。
+按照 [Qwen3.5 vLLM 官方部署说明](https://github.com/vllm-project/recipes/blob/main/Qwen/Qwen3.5.md)，在独立 Python 环境安装经过目标 GPU 验证的固定版本 vLLM。模型权重、CUDA 兼容性、显存、量化及并发参数由目标服务器确定，Mac 的 Ollama 模型不直接复用。
 
-Linux 业务 API 启动：
+在模型服务的终端设置 `VLLM_BIN`（独立环境可执行文件的绝对路径）、`VLLM_MODEL_PATH`（HF 模型 ID 或本地目录），并通过运行环境注入 `VLLM_API_KEY`，与业务 `LLM_API_KEY` 一致。以下为 Qwen3.5 文本业务启动示例，具体参数需按已安装 vLLM 版本验证：
 
 ```bash
-uv sync --locked
-uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 8000
+export VLLM_BIN=/opt/vllm/bin/vllm
+export VLLM_MODEL_PATH=/srv/models/your-qwen-model
+# 运行环境需已提供 VLLM_API_KEY，勿将真实密钥写入仓库。
+bash scripts/prod/start-vllm.sh \
+  --reasoning-parser qwen3 \
+  --default-chat-template-kwargs '{"enable_thinking": false}'
 ```
+
+该入口检查 Linux 和 NVIDIA 驱动，默认监听 `127.0.0.1:8001`，服务名为 `qwen-business`；其他 vLLM 参数原样传入。关闭思考的参数来自 [官方 Qwen3.5 配置说明](https://github.com/vllm-project/recipes/blob/main/Qwen/Qwen3.5.md#configuration-tips)。密钥使用 [vLLM 原生环境变量](https://docs.vllm.ai/en/latest/configuration/env_vars/#environment-variables)传递。
+
+另一终端启动业务 API，模型就绪后执行验收：
+
+```bash
+bash scripts/prod/start-api.sh
+# 另一个终端：
+bash scripts/prod/verify.sh
+```
+
+API 默认监听 `127.0.0.1:8000`，拒绝 `--reload`，启动时不安装或同步依赖。上线需由 systemd 等服务管理器托管，详见 [部署说明](docs/deployment-linux.md)。API 与模型可以部署在不同 Linux 主机；API 主机无需 GPU，`start-vllm.sh` 和完整 `verify.sh` 用于 GPU 主机，远端 API 可单独运行通用业务验收。
+
+模型服务需支持 Chat Completions 和原生 JSON Schema 输出；以真实业务验收结果判断具体模型和 vLLM 组合是否可用。验收文件写入 `verification/`，`nvidia-smi` 成功仅确认驱动和设备可见，模型 GPU 占用需另看服务日志和设备监控。本机未执行 Linux GPU 部署。
 
 ## Git 版本管理
 

@@ -20,6 +20,7 @@ jobs:
           version: "0.11.19"
           python-version: "3.12"
           enable-cache: true
+      - run: for script in scripts/prod/*.sh; do bash -n "$script"; done
       - run: uv sync --locked --group dev
       - run: uv run --locked ruff check app tests scripts
       - run: uv run --locked ruff format --check app tests scripts

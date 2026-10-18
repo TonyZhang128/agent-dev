@@ -125,7 +125,7 @@ curl --noproxy '*' -fsS http://127.0.0.1:8000/api/agents/chat \
 ```zsh
 # 在项目根目录执行：
 UV_CACHE_DIR="$PWD/.cache/uv" uv run --locked python -m unittest discover -s tests -v
-UV_CACHE_DIR="$PWD/.cache/uv" uv run --locked python -m scripts.verify_agents
+UV_CACHE_DIR="$PWD/.cache/uv" uv run --locked python -m scripts.common.verify_agents
 ```
 
 真实测试覆盖日志文字与 JSON 输入、自定义与默认意图、含糊意图、普通对话、携带历史的对话，以及原有业务规划接口。记录保存在 `verification/agents-live-result.json`。
@@ -135,7 +135,9 @@ UV_CACHE_DIR="$PWD/.cache/uv" uv run --locked python -m scripts.verify_agents
 后台服务修改代码后，重启 API 即可，模型服务可继续复用：
 
 ```zsh
-zsh scripts/services.sh restart-api
+zsh scripts/dev/services.sh restart-api
 ```
+
+Linux 上线请使用 [部署脚本说明](../scripts/README.md)中的 `scripts/prod/` 入口，并由服务管理器重启 API。
 
 原有 `POST /api/business/plan` 接口继续可用。
