@@ -56,10 +56,10 @@ export UV_CACHE_DIR="$PWD/.cache/uv"
 uv sync --locked --group dev
 uv run --locked ruff check app tests scripts
 uv run --locked ruff format --check app tests scripts
-uv run --locked python -m unittest discover -s tests -v
+uv run --locked pytest -v
 ```
 
-自动化测试使用真实 LangChain Agent 加模拟 HTTP 模型响应，不需要网络或 Ollama。变更必须通过相关检查；不要通过删除校验或测试掩盖失败。
+自动化测试使用 pytest / pytest-asyncio、真实 LangChain Agent 加模拟 HTTP 模型响应，不需要网络或 Ollama。变更必须通过相关检查；不要通过删除校验或测试掩盖失败。
 
 涉及推理协议、提示词、模型配置或 Agent 流程的变更，启动服务后进行真实验证：
 

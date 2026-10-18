@@ -129,7 +129,10 @@ curl --noproxy '*' -fsS http://127.0.0.1:8000/api/business/plan \
 export UV_CACHE_DIR="$PWD/.cache/uv"
 uv run --locked ruff check app tests scripts
 uv run --locked ruff format --check app tests scripts
-uv run --locked python -m unittest discover -s tests -v
+uv run --locked pytest -v
+# 单独运行一个测试文件，或按名称筛选：
+uv run --locked pytest tests/test_agents.py -v
+uv run --locked pytest -k intent -v
 # 需要运行中的 API 和真实模型：
 uv run --locked python -m scripts.common.verify_agents
 # 额外验证模型直调、ASGI、TCP 接口和 Ollama GPU：
@@ -137,7 +140,7 @@ uv run --locked python -m scripts.dev.verify_live
 ollama ps
 ```
 
-自动化测试运行真实 LangChain Agent 和模拟模型 HTTP 传输，不需要 Ollama、联网或云端凭据。测试覆盖脚本分流、生产启动限制、配置保留，以及既有 API、结构化输出、并发标签隔离、消息隔离、超时、异常以及工具调用循环。真实验收脚本覆盖 8 个业务案例，记录写入本地 `verification/agents-live-result.json`；验收记录、日志和缓存不提交 Git。GitHub Actions 在 Linux 上执行锁定依赖安装、Ruff 和自动化测试，不执行模型下载和真实推理。
+自动化测试使用 pytest / pytest-asyncio，运行真实 LangChain Agent 和模拟模型 HTTP 传输，不需要 Ollama、联网或云端凭据。测试覆盖脚本分流、生产启动限制、配置保留，以及既有 API、结构化输出、并发标签隔离、消息隔离、超时、异常以及工具调用循环。真实验收脚本覆盖 8 个业务案例，记录写入本地 `verification/agents-live-result.json`；验收记录、日志和缓存不提交 Git。GitHub Actions 在 Linux 上执行锁定依赖安装、Ruff 和自动化测试，不执行模型下载和真实推理。
 
 ## 项目结构与 Agent 开发
 
@@ -162,7 +165,7 @@ app/
     log_summary.md
     intent.md
     chat.md
-tests/                    # API、错误处理、Agent 运行时与工具调用测试
+tests/                    # pytest：API、错误处理、Agent 运行时与脚本测试
 scripts/
   dev/                    # macOS：Homebrew、Ollama、launchd、Metal GPU 验收
   prod/                   # Linux：运行依赖、API、独立 vLLM、NVIDIA 验收

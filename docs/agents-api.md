@@ -124,7 +124,7 @@ curl --noproxy '*' -fsS http://127.0.0.1:8000/api/agents/chat \
 
 ```zsh
 # 在项目根目录执行：
-UV_CACHE_DIR="$PWD/.cache/uv" uv run --locked python -m unittest discover -s tests -v
+UV_CACHE_DIR="$PWD/.cache/uv" uv run --locked pytest -v
 UV_CACHE_DIR="$PWD/.cache/uv" uv run --locked python -m scripts.common.verify_agents
 ```
 

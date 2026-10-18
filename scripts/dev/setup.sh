@@ -19,7 +19,7 @@ uv python find 3.12 >/dev/null 2>&1 || uv python install 3.12
 print '2/5 创建 Python 环境并验证代码'
 uv sync --locked --group dev
 [[ -e .env ]] || cp -n .env.example .env
-uv run --locked python -m unittest discover -s tests -v
+uv run --locked pytest -v
 
 print '3/5 复用已有服务，或启动本项目的 macOS 用户会话服务'
 zsh scripts/dev/services.sh start
