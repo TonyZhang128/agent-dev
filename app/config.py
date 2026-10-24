@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,9 +16,18 @@ class Settings(BaseSettings):
     llm_api_key: SecretStr = SecretStr("ollama")
     llm_timeout_seconds: float = Field(default=180, gt=0, le=600)
     llm_max_tokens: int = Field(default=2048, ge=256, le=8192)
+    llm_context_tokens: int = Field(default=8192, ge=1024, le=1048576)
+    llm_context_margin_tokens: int = Field(default=256, ge=0, le=8192)
+    conversation_max_input_characters: int = Field(default=1000000, ge=1, le=10000000)
     llm_reasoning_effort: str = "none"
     agent_recursion_limit: int = Field(default=8, ge=3, le=50)
     langsmith_tracing: bool = False
+
+    @model_validator(mode="after")
+    def validate_context_budget(self) -> "Settings":
+        if self.llm_max_tokens + self.llm_context_margin_tokens >= self.llm_context_tokens:
+            raise ValueError("context must exceed output and margin token reservations")
+        return self
 
     @field_validator("llm_base_url")
     @classmethod

@@ -1,0 +1,32 @@
+[
+  {
+    "name": "unknown_ambiguous",
+    "request": {
+      "user_id": "test-user",
+      "session_id": "test-session",
+      "history": [],
+      "text": "帮我打开那个页面"
+    },
+    "response": {
+      "intent": "unknown",
+      "confidence": 0.4,
+      "reason": "用户没有明确指出希望打开的页面。",
+      "needs_clarification": true
+    }
+  },
+  {
+    "name": "unknown_low_confidence",
+    "request": {
+      "user_id": "test-user",
+      "session_id": "test-session",
+      "history": [],
+      "text": "可能想看看工作相关的内容，还没确定"
+    },
+    "response": {
+      "intent": "unknown",
+      "confidence": 0.6499,
+      "reason": "目标页面尚不明确，判断分数低于阈值，需要澄清。",
+      "needs_clarification": true
+    }
+  }
+]

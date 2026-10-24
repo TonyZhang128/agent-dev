@@ -1,0 +1,6 @@
+{
+  "intent": "image_library",
+  "confidence": 0.95,
+  "reason": "用户明确要求进入图片库查看图片。",
+  "needs_clarification": false
+}

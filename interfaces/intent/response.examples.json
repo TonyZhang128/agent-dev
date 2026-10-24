@@ -1,0 +1,77 @@
+[
+  {
+    "name": "work_list",
+    "request": {
+      "user_id": "test-user",
+      "session_id": "test-session",
+      "history": [],
+      "text": "我今天有哪些待办任务"
+    },
+    "response": {
+      "intent": "work_list",
+      "confidence": 0.95,
+      "reason": "用户希望查看工作列表中的待办任务。",
+      "needs_clarification": false
+    }
+  },
+  {
+    "name": "supervision_log",
+    "request": {
+      "user_id": "test-user",
+      "session_id": "test-session",
+      "history": [],
+      "text": "我要填写今天的监理日志"
+    },
+    "response": {
+      "intent": "supervision_log",
+      "confidence": 0.96,
+      "reason": "用户明确要求进入监理日志页面填写日志。",
+      "needs_clarification": false
+    }
+  },
+  {
+    "name": "image_library",
+    "request": {
+      "user_id": "test-user",
+      "session_id": "test-session",
+      "history": [],
+      "text": "你好，帮我打开图片库"
+    },
+    "response": {
+      "intent": "image_library",
+      "confidence": 0.95,
+      "reason": "用户明确要求进入图片库查看图片。",
+      "needs_clarification": false
+    }
+  },
+  {
+    "name": "business_management",
+    "request": {
+      "user_id": "test-user",
+      "session_id": "test-session",
+      "history": [],
+      "text": "进入业务管理页面"
+    },
+    "response": {
+      "intent": "business_management",
+      "confidence": 0.96,
+      "reason": "用户明确要求进入业务管理页面。",
+      "needs_clarification": false
+    }
+  },
+  {
+    "name": "chat",
+    "request": {
+      "user_id": "test-user",
+      "session_id": "test-session",
+      "history": [],
+      "text": "你好，今天过得怎么样"
+    },
+    "response": {
+      "intent": "chat",
+      "confidence": 0.99,
+      "reason": "你好！有什么可以帮你？",
+      "needs_clarification": false
+    }
+  }
+]

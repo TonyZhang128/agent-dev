@@ -1,0 +1,40 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "intent": {
+      "enum": [
+        "work_list",
+        "supervision_log",
+        "image_library",
+        "business_management",
+        "chat",
+        "unknown"
+      ],
+      "title": "Intent",
+      "type": "string"
+    },
+    "confidence": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Confidence",
+      "type": "number"
+    },
+    "reason": {
+      "minLength": 1,
+      "title": "Reason",
+      "type": "string"
+    },
+    "needs_clarification": {
+      "title": "Needs Clarification",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "intent",
+    "confidence",
+    "reason",
+    "needs_clarification"
+  ],
+  "title": "IntentResult",
+  "type": "object"
+}

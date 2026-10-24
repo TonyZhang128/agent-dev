@@ -12,6 +12,7 @@ from app.agents.runtime import build_agent, invoke_agent
 from app.config import Settings
 from app.llm import ModelService
 from app.main import create_app
+from tests.helpers import request_payload
 
 
 def completion(message, finish="stop"):
@@ -40,11 +41,24 @@ def models_for(respond, **settings):
 
 
 @pytest.mark.asyncio
-async def test_concurrent_custom_intents_are_isolated():
+async def test_concurrent_fixed_intent_requests_are_isolated():
+    cases = {
+        "打开工作列表": "work_list",
+        "填写监理日志": "supervision_log",
+        "打开图片库": "image_library",
+        "进入业务管理": "business_management",
+        "你好": "chat",
+        "谢谢": "chat",
+    }
 
     def respond(request):
         body = json.loads(request.content)
-        label = body["response_format"]["json_schema"]["schema"]["properties"]["intent"]["enum"][0]
+        assert len(body["messages"]) == 2
+        if "response_format" not in body:
+            return completion({"content": "回答：" + body["messages"][-1]["content"]})
+        content = json.loads(body["messages"][-1]["content"])
+        assert [item["label"] for item in content["intents"]] == list(dict.fromkeys(cases.values()))
+        label = cases[content["text"]]
         return completion(
             {
                 "content": json.dumps(
@@ -65,21 +79,15 @@ async def test_concurrent_custom_intents_are_isolated():
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:
 
-            async def classify(label):
-                response = await client.post(
-                    "/api/agents/intent",
-                    json={
-                        "text": "查询记录",
-                        "intents": [{"label": label, "description": "查询指定记录"}],
-                    },
-                )
+            async def classify(text):
+                payload = {"text": text, "intents": []}
+                response = await client.post("/api/agents/intent", json=request_payload(payload))
                 assert response.status_code == 200
+                if cases[text] == "chat":
+                    assert response.json()["reason"] == "回答：" + text
                 return response.json()["intent"]
 
-            assert await asyncio.gather(classify("lookup_a"), classify("lookup_b")) == [
-                "lookup_a",
-                "lookup_b",
-            ]
+            assert await asyncio.gather(*(classify(text) for text in cases)) == list(cases.values())
     assert service.http_client.is_closed
     assert service.http_async_client.is_closed
 
@@ -96,7 +104,9 @@ async def test_total_timeout_bounds_the_agent():
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:
-            response = await client.post("/api/agents/chat", json={"message": "你好"})
+            response = await client.post(
+                "/api/agents/chat", json=request_payload({"message": "你好"})
+            )
             assert response.status_code == 504
 
 
@@ -159,7 +169,9 @@ async def test_langchain_tool_loop_can_be_extended():
 def test_refusal_and_content_filter_return_502(message, finish):
     service = models_for(lambda request, m=message, f=finish: completion(m, f))
     with TestClient(create_app(service)) as client:
-        response = client.post("/api/agents/log-summary", json={"content": "已完成文档"})
+        response = client.post(
+            "/api/agents/log-summary", json=request_payload({"content": "已完成文档"})
+        )
         assert response.status_code == 502
 
 
@@ -173,7 +185,12 @@ def test_unregistered_tool_calls_return_502():
     with TestClient(
         create_app(models_for(lambda request: completion(response, "tool_calls")))
     ) as client:
-        assert client.post("/api/agents/chat", json={"message": "执行任务"}).status_code == 502
+        assert (
+            client.post(
+                "/api/agents/chat", json=request_payload({"message": "执行任务"})
+            ).status_code
+            == 502
+        )
 
 
 def test_readiness_handles_malformed_metadata():

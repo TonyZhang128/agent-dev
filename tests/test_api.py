@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from app.config import Settings
 from app.llm import ModelService
 from app.main import create_app
+from tests.helpers import request_payload
 
 VALID = {
     "goal": "处理报销申请",
@@ -90,7 +91,9 @@ def test_sdk_schema_and_route(plan_client):
     with plan_client() as client:
         assert client.get("/health").status_code == 200
         assert client.get("/ready").status_code == 200
-        response = client.post("/api/business/plan", json={"instruction": "审核报销"})
+        response = client.post(
+            "/api/business/plan", json=request_payload({"instruction": "审核报销"})
+        )
         assert response.status_code == 200
         assert response.json() == VALID
 
@@ -108,7 +111,7 @@ def test_sdk_schema_and_route(plan_client):
 )
 def test_invalid_inputs(plan_client, body):
     with plan_client() as client:
-        assert client.post("/api/business/plan", json=body).status_code == 422
+        assert client.post("/api/business/plan", json=request_payload(body)).status_code == 422
 
 
 @pytest.mark.parametrize(
@@ -119,21 +122,30 @@ def test_invalid_inputs(plan_client, body):
 def test_bad_model_json(plan_client, content):
     with plan_client(content=content) as client:
         assert (
-            client.post("/api/business/plan", json={"instruction": "审核报销"}).status_code == 502
+            client.post(
+                "/api/business/plan", json=request_payload({"instruction": "审核报销"})
+            ).status_code
+            == 502
         )
 
 
 def test_truncated_output(plan_client):
     with plan_client(finish="length") as client:
         assert (
-            client.post("/api/business/plan", json={"instruction": "审核报销"}).status_code == 502
+            client.post(
+                "/api/business/plan", json=request_payload({"instruction": "审核报销"})
+            ).status_code
+            == 502
         )
 
 
 def test_upstream_failure(plan_client):
     with plan_client(status=404) as client:
         assert (
-            client.post("/api/business/plan", json={"instruction": "审核报销"}).status_code == 502
+            client.post(
+                "/api/business/plan", json=request_payload({"instruction": "审核报销"})
+            ).status_code
+            == 502
         )
 
 
@@ -142,5 +154,8 @@ def test_unavailable(plan_client):
         assert client.get("/health").status_code == 200
         assert client.get("/ready").status_code == 503
         assert (
-            client.post("/api/business/plan", json={"instruction": "审核报销"}).status_code == 503
+            client.post(
+                "/api/business/plan", json=request_payload({"instruction": "审核报销"})
+            ).status_code
+            == 503
         )

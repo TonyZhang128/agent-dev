@@ -19,6 +19,23 @@ from app.errors import InvalidModelOutput
 from app.llm import ModelService
 
 
+def prepared_schema(schema: dict | None, name: str) -> dict | None:
+    if schema is None:
+        return None
+    schema = deepcopy(schema)
+    schema["title"] = name
+    schema.setdefault("description", f"Structured response for {name}")
+    return schema
+
+
+def system_prompt(prompt: str, schema: dict | None) -> str:
+    return (
+        prompt
+        if schema is None
+        else prompt + "\nJSON schema: " + json.dumps(schema, ensure_ascii=False)
+    )
+
+
 def build_agent(
     models: ModelService,
     *,
@@ -29,16 +46,13 @@ def build_agent(
     tools: tuple[BaseTool, ...] = (),
 ):
     strategy = None
+    schema = prepared_schema(schema, name)
     if schema is not None:
-        schema = deepcopy(schema)
-        schema["title"] = name
-        schema.setdefault("description", f"Structured response for {name}")
-        prompt += "\nJSON schema: " + json.dumps(schema, ensure_ascii=False)
         strategy = ProviderStrategy(schema=schema, strict=True)
     return create_agent(
         model=models.chat_model(temperature=temperature),
         tools=list(tools),
-        system_prompt=prompt,
+        system_prompt=system_prompt(prompt, schema),
         response_format=strategy,
         middleware=[ResponseGuard(allow_tool_calls=bool(tools))],
         checkpointer=None,
@@ -46,13 +60,22 @@ def build_agent(
     )
 
 
-async def invoke_agent(agent, models: ModelService, messages: list[AnyMessage]) -> dict[str, Any]:
+async def invoke_agent(
+    agent,
+    models: ModelService,
+    messages: list[AnyMessage],
+    *,
+    metadata: dict[str, str] | None = None,
+) -> dict[str, Any]:
     try:
         with tracing_context(enabled=models.settings.langsmith_tracing):
             async with asyncio.timeout(models.settings.llm_timeout_seconds):
                 return await agent.ainvoke(
                     {"messages": messages},
-                    config={"recursion_limit": models.settings.agent_recursion_limit},
+                    config={
+                        "recursion_limit": models.settings.agent_recursion_limit,
+                        "metadata": metadata or {},
+                    },
                 )
     except (
         StructuredOutputError,

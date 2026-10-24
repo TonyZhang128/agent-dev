@@ -13,8 +13,8 @@
 | Linux 业务环境安装 | `bash scripts/prod/setup.sh` | Python 3.12、锁定运行依赖、保留已有 `.env` |
 | Linux 前台 API | `bash scripts/prod/start-api.sh` | 不同步依赖，拒绝 reload；允许传入其他 uvicorn 参数 |
 | Linux 前台模型服务 | `bash scripts/prod/start-vllm.sh [vLLM 参数]` | NVIDIA 检查、独立 vLLM 环境；不安装驱动或模型 |
-| Linux 完整验收 | `bash scripts/prod/verify.sh` | NVIDIA 信息、运行中 API 的 8 个案例、通用真实推理 |
-| 通用业务验收 | `uv run --locked python -m scripts.common.verify_agents` | Mac/Linux；调用运行中的 API |
+| Linux 完整验收 | `bash scripts/prod/verify.sh` | NVIDIA 信息、运行中 API 的业务验收及完整意图、日志评测集、通用真实推理 |
+| 通用业务验收 | `uv run --locked python -m scripts.common.verify_agents` | Mac/Linux；调用运行中的 API，验收完整意图及日志评测集 |
 | 通用推理验收 | `uv run --locked python -m scripts.common.verify_live` | Mac/Linux；直调 Agent、ASGI、TCP；不检查硬件 |
 
 Linux 完整步骤、配置和后台托管见 [部署说明](../docs/deployment-linux.md)。Mac 步骤见 [项目 README](../README.md#环境与安装)。
@@ -25,4 +25,8 @@ Linux 完整步骤、配置和后台托管见 [部署说明](../docs/deployment-
 
 开发安装通过 `uv sync --locked --group dev` 安装 pytest / pytest-asyncio，并使用 `uv run --locked pytest -v` 执行离线单元测试。生产 `--no-dev` 环境不安装这些测试工具。
 
-真实验收会调用模型，报告写入忽略提交的 `verification/`。设置 `BUSINESS_API_URL` 可验证其他地址的 API，模型直调仍读取当前进程及根目录 `.env` 的 `LLM_*` 配置，二者需对应同一部署。Linux 验收使用 `--no-sync --no-dev`，避免安装开发工具或在验收时修改环境。
+真实验收会调用模型，报告写入忽略提交的 `verification/`。业务验收报告 `agents-live-result.json` 的每条 `checks` 记录包含实际请求体 `request` 和 API 输出 `response`。设置 `BUSINESS_API_URL` 可验证其他地址的 API，模型直调仍读取当前进程及根目录 `.env` 的 `LLM_*` 配置，二者需对应同一部署。Linux 验收使用 `--no-sync --no-dev`，避免安装开发工具或在验收时修改环境。
+
+通用业务验收读取 `data/intent.json` 的版本化评测集，逐条比对固定五类页面导航/一般交流和 `unknown` 兜底结果，并验证非空 `intents` 被拒绝为 `422`；任何不匹配都会使验收失败。用例和成功标准见 [意图识别测试说明](../docs/intent-testing.md)。
+
+通用业务验收读取 `data/log_summary.json` 中用户提供的唯一原始 OCR 对象，并使用 `interfaces/log_summary/response.example.json` 校验固定响应的日期及列表有无；该条记录名为 `provided_ocr_log`。另读取 `tests/fixtures/log_summary_cases.json`（版本 `4.0.0`，11条，含5条工程 OCR）做完整回归。检查实际日期、列表事实有无、必要指标/数值/单位及禁止断言；忽略空白和全半角差异，不逐字比较参考段落。任一日志不匹配也会使验收失败。报告包含 `log_summary_dataset_version`，用户输入记录包含 `expected` 和 `passed`，回归日志还包含 `acceptance`。完整验收共45次 HTTP 业务调用：41次成功响应、4次非空候选的预期 `422`；意图数据集版本为 `4.0.0`，包含24条分类及4条非法请求。业务话术与人工复核边界见 [日志总结测试说明](../docs/log-summary-testing.md)。

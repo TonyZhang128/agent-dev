@@ -17,6 +17,11 @@ from app.main import create_app
 from app.schemas import BusinessPlan, PlanRequest
 
 INSTRUCTION = "员工提交报销申请后，先检查发票是否齐全，齐全则提交部门经理审批，否则通知员工补齐。"
+PLAN_REQUEST = {
+    "user_id": "verification-user",
+    "session_id": "verification-session",
+    "instruction": INSTRUCTION,
+}
 
 
 async def direct():
@@ -24,7 +29,7 @@ async def direct():
     try:
         if not await service.ready():
             raise RuntimeError("配置的模型未在服务端列出")
-        return await BusinessPlanAgent(service).run(PlanRequest(instruction=INSTRUCTION))
+        return await BusinessPlanAgent(service).run(PlanRequest(**PLAN_REQUEST))
     finally:
         await service.close()
 
@@ -46,7 +51,7 @@ def main(*, gpu_check=None):
             assert client.get("/health").status_code == 200
             assert client.get("/ready").status_code == 200
             asgi_started = time.monotonic()
-            response = client.post("/api/business/plan", json={"instruction": INSTRUCTION})
+            response = client.post("/api/business/plan", json=PLAN_REQUEST)
             report["asgi_seconds"] = round(time.monotonic() - asgi_started, 2)
             if response.status_code != 200:
                 raise RuntimeError(f"FastAPI returned {response.status_code}: {response.text}")
@@ -61,7 +66,7 @@ def main(*, gpu_check=None):
             with httpx.Client(
                 base_url=api_url, timeout=settings.llm_timeout_seconds, trust_env=False
             ) as client:
-                response = client.post("/api/business/plan", json={"instruction": INSTRUCTION})
+                response = client.post("/api/business/plan", json=PLAN_REQUEST)
                 response.raise_for_status()
                 BusinessPlan.model_validate(response.json())
                 report["http_api"] = True
@@ -86,9 +91,7 @@ def main(*, gpu_check=None):
                         timeout=settings.llm_timeout_seconds,
                         trust_env=False,
                     ) as client:
-                        response = client.post(
-                            "/api/business/plan", json={"instruction": INSTRUCTION}
-                        )
+                        response = client.post("/api/business/plan", json=PLAN_REQUEST)
                         response.raise_for_status()
                         BusinessPlan.model_validate(response.json())
                         report["http_api"] = True

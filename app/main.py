@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from openai import APIConnectionError, APIStatusError, APITimeoutError
 
@@ -11,7 +12,7 @@ from app.agents.chat import ChatAgent
 from app.agents.intent import IntentAgent
 from app.agents.log_summary import LogSummaryAgent
 from app.config import Settings
-from app.errors import InvalidModelOutput
+from app.errors import ConversationInputTooLarge, InvalidModelOutput
 from app.llm import ModelService
 from app.schemas import (
     BusinessPlan,
@@ -34,13 +35,26 @@ def create_app(service: ModelService | None = None) -> FastAPI:
         try:
             app.state.business_plan_agent = BusinessPlanAgent(app.state.model_service)
             app.state.log_summary_agent = LogSummaryAgent(app.state.model_service)
-            app.state.intent_agent = IntentAgent(app.state.model_service)
             app.state.chat_agent = ChatAgent(app.state.model_service)
+            app.state.intent_agent = IntentAgent(app.state.model_service, app.state.chat_agent)
             yield
         finally:
             await app.state.model_service.close()
 
     app = FastAPI(title="Qwen 业务智能体 API", version="0.3.0", lifespan=lifespan)
+
+    @app.exception_handler(RequestValidationError)
+    async def invalid_request(request: Request, exc: RequestValidationError):
+        # Pydantic's input/ctx may contain the entire conversation and identity.
+        details = [{key: item[key] for key in ("type", "loc", "msg")} for item in exc.errors()]
+        return JSONResponse(status_code=422, content={"detail": details})
+
+    @app.exception_handler(ConversationInputTooLarge)
+    async def conversation_too_large(request: Request, exc: ConversationInputTooLarge):
+        return JSONResponse(
+            status_code=422,
+            content={"detail": "请求超过输入上限，或当前输入与系统提示词超出上下文预算"},
+        )
 
     @app.exception_handler(APITimeoutError)
     @app.exception_handler(TimeoutError)
@@ -94,7 +108,10 @@ def create_app(service: ModelService | None = None) -> FastAPI:
         return await request.app.state.log_summary_agent.run(payload)
 
     @app.post(
-        "/api/agents/intent", response_model=IntentResult, tags=["智能体"], summary="识别业务意图"
+        "/api/agents/intent",
+        response_model=IntentResult,
+        tags=["智能体"],
+        summary="识别页面导航或一般交流意图",
     )
     async def intent(payload: IntentRequest, request: Request):
         return await request.app.state.intent_agent.run(payload)

@@ -1,0 +1,75 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "title": {
+      "maxLength": 100,
+      "minLength": 1,
+      "title": "Title",
+      "type": "string"
+    },
+    "date": {
+      "anyOf": [
+        {
+          "maxLength": 50,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "原样摘录输入date、日志日期或检测日期；检测日期优先于计划日期。例如检测日期2024年10月26日则输出2024年10月26日；只有计划日期时为null。",
+      "title": "Date"
+    },
+    "summary": {
+      "description": "可纳入当日日志的客观中文段落，保留施工标段、部位、指标、全部原始实测值及单位；禁止换算，例如弯沉0.1、0.2、0.3（单位0.01mm）必须保持这三个数值；不推断合格结论。",
+      "maxLength": 1000,
+      "minLength": 1,
+      "title": "Summary",
+      "type": "string"
+    },
+    "completed_items": {
+      "description": "仅输入明确写出已完成的事项；只有表格、测量数据或检测日期时必须为[]，不能添加完成检测或完成记录填写。",
+      "items": {
+        "maxLength": 300,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 8,
+      "title": "Completed Items",
+      "type": "array"
+    },
+    "pending_items": {
+      "description": "仅输入明确的待办或进行中事项；空值及未记录合格率不产生待办，无则[]。",
+      "items": {
+        "maxLength": 300,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 8,
+      "title": "Pending Items",
+      "type": "array"
+    },
+    "issues": {
+      "description": "输入原表明确的不合格结论、问题、风险或矛盾，必须保留；例如结论为宽度不合格则列出宽度不合格；未填合格率不属于质量问题，无则[]。",
+      "items": {
+        "maxLength": 300,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 8,
+      "title": "Issues",
+      "type": "array"
+    }
+  },
+  "required": [
+    "title",
+    "date",
+    "summary",
+    "completed_items",
+    "pending_items",
+    "issues"
+  ],
+  "title": "LogSummary",
+  "type": "object"
+}
