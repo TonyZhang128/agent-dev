@@ -1,0 +1,22 @@
+# Run through scripts/dev/start-frpc.sh so relative paths use the repository root.
+serverAddr = "107.182.190.191"
+serverPort = 7000
+loginFailExit = false
+
+auth.method = "token"
+auth.tokenSource.type = "file"
+auth.tokenSource.file.path = ".secrets/frp/token"
+
+transport.tls.enable = true
+transport.tls.trustedCaFile = ".secrets/frp/ca.crt"
+transport.tls.serverName = "107.182.190.191"
+
+log.to = "console"
+log.level = "info"
+
+[[proxies]]
+name = "qwen-business-api"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 8000
+remotePort = 18000

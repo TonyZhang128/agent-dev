@@ -13,6 +13,8 @@
 
 服务默认监听 `127.0.0.1:8000`，交互文档为 <http://127.0.0.1:8000/docs>。这些接口生成内容和计划，尚未连接审批、订单或消息发送等业务系统。
 
+本机 API 已通过 frp 接入公网服务器，访问地址为 `https://107.182.190.191:8443`，Swagger 为 `/docs`。公网调用无需账户、密码或 API key，另一台电脑上的系统可以直接发送 HTTP API 请求；HTTPS 使用私有 CA，需将本机 `.secrets/frp/ca.crt` 复制到调用方并配置证书信任。示例：`curl --cacert ./ca.crt https://107.182.190.191:8443/health`。客户端连接 `107.182.190.191:7000`，将本机 `8000` 转发到服务端回环端口 `18000`，由服务器已有 Caddy 对外提供访问。启动与关闭隧道分别使用 `zsh scripts/dev/services.sh start-frpc`、`stop-frpc`，调用示例与运维见 [frp 部署说明](docs/frp.md)。
+
 ## 环境与安装
 
 本机已验证：Apple M5 / 24GB、macOS 26.7.1、Ollama 0.40.5、Qwen3.5 9B Q4_K_M、Metal GPU。项目固定 Python 3.12；`uv.lock` 锁定完整依赖，虚拟环境位于 `.venv/`，与其他 Python 项目隔离。
@@ -191,6 +193,8 @@ scripts/
   common/                 # 两种环境共用的业务与模型真实推理验收
   README.md               # 脚本入口和迁移说明
   *.sh / verify_*.py      # 原路径兼容入口
+config/frp/              # frpc 配置、专用 frps 和公开访问的 Caddy HTTPS 模板
+docs/frp.md              # 公网接入、凭据、服务托管与分层验收
 docs/agents-api.md        # 对外 API 约定和示例
 docs/log-summary-testing.md # OCR 日志描述规则及离线、真实模型验收
 .github/workflows/ci.yml # Linux 自动检查

@@ -31,7 +31,7 @@ stop_job() {
     launchctl remove "$label"
     for attempt in {1..100}; do
       if ! launchctl list "$label" >/dev/null 2>&1 && \
-         ! /usr/sbin/lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+         { [[ -z "$port" ]] || ! /usr/sbin/lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; }; then
         print "已停止：$label"
         return
       fi
@@ -58,6 +58,7 @@ case "${1:-status}" in
     fi
     ;;
   stop)
+    stop_job frpc ''
     stop_job api 8000
     stop_job ollama 11434
     ;;
@@ -69,8 +70,24 @@ case "${1:-status}" in
     fi
     start_job api start-api.sh
     ;;
+  start-frpc)
+    if launchctl list local.qwen-business-dev.frpc >/dev/null 2>&1; then
+      print '已注册：local.qwen-business-dev.frpc'
+    else
+      zsh scripts/dev/start-frpc.sh --check
+      start_job frpc start-frpc.sh
+    fi
+    ;;
+  stop-frpc)
+    stop_job frpc ''
+    ;;
+  restart-frpc)
+    zsh scripts/dev/start-frpc.sh --check
+    stop_job frpc ''
+    start_job frpc start-frpc.sh
+    ;;
   status)
-    for name in ollama api; do
+    for name in ollama api frpc; do
       launchctl list "local.qwen-business-dev.$name" 2>/dev/null || print "$name：未注册本项目服务"
     done
     curl --noproxy '*' -fsS --max-time 5 http://127.0.0.1:11434/api/version || true
@@ -78,5 +95,5 @@ case "${1:-status}" in
     curl --noproxy '*' -fsS --max-time 5 http://127.0.0.1:8000/health || true
     print
     ;;
-  *) print -u2 '用法：zsh scripts/dev/services.sh start|stop|status|restart-api'; exit 2 ;;
+  *) print -u2 '用法：zsh scripts/dev/services.sh start|stop|status|restart-api|start-frpc|stop-frpc|restart-frpc'; exit 2 ;;
 esac

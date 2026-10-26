@@ -2,6 +2,8 @@
 
 服务地址：`http://127.0.0.1:8000`。交互文档：`http://127.0.0.1:8000/docs`。
 
+当前公网地址为 `https://107.182.190.191:8443`，接口路径和 JSON 请求/返回保持一致，无需账户、密码、API key 或 `Authorization` 请求头。其他电脑上的系统可直接调用；HTTPS 使用私有 CA，客户端需配置 CA 证书信任，具体示例见 [公网接入与跨电脑调用](frp.md)。`user_id`、`session_id` 仍是必填业务标识，不是登录凭据。
+
 | 业务 | 方法与路径 | 模块 |
 | --- | --- | --- |
 | 总结并生成工作日志 | `POST /api/agents/log-summary` | `app/agents/log_summary.py` |

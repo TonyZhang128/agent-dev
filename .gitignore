@@ -18,3 +18,8 @@ build/
 *.egg-info/
 
 skills
+
+template_pipeline/
+
+# Tunnel tokens, private keys and local certificate material.
+.secrets/

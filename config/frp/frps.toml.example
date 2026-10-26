@@ -1,0 +1,18 @@
+# Dedicated frps instance. Merge deliberately if this host already runs frps.
+bindAddr = "0.0.0.0"
+bindPort = 7000
+proxyBindAddr = "127.0.0.1"
+allowPorts = [{ single = 18000 }]
+maxPortsPerClient = 1
+detailedErrorsToClient = false
+
+auth.method = "token"
+auth.tokenSource.type = "file"
+auth.tokenSource.file.path = "/etc/frp/token"
+
+transport.tls.force = true
+transport.tls.certFile = "/etc/frp/server.crt"
+transport.tls.keyFile = "/etc/frp/server.key"
+
+log.to = "console"
+log.level = "info"
