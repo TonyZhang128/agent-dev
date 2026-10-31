@@ -1,4 +1,4 @@
-"""Protect router composition, public contracts and application-local resources."""
+"""保护路由组合、公开契约和应用局部资源。"""
 
 import json
 from pathlib import Path
@@ -21,7 +21,7 @@ def test_full_openapi_matches_contract_snapshot():
     )
     app = create_app()
     assert app.openapi() == expected
-    # OpenAPI merges duplicate paths; inspect registration as well as documentation.
+    # OpenAPI 会合并重复路径，因此除文档外还要检查实际注册。
     routes = [route for route in app.routes if isinstance(route, APIRoute)]
     operations = [(method, route.path) for route in routes for method in route.methods]
     assert len(operations) == len(set(operations)) == 12
@@ -32,7 +32,7 @@ def test_aggregate_router_can_be_mounted_in_another_application():
 
     app = FastAPI()
     app.include_router(api_router)
-    # Invalid business inputs must be rejected before accessing application resources.
+    # 非法业务输入必须在访问应用资源前被拒绝。
     with TestClient(app) as client:
         assert client.get("/health").json() == {"status": "ok"}
         for path in (

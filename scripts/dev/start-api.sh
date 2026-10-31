@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Usage: zsh scripts/dev/start-api.sh [--debug] [uvicorn args...]
+# 用法：zsh scripts/dev/start-api.sh [--debug] [uvicorn 参数...]
 set -euo pipefail
 [[ "$(uname -s)" == Darwin ]] || { print -u2 "此脚本仅用于 macOS 开发；Linux 使用 scripts/prod/。"; exit 1; }
 cd "${0:A:h:h:h}"
@@ -7,7 +7,7 @@ export UV_CACHE_DIR="$PWD/.cache/uv"
 export NO_PROXY="${NO_PROXY:+$NO_PROXY,}127.0.0.1,localhost,::1"
 export no_proxy="$NO_PROXY"
 
-# Keep normal foreground and launchd startup unchanged; enable debugpy explicitly.
+# 保持普通前台和 launchd 启动方式不变；仅在显式指定时启用 debugpy。
 debug=0
 uvicorn_args=()
 for arg in "$@"; do

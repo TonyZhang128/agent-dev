@@ -122,6 +122,7 @@ Linux 使用 `scripts/prod/` 对应入口；远端业务验收使用 `BUSINESS_A
 ## 七、配置、依赖与运维
 
 - 项目固定 Python 3.12；Ruff 负责基础 lint、导入排序和格式。遵循现有命名和类型注解，不为本次任务无关的风格批量重写。
+- 注释和 docstring 统一使用中文；标识符、命令、路径、环境变量和必要技术术语保留原文。新增或修改代码时保持该风格，翻译注释不得改变代码行为。
 - 依赖通过 `uv add` 管理，`pyproject.toml` 和 `uv.lock` 一起更新，禁止手改锁文件。固定已验证的 `langchain`、`langchain-core`、`langchain-openai`；升级前查官方文档与 provider 兼容性，不引入不必要框架。
 - `Settings` 的读取顺序为 API 进程环境、根目录 `.env`、源码默认值；新增配置同步更新 `Settings`、`.env.example` 和 README，保留本机 `.env`。
 - launchd 启动的后台任务不保证继承当前终端临时导出的所有变量。持久业务配置优先维护根目录 `.env`，不要声称 `export LLM_*` 或 `OLLAMA_*` 一定传入后台任务；Ollama 自身配置需由其实际启动环境提供。

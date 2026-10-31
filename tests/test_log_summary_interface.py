@@ -1,4 +1,4 @@
-"""Keep the supplied system input and published response contract consistent."""
+"""使提供的系统输入与已发布的响应契约保持一致。"""
 
 import json
 from pathlib import Path

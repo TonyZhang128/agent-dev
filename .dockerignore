@@ -1,15 +1,15 @@
-# Build context only needs application code, the lock file and container scripts.
+# 构建上下文只需要应用代码、锁文件和容器脚本。
 .git/
 .github/
 .gitignore
 .dockerignore
 
-# Secrets and local configuration never enter an image.
+# 密钥和本机配置不会进入镜像。
 .env
 .env.*
 .secrets/
 
-# Local environments, caches, logs and verification output.
+# 本地环境、缓存、日志和验收输出。
 .venv/
 .cache/
 .logs/
@@ -22,7 +22,7 @@ verification/
 __pycache__/
 *.pyc
 
-# Not needed at runtime; keeps the API image small.
+# 运行时不需要，用于减小 API 镜像体积。
 # 注意不要忽略 app/prompts/*.md，提示词随应用代码进入镜像。
 tests/
 docs/

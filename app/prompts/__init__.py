@@ -1,4 +1,4 @@
-"""Load versioned prompts relative to this package, independent of the shell cwd."""
+"""按包路径加载版本化提示词，不受 Shell 当前工作目录影响。"""
 
 from functools import lru_cache
 from pathlib import Path

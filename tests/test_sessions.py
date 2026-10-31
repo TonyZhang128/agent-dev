@@ -1,4 +1,4 @@
-"""Session contracts, history trimming, and overlapping request isolation."""
+"""会话契约、历史裁剪和重叠请求隔离。"""
 
 import asyncio
 import json
@@ -253,7 +253,7 @@ def test_former_4000_character_limit_no_longer_rejects_valid_conversation():
 
 @pytest.mark.parametrize("margin,expected_turns", [(693, 1), (694, 0)])
 def test_whole_turn_at_exact_budget_boundary_does_not_mutate_history(margin, expected_turns):
-    # 1024 - 256 - 693 = 75; system/current cost 22+19 and the newest turn costs 17+17.
+    # 1024 - 256 - 693 = 75；system/current 占 22+19，最新回合占 17+17。
     messages = [
         ChatMessage(role=role, content=content)
         for role, content in [

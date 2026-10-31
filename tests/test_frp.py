@@ -1,4 +1,4 @@
-"""Verify tunnel startup and lifecycle without connecting to a public server."""
+"""验证隧道启动和生命周期，不连接公网服务器。"""
 
 import os
 import shutil

@@ -1,4 +1,4 @@
-"""Exercise deployment entry points without installing packages or starting services."""
+"""在不安装依赖包或启动服务的情况下验证部署入口。"""
 
 import shutil
 import subprocess

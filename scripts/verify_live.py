@@ -1,4 +1,4 @@
-"""Compatibility entry point for macOS Ollama verification."""
+"""macOS Ollama 验证的兼容入口。"""
 
 from scripts.dev.verify_live import main
 

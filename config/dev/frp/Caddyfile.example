@@ -1,5 +1,5 @@
-# Imported from /etc/caddy/Caddyfile. Compatible with the server's Caddy 2.6.4.
-# Public API access does not require an account, password or API key.
+# 由 /etc/caddy/Caddyfile 导入；兼容服务器上的 Caddy 2.6.4。
+# 公网 API 访问不需要账号、密码或 API key。
 https://107.182.190.191:8443 {
     tls /etc/caddy/highway-frp/server.crt /etc/caddy/highway-frp/server.key
 

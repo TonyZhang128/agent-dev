@@ -1,5 +1,5 @@
 #!/bin/zsh
-# User-session services survive the shell that starts them; no login files are edited.
+# 用户会话任务在启动它的 Shell 退出后继续运行；不修改登录文件。
 set -euo pipefail
 cd "${0:A:h:h:h}"
 [[ "$(uname -s)" == Darwin ]] || { print -u2 '此脚本使用 macOS launchd。'; exit 1; }

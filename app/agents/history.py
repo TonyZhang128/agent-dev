@@ -1,4 +1,4 @@
-"""Pure request-local history selection; no sessions, storage, or mutable agent state."""
+"""纯请求局部的历史选择；不涉及会话、存储或可变 Agent 状态。"""
 
 import json
 
@@ -10,7 +10,7 @@ from app.schemas import ChatMessage
 
 
 def message_budget(text: str) -> int:
-    # Conservative byte-based estimate, NOT an exact model tokenizer. Include framing.
+    # 保守的字节估算，不是精确的模型分词器；同时计入消息封装开销。
     return len(text.encode("utf-8")) + 16
 
 
@@ -28,7 +28,7 @@ def trim_history(
     ):
         raise ConversationInputTooLarge
     fixed = message_budget(system_prompt) + message_budget(current)
-    # Reserve for native response-format instructions as well as the schema in the prompt.
+    # 为原生响应格式指令和提示词中的 Schema 预留预算。
     if schema is not None:
         fixed += message_budget(json.dumps(schema, ensure_ascii=False))
     available = (
@@ -40,7 +40,7 @@ def trim_history(
     if available < 0:
         raise ConversationInputTooLarge
     start = len(history)
-    # Retain a contiguous suffix of complete user/assistant turns. Never cut message text.
+    # 只保留完整 user/assistant 回合组成的连续后缀，绝不截断消息正文。
     for index in range(len(history) - 2, -1, -2):
         cost = message_budget(history[index].content) + message_budget(history[index + 1].content)
         if cost > available:

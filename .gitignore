@@ -24,7 +24,7 @@ build/
 skills
 
 
-# Tunnel tokens, private keys and local certificate material.
+# 隧道令牌、私钥和本机证书材料。
 .secrets/
 
 .agents/

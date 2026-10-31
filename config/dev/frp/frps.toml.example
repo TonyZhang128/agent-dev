@@ -1,4 +1,4 @@
-# Dedicated frps instance. Merge deliberately if this host already runs frps.
+# 专用 frps 实例；如果该主机已有 frps 在运行，谨慎合并配置。
 bindAddr = "0.0.0.0"
 bindPort = 7000
 proxyBindAddr = "127.0.0.1"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Source from Linux deployment entry points; do not source application .env as shell code.
+# 供 Linux 部署入口 source；不要把应用 .env 当作 Shell 代码加载。
 set -euo pipefail
 [[ "$(uname -s)" == Linux ]] || { echo '此脚本仅用于 Linux 部署；Mac 使用 scripts/dev/。' >&2; exit 1; }
 PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -20,6 +20,6 @@ require_nvidia() {
 require_api_environment() {
   require_uv
   [[ -x .venv/bin/python && -x .venv/bin/uvicorn ]] || { echo '请先运行 bash scripts/prod/setup.sh。' >&2; exit 1; }
-  # Settings preserves process-environment precedence and validates the existing .env.
+  # Settings 保持进程环境变量优先，并校验现有 .env。
   uv run --locked --no-sync --no-dev python -m scripts.prod.check_config
 }

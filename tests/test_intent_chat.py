@@ -1,4 +1,4 @@
-"""Intent chat routing uses real agents with mocked model HTTP responses."""
+"""意图与聊天路由使用真实 Agent 和模拟的模型 HTTP 响应。"""
 
 import asyncio
 import json
@@ -162,7 +162,7 @@ def test_reason_length_only_relaxed_for_final_chat_response(intent):
     else:
         with pytest.raises(ValidationError):
             IntentResult.model_validate(payload)
-    # Classification reasons stay short even when the final response can contain a long reply.
+    # 即使最终回答可以很长，分类理由仍保持简短。
     with intent_client(payload) as (client, calls):
         response = client.post("/agents/intent", json=request_payload({"text": "你好"}))
         assert response.status_code == 502

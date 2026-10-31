@@ -1,4 +1,4 @@
-"""Real model smoke test: never substitutes a fake inference response."""
+"""真实模型冒烟测试：绝不使用伪造的推理响应替代。"""
 
 import asyncio
 import json
@@ -47,7 +47,7 @@ def main(*, gpu_check=None):
         report["direct_seconds"] = round(time.monotonic() - direct_started, 2)
         report["direct_model_reply"] = chat.model_dump()
         report["real_inference"] = True
-        # Real SDK and real model behind an in-process ASGI client.
+        # 在进程内 ASGI 客户端后面使用真实 SDK 和真实模型。
         with TestClient(create_app()) as client:
             assert client.get("/health").status_code == 200
             assert client.get("/ready").status_code == 200
@@ -58,7 +58,7 @@ def main(*, gpu_check=None):
                 raise RuntimeError(f"FastAPI returned {response.status_code}: {response.text}")
             report["api_reply"] = ChatResponse.model_validate(response.json()).model_dump()
             report["asgi_api"] = True
-        # Independently verify actual TCP HTTP, not just an ASGI test transport.
+        # 独立验证真实 TCP HTTP，而不只是 ASGI 测试传输。
         import os
 
         api_url = os.environ.get("BUSINESS_API_URL")

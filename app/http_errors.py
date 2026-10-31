@@ -1,4 +1,4 @@
-"""HTTP error mapping; business and model errors remain independent of FastAPI."""
+"""HTTP 错误映射；业务错误和模型错误保持与 FastAPI 无关。"""
 
 import logging
 
@@ -9,14 +9,14 @@ from openai import APIConnectionError, APIStatusError, APITimeoutError
 
 from app.errors import ConversationInputTooLarge, InvalidModelOutput
 
-# Preserve the established channel for deployments that filter HTTP error logs.
+# 保留既有日志通道，兼容按 HTTP 错误日志过滤的部署。
 logger = logging.getLogger("app.main")
 
 
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(RequestValidationError)
     async def invalid_request(request: Request, exc: RequestValidationError) -> JSONResponse:
-        # Pydantic's input/ctx may contain the entire conversation and identity.
+        # Pydantic 的 input/ctx 可能包含完整对话和身份信息。
         details = [{key: item[key] for key in ("type", "loc", "msg")} for item in exc.errors()]
         return JSONResponse(status_code=422, content={"detail": details})
 

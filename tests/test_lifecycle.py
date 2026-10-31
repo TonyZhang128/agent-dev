@@ -1,4 +1,4 @@
-"""Resource ownership stays explicit on startup, shutdown and failure paths."""
+"""启动、关闭和失败路径中的资源归属保持明确。"""
 
 import asyncio
 
@@ -72,7 +72,7 @@ async def test_agent_initialization_failure_closes_service(monkeypatch):
     def fail_model(**kwargs):
         raise RuntimeError("model initialization failed")
 
-    # Substitute model construction at the external integration boundary.
+    # 在外部集成边界替换模型构造。
     monkeypatch.setattr(service, "chat_model", fail_model)
     with pytest.raises(RuntimeError, match="model initialization failed"):
         async with app.router.lifespan_context(app):

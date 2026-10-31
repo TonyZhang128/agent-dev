@@ -1,4 +1,4 @@
-"""Pin public error semantics while changing HTTP handler organization."""
+"""固定公开错误语义，同时允许调整 HTTP 处理器组织方式。"""
 
 import httpx
 import pytest

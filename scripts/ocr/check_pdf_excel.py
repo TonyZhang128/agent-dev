@@ -35,7 +35,7 @@ def check(code: str, tmp: Path) -> dict:
         "collide": [],
         "order": [],
     }
-    # 1. PDF
+    # 1. PDF 文本层核对
     with pymupdf.open(out["pdf"]) as doc:
         pg = doc[0]
         W, H = pg.rect.width, pg.rect.height
@@ -46,7 +46,7 @@ def check(code: str, tmp: Path) -> dict:
             )
             if values[c["field"]] not in re.sub(r"\s", "", pg.get_textbox(box)):
                 res["pdfMiss"].append(c["field"])
-    # 2. Excel
+    # 2. Excel 单元格核对
     ws = openpyxl.load_workbook(out["xlsx"]).active
     where = {}
     for row in ws.iter_rows():

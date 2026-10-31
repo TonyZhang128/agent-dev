@@ -1,4 +1,4 @@
-"""Shared LangChain hooks: fail rather than accept partial or refused output."""
+"""共享 LangChain 钩子：宁可失败，也不接受残缺或被拒绝的输出。"""
 
 from langchain.agents.middleware import AgentMiddleware, AgentState
 from langchain_core.messages import AIMessage

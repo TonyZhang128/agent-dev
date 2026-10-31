@@ -1,4 +1,4 @@
 #!/bin/zsh
-# Compatibility entry point for macOS development.
+# macOS 开发的兼容入口。
 set -euo pipefail
 exec /bin/zsh "${0:A:h}/dev/start-ollama.sh" "$@"

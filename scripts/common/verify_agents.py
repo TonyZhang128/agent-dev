@@ -1,4 +1,4 @@
-"""Verify the running API with the supplied OCR input and versioned regression cases."""
+"""使用提供的 OCR 输入和版本化回归用例验证运行中的 API。"""
 
 import json
 import os
@@ -14,7 +14,7 @@ from app.schemas import ChatResponse, IntentResult, LogSummary
 
 
 def log_matches_expectations(log: LogSummary, sample: dict) -> bool:
-    """Check versioned factual constraints; wording still needs human review."""
+    """检查版本化的事实约束；措辞仍需人工复核。"""
 
     def normalize(text: str) -> str:
         return "".join(unicodedata.normalize("NFKC", text).split())
@@ -22,7 +22,7 @@ def log_matches_expectations(log: LogSummary, sample: dict) -> bool:
     expected = sample["expected_response"]
     if log.date != expected["date"]:
         return False
-    # Check presence/absence without requiring the model to copy reference prose.
+    # 检查字段是否存在，不要求模型照抄参考资料原文。
     for field in ("completed_items", "pending_items", "issues"):
         if bool(getattr(log, field)) != bool(expected[field]):
             return False
@@ -35,7 +35,7 @@ def log_matches_expectations(log: LogSummary, sample: dict) -> bool:
 
 
 class _VerificationClient:
-    """Record the actual request/response before status and business validation."""
+    """在状态码和业务校验之前记录实际请求和响应。"""
 
     def __init__(self, client: httpx.Client, checks: list[dict]):
         self.client = client

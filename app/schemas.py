@@ -12,7 +12,7 @@ Identifier = Annotated[str, StringConstraints(strip_whitespace=True, min_length=
 
 
 class RequestContext(StrictModel):
-    """Caller-supplied identity metadata, never a substitute for authentication."""
+    """调用方提供的身份元数据，不能替代身份认证。"""
 
     user_id: Identifier
     session_id: Identifier
@@ -77,7 +77,7 @@ class LogSummary(StrictModel):
 
 
 class IntentDefinition(StrictModel):
-    """Internal description of a fixed intent; callers cannot supply candidates."""
+    """固定意图的内部描述；调用方不能提供候选意图。"""
 
     label: IntentLabel
     description: Description
@@ -124,7 +124,7 @@ class IntentResult(StrictModel):
 
 
 class IntentClassification(IntentResult):
-    """Internal classifier output; the chat reply is generated in a separate call."""
+    """意图分类器的内部输出；聊天回答由另一次调用生成。"""
 
     reason: SummaryItem
 

@@ -1,4 +1,4 @@
-"""Keep published intent response contracts and examples aligned with the API."""
+"""使已发布的意图响应契约和示例与 API 保持一致。"""
 
 import json
 from pathlib import Path

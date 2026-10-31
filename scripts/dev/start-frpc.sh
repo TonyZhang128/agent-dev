@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Foreground tunnel entry; background ownership belongs to services.sh.
+# 前台隧道入口；后台任务管理由 services.sh 负责。
 set -euo pipefail
 cd "${0:A:h:h:h}"
 [[ "$(uname -s)" == Darwin ]] || { print -u2 '此脚本用于 macOS 开发环境。'; exit 1; }

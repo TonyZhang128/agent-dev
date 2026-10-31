@@ -1,4 +1,4 @@
-"""Explicit identity and first-turn context for legacy contract test scenarios."""
+"""为既有契约测试场景提供明确的身份和首轮上下文。"""
 
 
 def request_payload(payload):

@@ -7,7 +7,7 @@ require_nvidia
 [[ "$VLLM_BIN" = /* && -x "$VLLM_BIN" ]] || { echo 'VLLM_BIN 必须是可执行文件的绝对路径。' >&2; exit 1; }
 [[ "$VLLM_BIN" != "$PROJECT_ROOT/.venv/"* ]] || { echo 'vLLM 必须使用独立环境，不能安装到业务 .venv。' >&2; exit 1; }
 : "${VLLM_API_KEY:?请设置 VLLM_API_KEY，并与业务 .env 中的 LLM_API_KEY 保持一致}"
-# vLLM reads VLLM_API_KEY from the process environment; do not put keys in argv/logs.
+# vLLM 从进程环境读取 VLLM_API_KEY；不要把密钥放进 argv 或日志。
 export VLLM_API_KEY
 exec "$VLLM_BIN" serve "$VLLM_MODEL_PATH" \
   --host 127.0.0.1 --port 8001 --served-model-name highway-agent "$@"
