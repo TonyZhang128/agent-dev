@@ -8,4 +8,4 @@ for arg in "$@"; do
 done
 require_api_environment
 # Dependencies are installed at setup time, never synchronized during service startup.
-exec uv run --locked --no-sync --no-dev uvicorn app.main:app --host 127.0.0.1 --port 8000 "$@"
+exec uv run --locked --no-sync --no-dev uvicorn app.main:app --host 127.0.0.1 --port 8309 "$@"

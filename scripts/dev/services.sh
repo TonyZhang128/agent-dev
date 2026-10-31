@@ -51,21 +51,21 @@ case "${1:-status}" in
     else
       print '复用已运行的 Ollama'
     fi
-    if ! curl --noproxy '*' -fsS --max-time 3 http://127.0.0.1:8000/health >/dev/null 2>&1; then
+    if ! curl --noproxy '*' -fsS --max-time 3 http://127.0.0.1:8309/health >/dev/null 2>&1; then
       start_job api start-api.sh
     else
-      print '端口 8000 已有健康接口，保留现有进程'
+      print '端口 8309 已有健康接口，保留现有进程'
     fi
     ;;
   stop)
     stop_job frpc ''
-    stop_job api 8000
+    stop_job api 8309
     stop_job ollama 11434
     ;;
   restart-api)
-    stop_job api 8000
-    if /usr/sbin/lsof -nP -iTCP:8000 -sTCP:LISTEN >/dev/null 2>&1; then
-      print -u2 '端口 8000 被其他进程占用，未停止该进程。'
+    stop_job api 8309
+    if /usr/sbin/lsof -nP -iTCP:8309 -sTCP:LISTEN >/dev/null 2>&1; then
+      print -u2 '端口 8309 被其他进程占用，未停止该进程。'
       exit 1
     fi
     start_job api start-api.sh
@@ -92,7 +92,7 @@ case "${1:-status}" in
     done
     curl --noproxy '*' -fsS --max-time 5 http://127.0.0.1:11434/api/version || true
     print
-    curl --noproxy '*' -fsS --max-time 5 http://127.0.0.1:8000/health || true
+    curl --noproxy '*' -fsS --max-time 5 http://127.0.0.1:8309/health || true
     print
     ;;
   *) print -u2 '用法：zsh scripts/dev/services.sh start|stop|status|restart-api|start-frpc|stop-frpc|restart-frpc'; exit 2 ;;
