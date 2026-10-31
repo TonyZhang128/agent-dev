@@ -1,0 +1,130 @@
+# 生产编排：业务 API + 独立 vLLM 模型服务（两个镜像、两个环境）。
+#
+#   cp docker/env.example docker/prod.env && chmod 600 docker/prod.env
+#   # 编辑 docker/prod.env，至少填写 VLLM_MODEL_DIR、VLLM_MODEL_PATH、VLLM_API_KEY
+#   docker compose -f compose.prod.yml --env-file docker/prod.env build
+#   docker compose -f compose.prod.yml --env-file docker/prod.env up -d
+#
+# 详细说明（GGUF 基础镜像选择、权重准备、验收与升级）见 docs/docker.md。
+name: highway-agent
+
+services:
+  model:
+    build:
+      context: .
+      dockerfile: Dockerfile.vllm
+      args:
+        # Qwen3.5 GGUF(Q4_K_M) 需要带 GGUF 插件的分支镜像；BF16/反量化权重用官方镜像。
+        VLLM_BASE_IMAGE: ${VLLM_BASE_IMAGE:-vllm/vllm-openai:v0.32.0}
+    image: highway-agent-vllm:${APP_VERSION:-0.1.0}
+    restart: unless-stopped
+    # 由 docker-init 回收 vLLM 子进程，不依赖基础镜像自带 tini。
+    init: true
+    ipc: host
+    stop_grace_period: 60s
+    environment:
+      VLLM_MODEL_PATH: ${VLLM_MODEL_PATH:?请在 docker/prod.env 设置 VLLM_MODEL_PATH}
+      VLLM_SERVED_MODEL_NAME: ${VLLM_SERVED_MODEL_NAME:-highway-agent}
+      VLLM_HOST: 0.0.0.0
+      VLLM_PORT: ${VLLM_PORT:-8001}
+      # vLLM 原生鉴权变量，必须与 API 的 LLM_API_KEY 一致。
+      VLLM_API_KEY: ${VLLM_API_KEY:?请在 docker/prod.env 设置 VLLM_API_KEY}
+      HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-1}
+      VLLM_LOGGING_LEVEL: ${VLLM_LOGGING_LEVEL:-INFO}
+    volumes:
+      # 宿主机预置权重，容器只读挂载；禁止自动创建空目录掩盖配置错误。
+      - type: bind
+        source: ${VLLM_MODEL_DIR:?请在 docker/prod.env 设置 VLLM_MODEL_DIR}
+        target: /models
+        read_only: true
+        bind:
+          create_host_path: false
+    # Qwen3.5 关闭思考 + 上下文与业务 LLM_CONTEXT_TOKENS 对齐。
+    # 若该分支把 GGUF 按多模态类加载、因缺视觉权重报错，追加 --language-model-only
+    # （GGUF 只有语言权重；该参数需分支支持，本仓库未在 GPU 实机验证）。
+    command:
+      - --max-model-len
+      - "${VLLM_MAX_MODEL_LEN:-8192}"
+      - --gpu-memory-utilization
+      - "${VLLM_GPU_MEMORY_UTILIZATION:-0.90}"
+      - --reasoning-parser
+      - qwen3
+      - --default-chat-template-kwargs
+      - '{"enable_thinking": false}'
+    healthcheck:
+      # 基础镜像自带 Python，无需在镜像内安装 curl。
+      test: ["CMD", "python3", "-c", "import os,sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:' + os.environ.get('VLLM_PORT', '8001') + '/health', timeout=4).status == 200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: ${VLLM_START_PERIOD:-15m}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: ${VLLM_GPU_COUNT:-1}
+              capabilities: [gpu]
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: highway-agent-api:${APP_VERSION:-0.1.0}
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+    environment:
+      LLM_BASE_URL: http://model:${VLLM_PORT:-8001}/v1
+      LLM_MODEL: ${VLLM_SERVED_MODEL_NAME:-highway-agent}
+      LLM_API_KEY: ${VLLM_API_KEY:?请在 docker/prod.env 设置 VLLM_API_KEY}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-180}
+      LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-2048}
+      LLM_CONTEXT_TOKENS: ${LLM_CONTEXT_TOKENS:-8192}
+      LLM_CONTEXT_MARGIN_TOKENS: ${LLM_CONTEXT_MARGIN_TOKENS:-256}
+      CONVERSATION_MAX_INPUT_CHARACTERS: ${CONVERSATION_MAX_INPUT_CHARACTERS:-1000000}
+      # 思考开关由模型服务 chat template 控制，生产默认不再传 reasoning_effort。
+      LLM_REASONING_EFFORT: ${LLM_REASONING_EFFORT:-}
+      AGENT_RECURSION_LIMIT: ${AGENT_RECURSION_LIMIT:-8}
+      LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
+      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
+    ports:
+      # 默认只绑定回环，由部署平台的反向代理暴露 TLS 与鉴权。
+      - "${API_BIND_ADDRESS:-127.0.0.1}:${API_HOST_PORT:-8309}:8309"
+    volumes:
+      # 与 Java 服务共用同一数据池；模板与资料只读，projects 需要写入。
+      - type: bind
+        source: ${OCR_TEMPLATES_DIR:?请在 docker/prod.env 设置 OCR_TEMPLATES_DIR}
+        target: /app/data/ocr/templates
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${OCR_ADMIN_DIR:?请在 docker/prod.env 设置 OCR_ADMIN_DIR}
+        target: /app/data/ocr/admin
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${OCR_ASSETS_DIR:?请在 docker/prod.env 设置 OCR_ASSETS_DIR}
+        target: /app/data/ocr/assets
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${OCR_PROJECTS_DIR:?请在 docker/prod.env 设置 OCR_PROJECTS_DIR}
+        target: /app/data/ocr/projects
+        bind:
+          create_host_path: false
+      # RapidOCR 首次识别时下载 PP-OCRv6 Medium / PP-OCRv5 Server 模型；
+      # 命名卷保证重建容器后不必重新下载。离线部署需预先导入模型文件。
+      - ocr-models:/app/data/ocr/models
+    depends_on:
+      model:
+        # 模型加载可能很久；API 可先启动，/health 仍应立即可用。
+        condition: service_started
+
+volumes:
+  # OCR 模型缓存，避免容器重建时重新下载。
+  ocr-models:

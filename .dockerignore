@@ -1,0 +1,41 @@
+# Build context only needs application code, the lock file and container scripts.
+.git/
+.github/
+.gitignore
+.dockerignore
+
+# Secrets and local configuration never enter an image.
+.env
+.env.*
+.secrets/
+
+# Local environments, caches, logs and verification output.
+.venv/
+.cache/
+.logs/
+.models/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+verification/
+__pycache__/
+*.pyc
+
+# Not needed at runtime; keeps the API image small.
+# 注意不要忽略 app/prompts/*.md，提示词随应用代码进入镜像。
+tests/
+docs/
+skills/
+interfaces/
+data/
+config/
+ocr/
+README.md
+AGENTS.md
+CLAUDE.md
+
+.agents/
+.codex/
+.vscode/
+.DS_Store

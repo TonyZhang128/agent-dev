@@ -2,6 +2,8 @@
 
 业务 API 与模型服务使用两个独立环境。业务项目由 uv 管理 Python 3.12 和锁定依赖；vLLM 由服务器管理员按 NVIDIA GPU、驱动和 CUDA 兼容性安装到单独环境。本仓库不自动安装系统驱动或为未知硬件选择 vLLM 版本。
 
+需要容器化部署时，使用 [Docker 生产部署](docker.md)（`Dockerfile`、`Dockerfile.vllm`、`compose.prod.yml`）；本文档描述直接在宿主机运行脚本的部署方式。
+
 ## 1. 准备业务 API
 
 在目标 Linux 检查 `uv --version`，缺少时按 [uv 官方安装说明](https://docs.astral.sh/uv/getting-started/installation/)准备工具，然后在仓库根目录执行：
@@ -25,12 +27,14 @@ LLM_REASONING_EFFORT=
 
 先通过 `nvidia-smi` 确认设备及驱动可见。参考 [vLLM GPU 安装说明](https://docs.vllm.ai/en/latest/getting_started/installation/gpu/)和 [Qwen3.5 部署配方](https://github.com/vllm-project/recipes/blob/main/Qwen/Qwen3.5.md)，在业务项目之外安装适配目标 GPU 的固定版本，并准备兼容权重。显存、量化、上下文、张量并行参数需按服务器确定。
 
+Qwen3.5-9B 的 GGUF 权重可用仓库脚本在业务环境下载，不需要 GPU：`uv run --locked python -m scripts.models.download_qwen35_gguf`。它把 `.gguf` 与 `config.json`、tokenizer 组装到同一目录；GGUF 的 `VLLM_MODEL_PATH` 必须指向 `.gguf` 文件而不是目录，详见 [Docker 生产部署 · 准备权重](docker.md#2-准备权重)。
+
 模型入口只读取进程变量，不会将业务 `.env` 当作 Shell 脚本加载：
 
 | 变量 | 要求 |
 | --- | --- |
 | `VLLM_BIN` | 必填，独立 vLLM 可执行文件的绝对路径，例如 `/opt/vllm/bin/vllm` |
-| `VLLM_MODEL_PATH` | 必填，本地模型目录或 Hugging Face 模型 ID |
+| `VLLM_MODEL_PATH` | 必填，本地模型目录、`.gguf` 文件或 Hugging Face 模型 ID；GGUF 必须指向文件 |
 | `VLLM_API_KEY` | 必填，由运行环境注入，与业务 `LLM_API_KEY` 一致 |
 | `CUDA_VISIBLE_DEVICES` | 可选，vLLM 原生变量，选择可见 GPU |
 
