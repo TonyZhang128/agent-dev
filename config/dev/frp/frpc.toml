@@ -15,7 +15,7 @@ log.to = "console"
 log.level = "info"
 
 [[proxies]]
-name = "qwen-business-api"
+name = "highway-agent-api"
 type = "tcp"
 localIP = "127.0.0.1"
 localPort = 8309

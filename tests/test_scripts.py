@@ -138,7 +138,7 @@ def test_vllm_preserves_arguments_without_key_in_argv(deployment):
     assert result.returncode == 0, result.stderr
     args = deployment.trace.read_text().splitlines()
     assert args[:2] == ["serve", "/models/qwen model"]
-    assert "qwen-business" in args
+    assert "highway-agent" in args
     assert args[-2:] == ["--tensor-parallel-size", "2"]
     assert deployment.env["VLLM_API_KEY"] not in " ".join(args) + result.stdout + result.stderr
 
@@ -147,10 +147,10 @@ def test_vllm_preserves_arguments_without_key_in_argv(deployment):
     "values",
     (
         {},
-        {"llm_base_url": "http://127.0.0.1:8001/v1", "llm_model": "qwen-business"},
+        {"llm_base_url": "http://127.0.0.1:8001/v1", "llm_model": "highway-agent"},
         {
             "llm_base_url": "http://127.0.0.1:8001/v1",
-            "llm_model": "qwen-business",
+            "llm_model": "highway-agent",
             "llm_api_key": "CHANGE_ME",
         },
     ),
@@ -167,7 +167,7 @@ def test_production_config_accepts_remote_vllm(monkeypatch):
     settings = Settings(
         _env_file=None,
         llm_base_url="https://model.example.com/v1",
-        llm_model="qwen-business",
+        llm_model="highway-agent",
         llm_api_key="test-production-key",
     )
     monkeypatch.setattr("scripts.prod.check_config.Settings", lambda: settings)

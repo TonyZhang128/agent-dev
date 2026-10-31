@@ -10,4 +10,4 @@ require_nvidia
 # vLLM reads VLLM_API_KEY from the process environment; do not put keys in argv/logs.
 export VLLM_API_KEY
 exec "$VLLM_BIN" serve "$VLLM_MODEL_PATH" \
-  --host 127.0.0.1 --port 8001 --served-model-name qwen-business "$@"
+  --host 127.0.0.1 --port 8001 --served-model-name highway-agent "$@"

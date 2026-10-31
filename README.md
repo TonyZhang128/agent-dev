@@ -36,7 +36,7 @@ git clone https://github.com/TonyZhang128/agent-dev.git
 cd agent-dev
 ```
 
-现有工作目录为 `qwen-business-dev/`；仓库克隆后的目录名可以不同。以下命令均在项目根目录执行。
+仓库克隆后的目录名可以不同（当前本地工作目录为 `qwen-business-dev/`）。以下命令均在项目根目录执行。
 
 Mac 已安装 Homebrew 时，可使用完整安装脚本：
 
@@ -90,7 +90,7 @@ zsh scripts/dev/services.sh restart-api
 zsh scripts/dev/services.sh stop
 ```
 
-脚本按需注册 `local.qwen-business-dev.ollama`、`local.qwen-business-dev.api` 用户会话任务，复用已运行的服务，不修改 shell profile。任务持续到停止或退出登录；重新登录后运行 `start`。日志在 `.logs/*-service.*.log`。普通 `start` 不启动公网隧道；仅开发联调需要时单独执行 `start-frpc`，`stop` 会先停止本项目注册的 frpc，再处理 API/Ollama。
+脚本按需注册 `local.highway-agent.ollama`、`local.highway-agent.api` 用户会话任务，复用已运行的服务，不修改 shell profile。任务持续到停止或退出登录；重新登录后运行 `start`。日志在 `.logs/*-service.*.log`。普通 `start` 不启动公网隧道；仅开发联调需要时单独执行 `start-frpc`，`stop` 会先停止本项目注册的 frpc，再处理 API/Ollama。
 
 其他方式启动的进程不会被脚本停止。若 `restart-api` 提示端口 8309 被占用，说明尚未完成当前代码的重启部署；应确认进程归属并通过原启动方式管理，不直接杀进程。临时回环端口上的验证也不代表端口 8309 已更新。
 
@@ -193,7 +193,7 @@ ollama ps
 
 `tests/test_routing.py` 将完整 OpenAPI 与 `tests/fixtures/api-openapi.json` 比较，覆盖路径、方法、字段、模型、状态码、operationId、tags、summary，以及应用标题和版本，并额外检查重复注册、Router 独立挂载和多应用资源隔离。
 
-当前快照仍记录 `Qwen 业务智能体 API / 0.3.0`，而主应用已改为 `公路工程业务智能体 / 0.0.1`，因此完整快照测试存在已知失败。应先确认这项元信息变更，再审查并同步快照；不要跳过测试、删除元信息断言或自动覆盖整个基线。此差异也可能使 `setup.sh` 在前置测试阶段退出。历史记录中的测试通过数量属于当时版本，当前状态以实际运行结果为准。
+当前快照已与主应用同步，记录 `公路工程业务智能体 / 0.1.0`。修改应用标题或版本时必须先确认这项元信息变更，再审查完整差异并同步快照；不要跳过测试、删除元信息断言或自动覆盖整个基线。历史记录中的测试通过数量属于当时版本，当前状态以实际运行结果为准。
 
 ## 项目结构与 Agent 开发
 
@@ -306,7 +306,7 @@ bash scripts/prod/setup.sh
 
 ```dotenv
 LLM_BASE_URL=http://127.0.0.1:8001/v1
-LLM_MODEL=qwen-business
+LLM_MODEL=highway-agent
 LLM_API_KEY=your-server-key
 LLM_REASONING_EFFORT=
 ```
@@ -317,14 +317,14 @@ LLM_REASONING_EFFORT=
 
 ```bash
 export VLLM_BIN=/opt/vllm/bin/vllm
-export VLLM_MODEL_PATH=/srv/models/your-qwen-model
+export VLLM_MODEL_PATH=/srv/models/your-model
 # 运行环境需已提供 VLLM_API_KEY，勿将真实密钥写入仓库。
 bash scripts/prod/start-vllm.sh \
   --reasoning-parser qwen3 \
   --default-chat-template-kwargs '{"enable_thinking": false}'
 ```
 
-该入口检查 Linux 和 NVIDIA 驱动，默认监听 `127.0.0.1:8001`，服务名为 `qwen-business`；其他 vLLM 参数原样传入。关闭思考的参数来自 [官方 Qwen3.5 配置说明](https://github.com/vllm-project/recipes/blob/main/Qwen/Qwen3.5.md#configuration-tips)。密钥使用 [vLLM 原生环境变量](https://docs.vllm.ai/en/latest/configuration/env_vars/#environment-variables)传递。
+该入口检查 Linux 和 NVIDIA 驱动，默认监听 `127.0.0.1:8001`，服务名为 `highway-agent`；其他 vLLM 参数原样传入。关闭思考的参数来自 [官方 Qwen3.5 配置说明](https://github.com/vllm-project/recipes/blob/main/Qwen/Qwen3.5.md#configuration-tips)。密钥使用 [vLLM 原生环境变量](https://docs.vllm.ai/en/latest/configuration/env_vars/#environment-variables)传递。
 
 另一终端启动业务 API，模型就绪后执行验收：
 

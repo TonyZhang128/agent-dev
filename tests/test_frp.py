@@ -138,14 +138,14 @@ def test_frpc_background_start_is_idempotent_and_stop_owns_only_its_job(tunnel):
     assert second.returncode == 0, second.stderr
     commands = trace.read_text()
     assert commands.count("submit\n") == 1
-    assert "local.qwen-business-dev.frpc" in commands
+    assert "local.highway-agent.frpc" in commands
     assert "start-frpc.sh" in commands
     stop = run("services.sh", "stop-frpc")
     assert stop.returncode == 0, stop.stderr
     assert not os.path.exists(env["REGISTERED_FILE"])
     commands = trace.read_text()
-    assert "remove\nlocal.qwen-business-dev.frpc\n" in commands
-    assert "local.qwen-business-dev.api" not in commands
+    assert "remove\nlocal.highway-agent.frpc\n" in commands
+    assert "local.highway-agent.api" not in commands
 
 
 def test_frpc_background_job_is_not_submitted_when_preflight_fails(tunnel):

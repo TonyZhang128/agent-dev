@@ -97,7 +97,7 @@ zsh scripts/dev/services.sh stop-frpc
 zsh scripts/dev/services.sh status
 ```
 
-frpc 任务名为 `local.qwen-business-dev.frpc`，配置为 `config/dev/frp/frpc.toml`，日志为 `.logs/frpc-service.out.log` 和 `.logs/frpc-service.err.log`。通过项目脚本启动可确保相对路径始终从项目根目录解析。
+frpc 任务名为 `local.highway-agent.frpc`，配置为 `config/dev/frp/frpc.toml`，日志为 `.logs/frpc-service.out.log` 和 `.logs/frpc-service.err.log`。通过项目脚本启动可确保相对路径始终从项目根目录解析。旧版本注册的 `local.qwen-business-dev.*` 任务不会被新脚本接管，切换前先手动 `launchctl remove` 旧标签，避免同一代理重复注册。
 
 普通 `services.sh start` 只启动 Ollama/API（API 默认监听 `127.0.0.1:8309`），公网转发通过 `start-frpc` 显式启用。`services.sh stop` 会先停止本项目隧道，再停止 API/Ollama。任务属于当前用户会话，退出登录后按需重新启动。Mac 休眠、断网或 API 停止时，公网服务会中断；网络恢复后 frpc 会尝试重连，进行中的请求需要调用方自行处理失败。该隧道只在开发期使用，上线环境不部署本节脚本和配置。
 
@@ -111,20 +111,20 @@ frpc 任务名为 `local.qwen-business-dev.frpc`，配置为 `config/dev/frp/frp
 | `/etc/frp/frps.toml` | 专用 frps 配置，模板在 `config/dev/frp/frps.toml.example` |
 | `/etc/frp/token` | 隧道 token，与本机 `.secrets/frp/token` 一致 |
 | `/etc/frp/server.crt`、`server.key` | 隧道服务端证书 / 私钥 |
-| `/etc/systemd/system/qwen-frps.service` | 专用低权限用户 `frp` 托管服务 |
-| `/etc/caddy/qwen-frp/Caddyfile` | HTTPS 和公开访问的反向代理配置 |
-| `/etc/caddy/qwen-frp/server.crt`、`server.key` | 公网入口证书 / 私钥 |
+| `/etc/systemd/system/highway-frps.service` | 专用低权限用户 `frp` 托管服务 |
+| `/etc/caddy/highway-frp/Caddyfile` | HTTPS 和公开访问的反向代理配置 |
+| `/etc/caddy/highway-frp/server.crt`、`server.key` | 公网入口证书 / 私钥 |
 
-原 `/etc/caddy/Caddyfile` 新增了对专用配置的 import，原站点继续保留；初次部署前备份为 `/root/qwen-frp-deploy-20261024/Caddyfile.before`。模板在 `config/dev/frp/Caddyfile.example`，当前没有 BasicAuth 配置。移除鉴权前的专用站点配置另有私有备份。
+原 `/etc/caddy/Caddyfile` 新增了对专用配置的 import，原站点继续保留；初次部署前备份为 `/root/qwen-frp-deploy-20261024/Caddyfile.before`。模板在 `config/dev/frp/Caddyfile.example`，当前没有 BasicAuth 配置。移除鉴权前的专用站点配置另有私有备份。已按旧名部署的主机仍是 `qwen-frps.service` 和 `/etc/caddy/qwen-frp/`；按本节改名时需同时移动证书与配置、停用旧单元并重载 Caddy，否则 frps 或 Caddy 会因路径不存在而启动失败。
 
 服务端通过已授权的 SSH 登录后，可执行：
 
 ```bash
-systemctl status qwen-frps caddy --no-pager
-journalctl -u qwen-frps -n 50 --no-pager
+systemctl status highway-frps caddy --no-pager
+journalctl -u highway-frps -n 50 --no-pager
 frps verify -c /etc/frp/frps.toml
 # 修改 frps 后
-systemctl restart qwen-frps
+systemctl restart highway-frps
 # 修改 Caddy 后先校验，再重载
 caddy validate --config /etc/caddy/Caddyfile
 systemctl reload caddy
@@ -137,7 +137,7 @@ curl --noproxy '*' -fsS http://127.0.0.1:18000/health
 
 ## 更新凭据、证书和配置
 
-frp token 位于两端受控文件内。轮换时生成新的随机 token，安全替换两端文件，重启 `qwen-frps` 和本机 `restart-frpc`，不要输出 token。
+frp token 位于两端受控文件内。轮换时生成新的随机 token，安全替换两端文件，重启 `highway-frps` 和本机 `restart-frpc`，不要输出 token。
 
 公网 API 没有访问密码，无需执行账户或密码轮换。隧道 token 的变更不影响业务调用方的请求格式。
 

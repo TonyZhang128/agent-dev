@@ -1,7 +1,7 @@
 # Imported from /etc/caddy/Caddyfile. Compatible with the server's Caddy 2.6.4.
 # Public API access does not require an account, password or API key.
 https://107.182.190.191:8443 {
-    tls /etc/caddy/qwen-frp/server.crt /etc/caddy/qwen-frp/server.key
+    tls /etc/caddy/highway-frp/server.crt /etc/caddy/highway-frp/server.key
 
     reverse_proxy 127.0.0.1:18000 {
         transport http {

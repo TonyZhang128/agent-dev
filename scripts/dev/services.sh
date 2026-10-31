@@ -8,7 +8,7 @@ mkdir -p .logs
 
 start_job() {
   local name="$1" script="$2"
-  local label="local.qwen-business-dev.$name"
+  local label="local.highway-agent.$name"
   if launchctl list "$label" >/dev/null 2>&1; then
     print "已注册：$label"
     return
@@ -26,7 +26,7 @@ start_job() {
 
 stop_job() {
   local name="$1" port="$2"
-  local label="local.qwen-business-dev.$name"
+  local label="local.highway-agent.$name"
   if launchctl list "$label" >/dev/null 2>&1; then
     launchctl remove "$label"
     for attempt in {1..100}; do
@@ -71,8 +71,8 @@ case "${1:-status}" in
     start_job api start-api.sh
     ;;
   start-frpc)
-    if launchctl list local.qwen-business-dev.frpc >/dev/null 2>&1; then
-      print '已注册：local.qwen-business-dev.frpc'
+    if launchctl list local.highway-agent.frpc >/dev/null 2>&1; then
+      print '已注册：local.highway-agent.frpc'
     else
       zsh scripts/dev/start-frpc.sh --check
       start_job frpc start-frpc.sh
@@ -88,7 +88,7 @@ case "${1:-status}" in
     ;;
   status)
     for name in ollama api frpc; do
-      launchctl list "local.qwen-business-dev.$name" 2>/dev/null || print "$name：未注册本项目服务"
+      launchctl list "local.highway-agent.$name" 2>/dev/null || print "$name：未注册本项目服务"
     done
     curl --noproxy '*' -fsS --max-time 5 http://127.0.0.1:11434/api/version || true
     print

@@ -14,7 +14,7 @@ bash scripts/prod/setup.sh
 
 ```dotenv
 LLM_BASE_URL=http://127.0.0.1:8001/v1
-LLM_MODEL=qwen-business
+LLM_MODEL=highway-agent
 LLM_API_KEY=your-server-key
 LLM_REASONING_EFFORT=
 ```
@@ -38,14 +38,14 @@ LLM_REASONING_EFFORT=
 
 ```bash
 export VLLM_BIN=/opt/vllm/bin/vllm
-export VLLM_MODEL_PATH=/srv/models/your-qwen-model
+export VLLM_MODEL_PATH=/srv/models/your-model
 # VLLM_API_KEY 由运行环境注入。
 bash scripts/prod/start-vllm.sh \
   --reasoning-parser qwen3 \
   --default-chat-template-kwargs '{"enable_thinking": false}'
 ```
 
-此 Qwen3.5 示例使用 [官方关闭思考配置](https://github.com/vllm-project/recipes/blob/main/Qwen/Qwen3.5.md#configuration-tips)，需匹配所安装 vLLM 版本。默认监听 `127.0.0.1:8001`、模型名称 `qwen-business`。额外 CLI 参数原样传递；修改端口或 `--served-model-name` 后必须同步修改业务 `.env`。不要使用 `--api-key` 传入真实密钥。
+此 Qwen3.5 示例使用 [官方关闭思考配置](https://github.com/vllm-project/recipes/blob/main/Qwen/Qwen3.5.md#configuration-tips)，需匹配所安装 vLLM 版本。默认监听 `127.0.0.1:8001`、模型名称 `highway-agent`。额外 CLI 参数原样传递；修改端口或 `--served-model-name` 后必须同步修改业务 `.env`。已有部署从旧模型名切换时，需重启模型服务并同步业务 `.env` 的 `LLM_MODEL`，否则 `/ready` 和推理会因模型名不匹配失败。不要使用 `--api-key` 传入真实密钥。
 
 ## 3. 启动及托管 API
 
@@ -58,9 +58,9 @@ bash scripts/prod/start-api.sh
 后台托管可采用 systemd。以下示例假定代码在 `/opt/agent-dev`、运行用户为 `qwen`、uv 位于 `/home/qwen/.local/bin`，安装前替换为服务器实际路径：
 
 ```ini
-# /etc/systemd/system/qwen-business-api.service
+# /etc/systemd/system/highway-agent-api.service
 [Unit]
-Description=Qwen business API
+Description=Highway engineering agent API
 After=network-online.target
 Wants=network-online.target
 
@@ -85,10 +85,10 @@ WantedBy=multi-user.target
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now qwen-business-api
-sudo systemctl restart qwen-business-api
-sudo systemctl status qwen-business-api
-journalctl -u qwen-business-api -n 100 --no-pager
+sudo systemctl enable --now highway-agent-api
+sudo systemctl restart highway-agent-api
+sudo systemctl status highway-agent-api
+journalctl -u highway-agent-api -n 100 --no-pager
 ```
 
 模型服务可晚于 API 就绪，`/health` 仍检查进程存活，`/ready` 返回模型可用状态。默认仅绑定回环地址；如 API 和模型分机部署，配置模型监听地址、网络访问限制及业务 `LLM_BASE_URL`，外部业务入口按部署平台配置鉴权和 TLS。
