@@ -1,9 +1,13 @@
 """Shared LangChain model factory and OpenAI-compatible readiness probe."""
 
+import logging
+
 import httpx
 from langchain_openai import ChatOpenAI
 
 from app.config import Settings
+
+logger = logging.getLogger(__name__)
 
 
 class ModelService:
@@ -21,9 +25,13 @@ class ModelService:
     ):
         self.settings = settings
         self.http_client = http_client or httpx.Client(timeout=settings.llm_timeout_seconds)
-        self.http_async_client = http_async_client or httpx.AsyncClient(
-            timeout=settings.llm_timeout_seconds
-        )
+        try:
+            self.http_async_client = http_async_client or httpx.AsyncClient(
+                timeout=settings.llm_timeout_seconds
+            )
+        except BaseException:
+            self._close_sync_after_error()
+            raise
         self._models: dict[float, ChatOpenAI] = {}
 
     def chat_model(self, *, temperature: float = 0) -> ChatOpenAI:
@@ -67,5 +75,18 @@ class ModelService:
         )
 
     async def close(self) -> None:
-        await self.http_async_client.aclose()
-        self.http_client.close()
+        try:
+            await self.http_async_client.aclose()
+        except BaseException:
+            self._close_sync_after_error()
+            raise
+        else:
+            self.http_client.close()
+
+    def _close_sync_after_error(self) -> None:
+        """Attempt cleanup without replacing a startup/shutdown error or cancellation."""
+        try:
+            self.http_client.close()
+        except BaseException as exc:
+            # Transport exception text can include provider or request details.
+            logger.warning("Synchronous model HTTP client cleanup failed (%s)", type(exc).__name__)
