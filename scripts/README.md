@@ -17,9 +17,11 @@
 | Linux 业务环境安装 | `bash scripts/prod/setup.sh` | Python 3.12、锁定运行依赖、保留已有 `.env` |
 | Linux 前台 API | `bash scripts/prod/start-api.sh` | 不同步依赖，拒绝 reload；允许传入其他 uvicorn 参数 |
 | Linux 前台模型服务 | `bash scripts/prod/start-vllm.sh [vLLM 参数]` | NVIDIA 检查、独立 vLLM 环境；不安装驱动或模型 |
+| 模型权重下载 | `uv run --locked python -m scripts.models.download_qwen35_gguf [--quant Q4_K_M\|--vision\|--check\|--list]` | 从 ModelScope 下 GGUF 并补齐 config.json、tokenizer，落到 `.cache/models/`，供 vLLM 挂载 |
 | Linux 完整验收 | `bash scripts/prod/verify.sh` | NVIDIA 信息、运行中 API 的业务验收及完整意图、日志评测集、通用真实推理 |
 | 通用业务验收 | `uv run --locked python -m scripts.common.verify_agents` | Mac/Linux；调用运行中的 API，验收完整意图及日志评测集 |
 | 通用推理验收 | `uv run --locked python -m scripts.common.verify_live` | Mac/Linux；直调 Agent、ASGI、TCP；不检查硬件 |
+| OCR 真实验收 | `uv run --locked python -m scripts.common.verify_ocr --photo <数据池相对路径> --form JB12-4.2.2` | 调运行中 API，检查真实识别、简表、填表与 WBS；报告在 verification/ocr |
 
 Linux 完整步骤、配置和后台托管见 [部署说明](../docs/deployment-linux.md)。Mac 步骤见 [项目 README](../README.md#环境与安装)。
 
@@ -30,6 +32,10 @@ Linux 完整步骤、配置和后台托管见 [部署说明](../docs/deployment-
 原有 `scripts/setup.sh`、`services.sh`、`start-api.sh`、`start-ollama.sh`、`check-network.sh` 保留为 Mac 开发兼容入口，不会自动切到生产环境。原有 `python -m scripts.verify_agents` 转到通用验收；`python -m scripts.verify_live` 保留 Mac Ollama/GPU 验收语义。新命令请使用明确的环境目录。
 
 开发安装通过 `uv sync --locked --group dev` 安装 pytest / pytest-asyncio，并使用 `uv run --locked pytest -v` 执行离线单元测试。生产 `--no-dev` 环境不安装这些测试工具。
+
+`scripts/models/download_qwen35_gguf.py` 只做下载与校验，不需要 GPU 或 vLLM：默认取 `unsloth/Qwen3.5-9B-GGUF` 的 `Qwen3.5-9B-Q4_K_M.gguf`，再从 `Qwen/Qwen3.5-9B` 补齐 `config.json` 与 tokenizer，按 ModelScope 文件列表的 sha256 校验后写入 `.cache/models/qwen3.5-9b-q4_k_m/`。GGUF 不能单独作为 vLLM 模型：GGUF 加载器要求 `--model` 指向 `.gguf` 文件，并按 `Path(model).parent` 读取同目录的 `config.json` 与 tokenizer。`--vision` 才下载 mmproj，且放进 `vision/` 子目录；`--check` 离线校验已有目录；中断后保留 `.part`，重跑即续传。下载结果与容器变量的对应见 [Docker 生产部署](../docs/docker.md#2-准备权重)。
+
+`scripts/ocr/` 完整迁入 docsvc 的 16 个脚本，统一从仓库根目录以 `uv run --locked python -m scripts.ocr.<名称>` 调用。模板生成会写入配置的模板目录，应先备份；`demo_jianbiao` 会上传到 Java 服务，仅在显式需要演示数据时运行。各脚本用途、参数与资源要求见 [OCR 文档](../docs/ocr.md#辅助脚本)。
 
 真实验收会调用模型，报告写入忽略提交的 `verification/`。业务验收报告 `agents-live-result.json` 的每条 `checks` 记录包含实际请求体 `request` 和 API 输出 `response`。设置 `BUSINESS_API_URL` 可验证其他地址的 API，模型直调仍读取当前进程及根目录 `.env` 的 `LLM_*` 配置，二者需对应同一部署。Linux 验收使用 `--no-sync --no-dev`，避免安装开发工具或在验收时修改环境。
 

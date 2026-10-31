@@ -4,7 +4,7 @@
 
 开发环境为 macOS + Ollama + Qwen3.5 9B Q4_K_M，上线环境为 Linux + NVIDIA + 独立 vLLM；业务 API 统一通过 OpenAI 兼容协议调用模型。
 
-包版本为 `0.1.0`（`pyproject.toml`）；当前 OpenAPI 标题为“公路工程业务智能体”、版本为 `0.1.0`（`app/main.py`）。两者分别是项目包元信息与 API 文档元信息，当前尚未统一。三个业务均通过 `langchain.agents.create_agent()` 执行，HTTP 层使用按领域组织的 `APIRouter`。
+包版本为 `0.1.0`（`pyproject.toml`）；当前 OpenAPI 标题为“公路工程业务智能体”、版本为 `0.1.0`（`app/main.py`）。两者分别维护项目包元信息与 API 文档元信息。三个智能体均通过 `langchain.agents.create_agent()` 执行，HTTP 层使用按领域组织的 `APIRouter`。
 
 开发者和编程代理的共享规范见 [AGENTS.md](AGENTS.md)；`CLAUDE.md` 引用同一份规则。完整请求/响应契约见 [API 文档](docs/agents-api.md)，脚本入口见 [脚本说明](scripts/README.md)。
 
@@ -13,6 +13,11 @@
 | 工程日志描述 | `POST /agents/log-summary` | 可变结构的工程表单 OCR JSON（兼容文字）→ 日志段落及结构化字段 |
 | 意图识别 | `POST /agents/intent` | 文字与历史消息 → 固定四个页面或一般交流类别、判断分数、澄清标记；一般交流返回聊天回答 |
 | 自由对话 | `POST /agents/chat` | 当前消息、必填历史（首轮 `[]`）→ 回答和模型名称 |
+| 照片/简表 OCR | `POST /ocr/recognize`、`POST /ocr/jianbiao` | 数据池照片 → 草稿字段、定位与识别详情 |
+| 公式与填表 | `POST /ocr/fill` | 核对后的值 + 配置 → 公式/引用结果，可输出同源 PDF/Excel |
+| 表样预览与字段 | `GET /ocr/blank/{form}.png`、`GET /ocr/sheet/{form}` | 空白表 PNG、版面栏与格子字段 |
+| 施工图划分 | `POST /wbs/draft` | PDF/工可 → WBS 划分初稿 |
+| 文档依赖自检 | `GET /health/deps` | OCR、PDF、Excel、图像库导入与推理设备检查 |
 | 进程存活 | `GET /health` | `{"status":"ok"}`，不访问模型 |
 | 模型就绪 | `GET /ready` | 检查配置模型是否出现在上游模型列表，成功返回 `{"status":"ready"}`，不执行推理 |
 
@@ -20,7 +25,7 @@
 
 开发期可用 frp 将本机 API 临时接入公网服务器，供其他电脑联调；该能力只存在于开发环境，Linux 生产部署不安装、不启动 frp。地址、证书信任和启动方式见 [frp 公网接入（仅开发）](#frp-公网接入仅开发)，完整运维见 [frp 部署说明](docs/frp.md)。
 
-`ocr/` 是工作区内独立的表单识别应用，见其 `ocr/README.md`；它未挂载到 `app.main:app`，也不在主应用的依赖、CI 和测试覆盖范围内。主应用日志接口接收 OCR 结果，不代表会直接执行该 OCR 服务。该目录当前未纳入 Git，干净克隆可能不存在；不要在主业务 `.venv/` 中直接安装其依赖。
+`docsvc` 的全部运行代码和辅助脚本已合并到 `app/ocr/`、`scripts/ocr/`，共用当前应用入口、Python 3.12、依赖锁和 CI。配置、接口与验收见 [文档加工与 OCR](docs/ocr.md)。工作区原先未跟踪的 `ocr/` 是另一个表单匹配项目，仍保持独立；本次迁移来源为 `../docsvc`。
 
 ## 环境与安装
 
@@ -75,8 +80,14 @@ test -f .env || cp .env.example .env
 | `LLM_REASONING_EFFORT` | `none` | 关闭当前 Qwen 服务的思考输出；不支持的服务可设为空 |
 | `AGENT_RECURSION_LIMIT` | `8` | Agent 运行步数上限，包含工具调用循环 |
 | `LANGSMITH_TRACING` | `false` | 是否开启 LangSmith 追踪 |
+| `TEMPLATES_ROOT` | `data/ocr/templates` | 模板 JSON：forms、layouts、refs |
+| `ADMIN_ROOT` | `data/ocr/admin` | 管理端资料目录（优先查找 PDF/Excel） |
+| `ASSET_ROOT` | `data/ocr/assets` | 规范 PDF/Excel 资料目录 |
+| `PROJECTS_ROOT` | `data/ocr/projects` | 与 Java 共用的业务数据池，限制文件读写边界 |
 
 开启 LangSmith 时，还需在进程环境提供其凭据；追踪可能包含业务输入和模型输出。项目默认不会上传追踪。
+
+OCR 相对路径均以仓库根目录解析。没有模板时仍可启动智能体；模板接口返回 `503` 提示配置资源。已有 daolu_v6 资料的本机配置示例见 [OCR 路径配置](docs/ocr.md#路径配置)。模板和业务文件不随代码迁移或提交。
 
 Mac 后台运行：
 
@@ -208,6 +219,9 @@ app/
     router.py             # 聚合 Router，由主应用统一 include_router
     agents.py             # /agents：日志总结、意图识别、聊天
     system.py             # /health、/ready：存活与模型就绪检查
+    ocr.py                # /health/deps、/ocr：识别、简表、填表与表样
+    wbs.py                # /wbs/draft：施工图划分初稿
+  ocr/                    # 文档加工业务：资源隔离、识别、公式、PDF/Excel、WBS
   http_errors.py          # 输入与模型异常的统一 HTTP 映射、校验详情脱敏
   config.py               # .env 配置与默认值
   schemas.py              # 请求、响应的 Pydantic 模型和校验
@@ -236,6 +250,8 @@ scripts/
   dev/                    # macOS：Homebrew、Ollama、launchd、Metal GPU 验收
   prod/                   # Linux：运行依赖、API、独立 vLLM、NVIDIA 验收
   common/                 # 两种环境共用的业务与模型真实推理验收，按日志/意图/会话组织
+  ocr/                    # 原 docsvc 全部模板生成、文档检查和演示工具
+  models/                 # 下载 Qwen3.5 GGUF 权重并组装 vLLM 模型目录
   README.md               # 脚本入口和迁移说明
   *.sh / verify_*.py      # 原路径兼容入口
 config/dev/frp/          # 仅开发：frpc 配置、专用 frps 和公开访问的 Caddy HTTPS 模板
@@ -243,6 +259,10 @@ docs/frp.md              # 仅开发：frp 公网接入、凭据与服务端运�
 docs/agents-api.md        # 对外 API 约定和示例
 docs/log-summary-testing.md # OCR 日志描述规则及离线、真实模型验收
 .github/workflows/ci.yml # Linux 自动检查
+Dockerfile               # 生产业务 API 镜像（不含模型服务）
+Dockerfile.vllm          # 生产 vLLM 模型服务镜像，基础镜像由构建参数决定
+compose.prod.yml         # 生产编排：API + 模型服务，GPU 仅分配模型容器
+docker/                  # 容器入口脚本与 compose 变量模板
 pyproject.toml / uv.lock  # 直接依赖与完整锁文件
 .env.example             # 可提交的配置模板；实际 .env 不提交
 AGENTS.md                 # 后续编码 Agent 的仓库约定
@@ -296,6 +316,8 @@ api_router.include_router(example.router)
 ## Linux + NVIDIA 上线
 
 开发和上线使用同一份业务代码及 `uv.lock`，通过脚本目录与模型配置区分。Linux 不执行 Homebrew、launchd 或 Ollama 安装；vLLM 独立于业务 `.venv`。脚本清单见 [scripts/README.md](scripts/README.md)，后台托管示例见 [Linux 部署说明](docs/deployment-linux.md)。
+
+容器化部署使用两个镜像（业务 API 与 vLLM 模型服务）和 [compose.prod.yml](compose.prod.yml)，权重由宿主机只读挂载；构建、GGUF 基础镜像选择与验收见 [Docker 生产部署](docs/docker.md)。下文是不使用容器的脚本部署方式。
 
 先在 Linux 安装 uv，再准备业务环境：
 
