@@ -72,18 +72,25 @@ test -f .env || cp .env.example .env
 | `LLM_BASE_URL` | `http://127.0.0.1:11434/v1` | OpenAI 兼容模型 API，包含 `/v1` |
 | `LLM_MODEL` | `qwen3.5:9b-q4_K_M` | 服务端模型名称 |
 | `LLM_API_KEY` | `ollama` | Ollama 占位值；远端服务按需填写真实 key |
-| `LLM_TIMEOUT_SECONDS` | `180` | 一次 Agent 调用的总超时，也用于模型 HTTP 超时 |
+| `LLM_TIMEOUT_SECONDS` | `180` | 本地模型单次调用超时；启用回退时总预算再加回退超时 |
 | `LLM_MAX_TOKENS` | `2048` | 模型输出长度限制 |
 | `LLM_CONTEXT_TOKENS` | `8192` | 实际模型服务的上下文容量，含输入和输出 |
 | `LLM_CONTEXT_MARGIN_TOKENS` | `256` | 历史裁剪预算额外余量 |
 | `CONVERSATION_MAX_INPUT_CHARACTERS` | `1000000` | 历史及序列化当前输入总字符上限，超出返回422 |
 | `LLM_REASONING_EFFORT` | `none` | 关闭当前 Qwen 服务的思考输出；不支持的服务可设为空 |
+| `LLM_FALLBACK_BASE_URL` | `https://api.deepseek.com` | 本地 Ollama/vLLM 调用失败时的云端 OpenAI 兼容地址 |
+| `LLM_FALLBACK_MODEL` | `deepseek-flash` | 回退模型名称 |
+| `LLM_FALLBACK_API_KEY` | 空 | 回退密钥；留空即关闭回退 |
+| `LLM_FALLBACK_TIMEOUT_SECONDS` | `60` | 回退调用超时，叠加在 `LLM_TIMEOUT_SECONDS` 之上 |
+| `LLM_FALLBACK_REASONING_EFFORT` | `none` | 关闭回退模型思考；不支持的服务可设为空 |
 | `AGENT_RECURSION_LIMIT` | `8` | Agent 运行步数上限，包含工具调用循环 |
 | `LANGSMITH_TRACING` | `false` | 是否开启 LangSmith 追踪 |
 | `TEMPLATES_ROOT` | `data/ocr/templates` | 模板 JSON：forms、layouts、refs |
 | `ADMIN_ROOT` | `data/ocr/admin` | 管理端资料目录（优先查找 PDF/Excel） |
 | `ASSET_ROOT` | `data/ocr/assets` | 规范 PDF/Excel 资料目录 |
 | `PROJECTS_ROOT` | `data/ocr/projects` | 与 Java 共用的业务数据池，限制文件读写边界 |
+
+云端回退默认关闭：只有提供非空 `LLM_FALLBACK_API_KEY` 时才启用。启用后，本地 Ollama/vLLM 的模型调用因连接失败、超时或上游 HTTP 错误抛出异常时，本次调用改用回退模型重试一次，总预算为 `LLM_TIMEOUT_SECONDS + LLM_FALLBACK_TIMEOUT_SECONDS`。回退不重试已返回但未通过 Schema 校验的输出，`/ready` 仍只检查本地模型。DeepSeek 不支持严格 `json_schema`，回退时改用 JSON 模式并继续用 Pydantic 校验，不会退回宽松文本解析。启用回退意味着业务输入会发送到云端，需按数据合规要求决定。
 
 开启 LangSmith 时，还需在进程环境提供其凭据；追踪可能包含业务输入和模型输出。项目默认不会上传追踪。
 

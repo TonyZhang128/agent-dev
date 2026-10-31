@@ -168,7 +168,7 @@ curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/intent \
 }
 ```
 
-`chat` 需要分类和聊天两次模型调用，共享 `LLM_TIMEOUT_SECONDS` 总超时。聊天失败沿用 `503`（不可达）、`504`（超时）、`502`（上游错误或无效回答），不会将分类理由作为成功回答返回。内部分类使用 `IntentClassification` 的严格 JSON Schema，分类理由始终限300字符；最终响应使用 `IntentResult` 校验，`chat` 的 `reason` 不受300字符限制且不做截断，其他标签仍保留该限制。
+`chat` 需要分类和聊天两次模型调用，共享同一次请求的总超时预算（默认 `LLM_TIMEOUT_SECONDS`，启用回退时再加上 `LLM_FALLBACK_TIMEOUT_SECONDS`）。聊天失败沿用 `503`（不可达）、`504`（超时）、`502`（上游错误或无效回答），不会将分类理由作为成功回答返回。内部分类使用 `IntentClassification` 的严格 JSON Schema，分类理由始终限300字符；最终响应使用 `IntentResult` 校验，`chat` 的 `reason` 不受300字符限制且不做截断，其他标签仍保留该限制。
 
 已取消自定义分类。为兼容已有的空字段请求，保留可选 `intents`，但只能省略或为 `[]`；任何非空列表均返回 `422`，即使其中使用的是当前五类标签，也不允许覆盖或缩减分类。模型不会收到调用方自定义候选。
 
@@ -233,6 +233,8 @@ UV_CACHE_DIR="$PWD/.cache/uv" uv run --locked python -m scripts.common.verify_ag
 真实测试覆盖日志文字与 JSON 输入、`data/intent.json` 的完整版本化评测集、普通对话及携带历史的对话。意图逐条比对标签、澄清标记及分数规则；记录和数据集版本保存在 `verification/agents-live-result.json`。每条 `checks` 记录的 `request` 保存实际 JSON 请求体，`response` 保存 API 输出，可直接对照输入和结果。
 
 输入不合法返回 422；模型不可达返回 503；模型推理超时返回 504；上游错误、响应截断或输出校验失败返回 502。
+
+配置非空 `LLM_FALLBACK_API_KEY` 后启用云端回退：本地 Ollama/vLLM 的模型调用因连接失败、超时或上游 HTTP 错误抛出异常时，本次调用改用回退模型重试一次，两次尝试的总预算为 `LLM_TIMEOUT_SECONDS + LLM_FALLBACK_TIMEOUT_SECONDS`。回退只覆盖模型调用失败，不重试已返回但未通过 Schema 校验的输出；`/ready` 仍只检查本地模型。回退模型若为 DeepSeek，`ProviderStrategy` 的严格 `json_schema` 请求会降级为 `json_object`，响应仍由 LangChain 解析并由 Pydantic 严格校验。启用回退会把本次请求内容发送到云端，需按数据合规要求评估。
 
 后台服务修改代码后，重启 API 即可，模型服务可继续复用：
 

@@ -23,6 +23,8 @@ LLM_REASONING_EFFORT=
 
 其他变量与开发共用同一 `Settings`，见 README。进程变量优先于 `.env`。生产 API 入口会拒绝 Ollama 开发地址/模型和未修改的密钥占位符；请勿直接复制 Mac 的 `.env` 上线。
 
+可选云端回退沿用 `LLM_FALLBACK_*`，默认关闭；启用后本地模型调用失败会把本次业务输入发送到云端，是否启用按数据合规要求决定。
+
 ## 2. 准备独立模型服务
 
 先通过 `nvidia-smi` 确认设备及驱动可见。参考 [vLLM GPU 安装说明](https://docs.vllm.ai/en/latest/getting_started/installation/gpu/)和 [Qwen3.5 部署配方](https://github.com/vllm-project/recipes/blob/main/Qwen/Qwen3.5.md)，在业务项目之外安装适配目标 GPU 的固定版本，并准备兼容权重。显存、量化、上下文、张量并行参数需按服务器确定。

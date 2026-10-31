@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
+from openai import APIStatusError
 from pydantic import BaseModel
 
 from app.agents.runtime import build_agent, invoke_agent
@@ -114,7 +115,7 @@ async def test_langchain_tool_loop_can_be_extended():
 
     @tool
     def add(a: int, b: int) -> int:
-        """Add two integers and return their sum."""
+        """将两个整数相加并返回和。"""
         return a + b
 
     class Total(BaseModel):
@@ -155,6 +156,81 @@ async def test_langchain_tool_loop_can_be_extended():
         result = await invoke_agent(agent, service, [HumanMessage(content="2 + 3")])
         assert Total.model_validate(result["structured_response"]).value == 5
         assert len(calls) == 2
+    finally:
+        await service.close()
+
+
+class FallbackResult(BaseModel):
+    value: int
+
+
+@pytest.mark.asyncio
+async def test_primary_failure_falls_back_to_cloud_model():
+    calls = []
+
+    def respond(request):
+        body = json.loads(request.content)
+        calls.append(
+            (
+                request.url.host,
+                body["model"],
+                body.get("response_format"),
+                body.get("reasoning_effort"),
+            )
+        )
+        if request.url.host == "127.0.0.1":
+            return httpx.Response(503, json={"error": {"message": "local model down"}})
+        assert request.headers["authorization"] == "Bearer test-fallback-key"
+        return completion({"content": '{"value": 5}'})
+
+    service = models_for(
+        respond,
+        llm_fallback_api_key="test-fallback-key",
+        llm_fallback_model="test-deepseek",
+        llm_timeout_seconds=10,
+        llm_fallback_timeout_seconds=4,
+    )
+    try:
+        agent = build_agent(
+            service,
+            name="calculate",
+            prompt="Return the value.",
+            schema=FallbackResult.model_json_schema(),
+        )
+        result = await invoke_agent(agent, service, [HumanMessage(content="2 + 3")])
+        assert FallbackResult.model_validate(result["structured_response"]).value == 5
+        assert [host for host, *_ in calls] == ["127.0.0.1", "api.deepseek.com"]
+        assert calls[1][1] == "test-deepseek"
+        # DeepSeek 不支持 json_schema；回退模型改用 JSON 模式。
+        assert calls[1][2] == {"type": "json_object"}
+        # 关闭思考，避免推理内容占用输出预算。
+        assert calls[1][3] == "none"
+        assert service.inference_timeout_seconds == 14
+    finally:
+        await service.close()
+
+
+@pytest.mark.asyncio
+async def test_primary_failure_without_fallback_key_keeps_upstream_error():
+    calls = []
+
+    def respond(request):
+        calls.append(request.url.host)
+        return httpx.Response(503, json={"error": {"message": "local model down"}})
+
+    service = models_for(respond)
+    try:
+        agent = build_agent(
+            service,
+            name="calculate",
+            prompt="Return the value.",
+            schema=FallbackResult.model_json_schema(),
+        )
+        with pytest.raises(APIStatusError):
+            await invoke_agent(agent, service, [HumanMessage(content="2 + 3")])
+        assert calls == ["127.0.0.1"]
+        assert not service.fallback_enabled
+        assert service.inference_timeout_seconds == service.settings.llm_timeout_seconds
     finally:
         await service.close()
 
