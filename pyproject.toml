@@ -1,7 +1,7 @@
 [project]
-name = "qwen-business-dev"
-version = "0.3.0"
-description = "基于 LangChain 的 Qwen 业务智能体 API"
+name = "highway-engineering-agent-layer"
+version = "0.1.0"
+description = "公路工程业务智能体层"
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "fastapi==0.136.3",
