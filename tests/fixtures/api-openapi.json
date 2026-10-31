@@ -37,54 +37,13 @@
         }
       }
     },
-    "/api/business/plan": {
-      "post": {
-        "tags": [
-          "业务规划"
-        ],
-        "summary": "生成业务步骤",
-        "operationId": "plan_api_business_plan_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PlanRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BusinessPlan"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/agents/log-summary": {
+    "/agents/log-summary": {
       "post": {
         "tags": [
           "智能体"
         ],
         "summary": "总结并生成工作日志",
-        "operationId": "log_summary_api_agents_log_summary_post",
+        "operationId": "log_summary_agents_log_summary_post",
         "requestBody": {
           "content": {
             "application/json": {
@@ -119,13 +78,13 @@
         }
       }
     },
-    "/api/agents/intent": {
+    "/agents/intent": {
       "post": {
         "tags": [
           "智能体"
         ],
         "summary": "识别页面导航或一般交流意图",
-        "operationId": "intent_api_agents_intent_post",
+        "operationId": "intent_agents_intent_post",
         "requestBody": {
           "content": {
             "application/json": {
@@ -160,13 +119,13 @@
         }
       }
     },
-    "/api/agents/chat": {
+    "/agents/chat": {
       "post": {
         "tags": [
           "智能体"
         ],
         "summary": "自由对话",
-        "operationId": "chat_api_agents_chat_post",
+        "operationId": "chat_agents_chat_post",
         "requestBody": {
           "content": {
             "application/json": {
@@ -204,93 +163,6 @@
   },
   "components": {
     "schemas": {
-      "BusinessPlan": {
-        "properties": {
-          "goal": {
-            "type": "string",
-            "maxLength": 300,
-            "minLength": 1,
-            "title": "Goal"
-          },
-          "steps": {
-            "items": {
-              "$ref": "#/components/schemas/BusinessStep"
-            },
-            "type": "array",
-            "maxItems": 12,
-            "minItems": 1,
-            "title": "Steps"
-          },
-          "assumptions": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "maxItems": 12,
-            "title": "Assumptions"
-          },
-          "questions": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "maxItems": 12,
-            "title": "Questions"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "goal",
-          "steps",
-          "assumptions",
-          "questions"
-        ],
-        "title": "BusinessPlan"
-      },
-      "BusinessStep": {
-        "properties": {
-          "step": {
-            "type": "integer",
-            "minimum": 1.0,
-            "title": "Step"
-          },
-          "action": {
-            "type": "string",
-            "maxLength": 500,
-            "minLength": 1,
-            "title": "Action"
-          },
-          "responsible_role": {
-            "type": "string",
-            "maxLength": 100,
-            "minLength": 1,
-            "title": "Responsible Role"
-          },
-          "condition": {
-            "type": "string",
-            "maxLength": 300,
-            "minLength": 1,
-            "title": "Condition"
-          },
-          "expected_output": {
-            "type": "string",
-            "maxLength": 300,
-            "minLength": 1,
-            "title": "Expected Output"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "step",
-          "action",
-          "responsible_role",
-          "condition",
-          "expected_output"
-        ],
-        "title": "BusinessStep"
-      },
       "ChatMessage": {
         "properties": {
           "role": {
@@ -591,36 +463,6 @@
         ],
         "title": "LogSummaryRequest",
         "description": "可变结构的工程表单 OCR JSON 或兼容文字，序列化后最多 4000 字符。"
-      },
-      "PlanRequest": {
-        "properties": {
-          "user_id": {
-            "type": "string",
-            "maxLength": 128,
-            "minLength": 1,
-            "title": "User Id"
-          },
-          "session_id": {
-            "type": "string",
-            "maxLength": 128,
-            "minLength": 1,
-            "title": "Session Id"
-          },
-          "instruction": {
-            "type": "string",
-            "maxLength": 2000,
-            "minLength": 1,
-            "title": "Instruction"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "user_id",
-          "session_id",
-          "instruction"
-        ],
-        "title": "PlanRequest"
       },
       "ValidationError": {
         "properties": {

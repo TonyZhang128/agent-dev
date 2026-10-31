@@ -4,8 +4,8 @@
 
 | 业务 | 路径 | 接口资料 |
 | --- | --- | --- |
-| 工程日志描述 | `POST /api/agents/log-summary` | [固定字段、Schema 和示例](log_summary/README.md) |
-| 意图识别 | `POST /api/agents/intent` | [固定五类字段、Schema、主示例和兜底示例](intent/README.md) |
+| 工程日志描述 | `POST /agents/log-summary` | [固定字段、Schema 和示例](log_summary/README.md) |
+| 意图识别 | `POST /agents/intent` | [固定五类字段、Schema、主示例和兜底示例](intent/README.md) |
 
 示例文件是接口参考值，实际调用返回内容由本次输入生成，不会覆盖这些文件。真实验证结果保存在 `verification/`。
 

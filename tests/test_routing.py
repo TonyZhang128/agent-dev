@@ -15,7 +15,7 @@ from app.main import create_app
 from tests.helpers import request_payload
 
 
-def test_full_openapi_matches_before_router_migration():
+def test_full_openapi_matches_contract_snapshot():
     expected = json.loads(
         (Path(__file__).parent / "fixtures/api-openapi.json").read_text(encoding="utf-8")
     )
@@ -24,7 +24,7 @@ def test_full_openapi_matches_before_router_migration():
     # OpenAPI merges duplicate paths; inspect registration as well as documentation.
     routes = [route for route in app.routes if isinstance(route, APIRoute)]
     operations = [(method, route.path) for route in routes for method in route.methods]
-    assert len(operations) == len(set(operations)) == 6
+    assert len(operations) == len(set(operations)) == 5
 
 
 def test_aggregate_router_can_be_mounted_in_another_application():
@@ -36,19 +36,17 @@ def test_aggregate_router_can_be_mounted_in_another_application():
     with TestClient(app) as client:
         assert client.get("/health").json() == {"status": "ok"}
         for path in (
-            "/api/business/plan",
-            "/api/agents/log-summary",
-            "/api/agents/intent",
-            "/api/agents/chat",
+            "/agents/log-summary",
+            "/agents/intent",
+            "/agents/chat",
         ):
             assert client.post(path, json={}).status_code == 422
         assert set(client.get("/openapi.json").json()["paths"]) == {
             "/health",
             "/ready",
-            "/api/business/plan",
-            "/api/agents/log-summary",
-            "/api/agents/intent",
-            "/api/agents/chat",
+            "/agents/log-summary",
+            "/agents/intent",
+            "/agents/chat",
         }
 
 
@@ -133,7 +131,6 @@ def test_routers_reuse_agents_within_each_application_and_isolate_applications()
     first_app, second_app = create_app(first_service), create_app(second_service)
     resource_names = (
         "model_service",
-        "business_plan_agent",
         "log_summary_agent",
         "chat_agent",
         "intent_agent",
@@ -143,7 +140,7 @@ def test_routers_reuse_agents_within_each_application_and_isolate_applications()
         second_resources = [getattr(second_app.state, name) for name in resource_names]
         assert all(a is not b for a, b in zip(first_resources, second_resources, strict=True))
         for client, model in ((first, "first"), (second, "second"), (first, "first")):
-            response = client.post("/api/agents/chat", json=request_payload({"message": "你好"}))
+            response = client.post("/agents/chat", json=request_payload({"message": "你好"}))
             assert response.status_code == 200
             assert response.json() == {"reply": f"reply from {model}", "model": model}
         for app, resources in ((first_app, first_resources), (second_app, second_resources)):

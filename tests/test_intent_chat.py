@@ -83,7 +83,7 @@ def intent_client(classification=None, *, reply="你好！有什么可以帮你�
 def test_chat_intent_returns_chat_agent_reply(confidence, reply):
     classification = CLASSIFICATION | {"confidence": confidence}
     with intent_client(classification, reply="  " + reply + "\n") as (client, calls):
-        response = client.post("/api/agents/intent", json=request_payload({"text": "你好"}))
+        response = client.post("/agents/intent", json=request_payload({"text": "你好"}))
         assert response.status_code == 200
         assert response.json() == classification | {"reason": reply}
         assert len(calls) == 2
@@ -117,7 +117,7 @@ def test_other_and_uncertain_intents_do_not_call_chat(changes):
         {"intent": "unknown", "needs_clarification": True} if fallback else {}
     )
     with intent_client(classification) as (client, calls):
-        response = client.post("/api/agents/intent", json=request_payload({"text": "用户的输入"}))
+        response = client.post("/agents/intent", json=request_payload({"text": "用户的输入"}))
         assert response.status_code == 200
         assert response.json() == expected
         assert len(calls) == 1
@@ -136,9 +136,7 @@ def test_other_and_uncertain_intents_do_not_call_chat(changes):
 )
 def test_chat_failure_is_not_reported_as_success(failure, reply, status):
     with intent_client(reply=reply, failure=failure) as (client, calls):
-        response = client.post(
-            "/api/agents/intent", json=request_payload({"text": "用户的私密输入"})
-        )
+        response = client.post("/agents/intent", json=request_payload({"text": "用户的私密输入"}))
         assert response.status_code == status
         assert len(calls) == 2
         assert "secret upstream body" not in response.text
@@ -147,9 +145,9 @@ def test_chat_failure_is_not_reported_as_success(failure, reply, status):
 
 def test_intent_chat_messages_are_isolated_from_other_endpoints_and_requests():
     with intent_client(reply=lambda text: "回答：" + text) as (client, calls):
-        client.post("/api/agents/chat", json=request_payload({"message": "另一位用户的历史"}))
+        client.post("/agents/chat", json=request_payload({"message": "另一位用户的历史"}))
         for text in ("我是甲", "我是乙"):
-            response = client.post("/api/agents/intent", json=request_payload({"text": text}))
+            response = client.post("/agents/intent", json=request_payload({"text": text}))
             assert response.json()["reason"] == "回答：" + text
         assert len(calls[-1]["messages"]) == 2
         assert "我是甲" not in json.dumps(calls[-1], ensure_ascii=False)
@@ -166,7 +164,7 @@ def test_reason_length_only_relaxed_for_final_chat_response(intent):
             IntentResult.model_validate(payload)
     # Classification reasons stay short even when the final response can contain a long reply.
     with intent_client(payload) as (client, calls):
-        response = client.post("/api/agents/intent", json=request_payload({"text": "你好"}))
+        response = client.post("/agents/intent", json=request_payload({"text": "你好"}))
         assert response.status_code == 502
         assert len(calls) == 1
 
@@ -194,8 +192,6 @@ async def test_intent_classification_and_chat_share_total_timeout():
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:
-            response = await client.post(
-                "/api/agents/intent", json=request_payload({"text": "你好"})
-            )
+            response = await client.post("/agents/intent", json=request_payload({"text": "你好"}))
             assert response.status_code == 504
             assert len(calls) == 2

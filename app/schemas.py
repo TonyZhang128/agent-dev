@@ -18,38 +18,6 @@ class RequestContext(StrictModel):
     session_id: Identifier
 
 
-class PlanRequest(RequestContext):
-    instruction: str = Field(min_length=1, max_length=2000)
-
-    @model_validator(mode="after")
-    def nonblank(self) -> "PlanRequest":
-        self.instruction = self.instruction.strip()
-        if not self.instruction:
-            raise ValueError("instruction must not be blank")
-        return self
-
-
-class BusinessStep(StrictModel):
-    step: int = Field(ge=1)
-    action: str = Field(min_length=1, max_length=500)
-    responsible_role: str = Field(min_length=1, max_length=100)
-    condition: str = Field(min_length=1, max_length=300)
-    expected_output: str = Field(min_length=1, max_length=300)
-
-
-class BusinessPlan(StrictModel):
-    goal: str = Field(min_length=1, max_length=300)
-    steps: list[BusinessStep] = Field(min_length=1, max_length=12)
-    assumptions: list[str] = Field(max_length=12)
-    questions: list[str] = Field(max_length=12)
-
-    @model_validator(mode="after")
-    def ordered_steps(self) -> "BusinessPlan":
-        if [item.step for item in self.steps] != list(range(1, len(self.steps) + 1)):
-            raise ValueError("steps must have consecutive numbers starting at 1")
-        return self
-
-
 ShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
 IntentLabel = Literal[
     "work_list", "supervision_log", "image_library", "business_management", "chat", "unknown"

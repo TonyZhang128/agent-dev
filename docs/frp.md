@@ -43,7 +43,7 @@ curl --cacert ./ca.crt -fsS \
 curl --cacert ./ca.crt -fsS \
   https://107.182.190.191:8443/ready
 curl --cacert ./ca.crt -fsS \
-  https://107.182.190.191:8443/api/agents/intent \
+  https://107.182.190.191:8443/agents/intent \
   -H 'Content-Type: application/json' \
   -d '{"user_id":"example-user","session_id":"example-session","history":[],"text":"打开图片库"}'
 ```
@@ -62,7 +62,7 @@ with httpx.Client(
     timeout=210,
 ) as client:
     response = client.post(
-        "/api/agents/intent",
+        "/agents/intent",
         json={
             "user_id": "remote-system-user",
             "session_id": "remote-session-001",

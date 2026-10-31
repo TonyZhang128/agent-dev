@@ -58,9 +58,7 @@ def test_model_error_bodies_remain_safe_and_exact(failure, status, detail, caplo
         ),
     )
     with TestClient(create_app(service)) as client:
-        response = client.post(
-            "/api/agents/chat", json=request_payload({"message": "用户的私密输入"})
-        )
+        response = client.post("/agents/chat", json=request_payload({"message": "用户的私密输入"}))
     assert response.status_code == status
     assert response.json() == {"detail": detail}
     assert "secret upstream body" not in caplog.text
@@ -76,7 +74,7 @@ def test_validation_error_keeps_only_public_fields():
     service = ModelService(Settings(_env_file=None))
     with TestClient(create_app(service)) as client:
         response = client.post(
-            "/api/agents/chat",
+            "/agents/chat",
             json={
                 "user_id": "private-user",
                 "session_id": "private-session",

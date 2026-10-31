@@ -6,7 +6,7 @@
 
 - 主应用入口为 `app.main:app`，默认监听 `127.0.0.1:8309`；技术栈为 Python 3.12、uv、FastAPI、Pydantic 和 LangChain 1.x。
 - macOS 开发使用 Ollama；Linux 部署使用独立的 vLLM 服务，通过 `.env` 中的 OpenAI 兼容端点切换。业务环境与模型服务环境分离。
-- 当前提供业务规划、工程日志总结、意图识别和聊天四类业务；尚未接入审批、订单修改、通知发送等外部业务动作，也没有数据库或服务端持久会话。
+- 当前提供工程日志总结、意图识别和聊天三类业务；尚未接入审批、订单修改、通知发送等外部业务动作，也没有数据库或服务端持久会话。
 - 工作区中的 `ocr/` 是独立应用，有自己的依赖和启动方式，未挂载到主应用。修改前阅读其 README；不要把主应用的检查结果当作 OCR 验收，也不要擅自合并环境、路由或依赖。
 - 以当前源码、配置、锁文件和实际测试为依据。历史审查报告记录当时结果，不代表当前部署已更新或当前测试必然通过。
 
@@ -24,8 +24,7 @@
 | --- | --- |
 | `app/main.py` | 应用工厂 `create_app()`、lifespan、共享资源初始化与清理、全局异常处理注册和 `include_router()`；不放具体业务路由或提示词 |
 | `app/api/router.py` | 统一聚合领域 Router；同一个领域仅注册一次 |
-| `app/api/agents.py` | `/api/agents` 下的日志、意图、聊天入口；分组为“智能体” |
-| `app/api/business.py` | `/api/business` 下的规划入口；分组为“业务规划” |
+| `app/api/agents.py` | `/agents` 下的日志、意图、聊天入口；分组为“智能体” |
 | `app/api/system.py` | `/health`、`/ready`；保留原路径和 OpenAPI 元信息 |
 | `app/schemas.py` | Pydantic 请求、响应与校验；拒绝额外字段，保留长度、枚举及跨字段约束 |
 | `app/agents/` | 与 HTTP 请求对象无关的业务逻辑；复用共享基类和运行时 |
@@ -57,12 +56,11 @@
 
 | 方法与路径 | 请求模型 | 响应模型 |
 | --- | --- | --- |
-| `POST /api/business/plan` | `PlanRequest` | `BusinessPlan` |
-| `POST /api/agents/log-summary` | `LogSummaryRequest` | `LogSummary` |
-| `POST /api/agents/intent` | `IntentRequest` | `IntentResult` |
-| `POST /api/agents/chat` | `ChatRequest` | `ChatResponse` |
+| `POST /agents/log-summary` | `LogSummaryRequest` | `LogSummary` |
+| `POST /agents/intent` | `IntentRequest` | `IntentResult` |
+| `POST /agents/chat` | `ChatRequest` | `ChatResponse` |
 
-- 四类业务均要求 `user_id`、`session_id`；intent/chat 还要求当前会话完整 `history`，首轮为 `[]`；日志和规划拒绝 history。
+- 三类业务均要求 `user_id`、`session_id`；intent/chat 还要求当前会话完整 `history`，首轮为 `[]`；日志拒绝 history。
 - 身份通过请求局部 LangChain metadata 传递，不写入模型提示词。调用方 ID 不等于身份认证；当前应用没有自定义认证机制。
 - 历史仅接受完整、交替的 user/assistant 回合，拒绝调用方 system 消息。使用共享历史工具按上下文预算裁剪最早完整回合，保留当前输入和系统提示词；遵守完整输入上限，不恢复旧的 10 条消息或 4000 字符会话限制。UTF-8 字节估算是保守预算，不是精确 tokenizer。
 - 日志接受文字或 JSON 对象，保留原始事实、数值和单位；不得虚构日期、成果、任务或合格结论。具体字段约束以 Schema 和 `interfaces/log_summary/` 为准。

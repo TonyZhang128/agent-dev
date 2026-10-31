@@ -1,6 +1,6 @@
 # 意图识别输出接口
 
-接口：`POST /api/agents/intent`，JSON 编码为 UTF-8。成功返回 HTTP `200`，响应直接是包含以下四个必填字段的 JSON 对象，不增加包装层。
+接口：`POST /agents/intent`，JSON 编码为 UTF-8。成功返回 HTTP `200`，响应直接是包含以下四个必填字段的 JSON 对象，不增加包装层。
 
 | 文件 | 用途 |
 | --- | --- |
@@ -56,7 +56,7 @@
 ## 调用示例及失败响应
 
 ```zsh
-curl --noproxy '*' -fsS http://127.0.0.1:8309/api/agents/intent \
+curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/intent \
   -H 'Content-Type: application/json' \
   -d '{"user_id":"example-user","session_id":"example-session","history":[],"text":"你好，帮我打开图片库"}'
 ```

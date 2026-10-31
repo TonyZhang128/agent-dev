@@ -4,10 +4,9 @@
 
 | 接口 | 当前输入 | 历史字段 |
 | --- | --- | --- |
-| `/api/agents/intent` | `text` | 必填 `history`，首轮为 `[]` |
-| `/api/agents/chat` | `message` | 必填 `history`，首轮为 `[]` |
-| `/api/agents/log-summary` | `content` | 不接受 `history` |
-| `/api/business/plan` | `instruction` | 不接受 `history` |
+| `/agents/intent` | `text` | 必填 `history`，首轮为 `[]` |
+| `/agents/chat` | `message` | 必填 `history`，首轮为 `[]` |
+| `/agents/log-summary` | `content` | 不接受 `history` |
 
 例如意图识别请求：
 
@@ -54,6 +53,6 @@ API 可处理重叠请求，模型端是否并行生成取决于部署配置；�
 
 ## 兼容性与验证
 
-请求校验错误仅返回字段位置、类型和说明，不回显原始身份或消息。旧请求必须补充两个ID；意图与聊天还须补充 history。缺失、空ID、错误历史角色或顺序均返回422；日志与规划携带 history 也返回422。业务路径、成功响应字段、分类阈值和上游错误映射保持现状。
+请求校验错误仅返回字段位置、类型和说明，不回显原始身份或消息。旧请求必须补充两个ID；意图与聊天还须补充 history。缺失、空ID、错误历史角色或顺序均返回422；日志携带 history 也返回422。成功响应字段、分类阈值和上游错误映射保持现状；业务接口路径统一为 `/agents/...`。
 
 `tests/test_sessions.py` 使用真实 LangChain Agent 与模拟模型HTTP，验证完整历史传递、裁剪边界、多字节预算、Schema预留、元数据传递、原始消息不变、不同用户同会话ID、同一用户不同会话的并发隔离，以及失败互不影响。真实意图集 `data/intent.json` 版本4.0.0包含24条分类和4条拒绝请求；执行 `uv run --locked python -m scripts.common.verify_agents` 验收并查看 `verification/agents-live-result.json`。

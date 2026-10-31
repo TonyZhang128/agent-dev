@@ -3,7 +3,6 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.agents.business_plan import BusinessPlanAgent
 from app.agents.chat import ChatAgent
 from app.agents.intent import IntentAgent
 from app.agents.log_summary import LogSummaryAgent
@@ -18,7 +17,6 @@ def create_app(service: ModelService | None = None) -> FastAPI:
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         app.state.model_service = service or ModelService(Settings())
         try:
-            app.state.business_plan_agent = BusinessPlanAgent(app.state.model_service)
             app.state.log_summary_agent = LogSummaryAgent(app.state.model_service)
             app.state.chat_agent = ChatAgent(app.state.model_service)
             app.state.intent_agent = IntentAgent(app.state.model_service, app.state.chat_agent)

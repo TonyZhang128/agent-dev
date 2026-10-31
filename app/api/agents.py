@@ -9,7 +9,7 @@ from app.schemas import (
     LogSummaryRequest,
 )
 
-router = APIRouter(prefix="/api/agents", tags=["智能体"])
+router = APIRouter(prefix="/agents", tags=["智能体"])
 
 
 @router.post("/log-summary", response_model=LogSummary, summary="总结并生成工作日志")

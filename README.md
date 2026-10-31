@@ -4,16 +4,15 @@
 
 开发环境为 macOS + Ollama + Qwen3.5 9B Q4_K_M，上线环境为 Linux + NVIDIA + 独立 vLLM；业务 API 统一通过 OpenAI 兼容协议调用模型。
 
-包版本为 `0.1.0`（`pyproject.toml`）；当前 OpenAPI 标题为“公路工程业务智能体”、版本为 `0.1.0`（`app/main.py`）。两者分别是项目包元信息与 API 文档元信息，当前尚未统一。四个业务均通过 `langchain.agents.create_agent()` 执行，HTTP 层使用按领域组织的 `APIRouter`。
+包版本为 `0.1.0`（`pyproject.toml`）；当前 OpenAPI 标题为“公路工程业务智能体”、版本为 `0.1.0`（`app/main.py`）。两者分别是项目包元信息与 API 文档元信息，当前尚未统一。三个业务均通过 `langchain.agents.create_agent()` 执行，HTTP 层使用按领域组织的 `APIRouter`。
 
 开发者和编程代理的共享规范见 [AGENTS.md](AGENTS.md)；`CLAUDE.md` 引用同一份规则。完整请求/响应契约见 [API 文档](docs/agents-api.md)，脚本入口见 [脚本说明](scripts/README.md)。
 
 | 功能 | 接口 | 输入与输出 |
 | --- | --- | --- |
-| 工程日志描述 | `POST /api/agents/log-summary` | 可变结构的工程表单 OCR JSON（兼容文字）→ 日志段落及结构化字段 |
-| 意图识别 | `POST /api/agents/intent` | 文字与历史消息 → 固定四个页面或一般交流类别、判断分数、澄清标记；一般交流返回聊天回答 |
-| 自由对话 | `POST /api/agents/chat` | 当前消息、必填历史（首轮 `[]`）→ 回答和模型名称 |
-| 业务步骤规划 | `POST /api/business/plan` | 自然语言业务指令 → 目标、步骤、假设、待确认问题 |
+| 工程日志描述 | `POST /agents/log-summary` | 可变结构的工程表单 OCR JSON（兼容文字）→ 日志段落及结构化字段 |
+| 意图识别 | `POST /agents/intent` | 文字与历史消息 → 固定四个页面或一般交流类别、判断分数、澄清标记；一般交流返回聊天回答 |
+| 自由对话 | `POST /agents/chat` | 当前消息、必填历史（首轮 `[]`）→ 回答和模型名称 |
 | 进程存活 | `GET /health` | `{"status":"ok"}`，不访问模型 |
 | 模型就绪 | `GET /ready` | 检查配置模型是否出现在上游模型列表，成功返回 `{"status":"ready"}`，不执行推理 |
 
@@ -141,7 +140,7 @@ zsh scripts/dev/setup.sh
 
 ## 用户与会话
 
-所有业务请求必须提供 `user_id`、`session_id`（非空字符串，各最多128字符）。意图识别和聊天还必须提供 `history`，首轮为 `[]`；日志和规划不接收历史。旧调用方必须补齐字段，成功响应结构不变。
+所有业务请求必须提供 `user_id`、`session_id`（非空字符串，各最多128字符）。意图识别和聊天还必须提供 `history`，首轮为 `[]`；日志不接收历史。旧调用方必须补齐字段，成功响应结构不变。
 
 调用方传入当前会话全部历史；服务端按每次调用的系统提示词、Schema、输出预留和上下文容量，以保守UTF-8字节估算裁剪最早完整回合，不修改原始历史，不持久保存会话。精确token数量取决于模型，估算可能提前裁剪；`LLM_CONTEXT_TOKENS` 必须与实际服务配置一致。身份字段作为 LangChain 调用元数据传递，不送入模型提示词，不代表完成身份认证。详细契约和边界见 [用户与会话说明](docs/sessions.md)。
 
@@ -151,15 +150,12 @@ zsh scripts/dev/setup.sh
 curl --noproxy '*' -fsS http://127.0.0.1:8309/health
 curl --noproxy '*' -fsS http://127.0.0.1:8309/ready
 uv run --locked python -c 'import json; from pathlib import Path; print(json.dumps({"user_id": "example-user", "session_id": "example-session", "content": json.loads(Path("data/log_summary.json").read_text())}, ensure_ascii=False))' | \
-  curl --noproxy '*' -fsS http://127.0.0.1:8309/api/agents/log-summary \
+  curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/log-summary \
     -H 'Content-Type: application/json' --data-binary @-
-curl --noproxy '*' -fsS http://127.0.0.1:8309/api/agents/intent \
+curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/intent \
   -H 'Content-Type: application/json' -d '{"user_id":"example-user","session_id":"example-session","history":[],"text":"打开监理日志页面"}'
-curl --noproxy '*' -fsS http://127.0.0.1:8309/api/agents/chat \
+curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/chat \
   -H 'Content-Type: application/json' -d '{"user_id":"example-user","session_id":"example-session","history":[],"message":"你好，请解释业务智能体。"}'
-curl --noproxy '*' -fsS http://127.0.0.1:8309/api/business/plan \
-  -H 'Content-Type: application/json' \
-  -d '{"user_id":"example-user","session_id":"example-session","instruction":"检查报销发票，齐全则提交经理审批，否则通知员工补齐。"}'
 ```
 
 完整字段、返回示例、意图标签及历史消息限制见 [智能体 API 文档](docs/agents-api.md)。`/health` 检查 API 存活，`/ready` 检查上游列出配置模型；只有业务调用会实际推理。
@@ -183,7 +179,7 @@ uv run --locked python -m scripts.dev.verify_live
 ollama ps
 ```
 
-自动化测试使用 pytest / pytest-asyncio，运行真实 LangChain Agent 和模拟模型 HTTP 传输，不需要 Ollama、联网或云端凭据；首次安装依赖可能需要联网。测试文件直接位于 `tests/test_*.py`，目前没有 `tests/unit/` 或 `tests/integration/`。测试覆盖脚本分流、生产启动限制、配置保留，以及既有 API、结构化输出、并发标签隔离、消息隔离、超时、异常、工具调用循环、路由注册和共享资源生命周期。真实验收脚本覆盖用户提供的 OCR 输入、完整意图及测试目录中的日志回归集、文字日志、对话和业务规划，记录写入本地 `verification/agents-live-result.json`；验收记录、日志和缓存不提交 Git。离线与真实模型验收标准见 [意图识别测试说明](docs/intent-testing.md) 和 [日志总结测试说明](docs/log-summary-testing.md)。GitHub Actions 在 Linux 上执行锁定依赖安装、Ruff 和自动化测试，不执行模型下载和真实推理。
+自动化测试使用 pytest / pytest-asyncio，运行真实 LangChain Agent 和模拟模型 HTTP 传输，不需要 Ollama、联网或云端凭据；首次安装依赖可能需要联网。测试文件直接位于 `tests/test_*.py`，目前没有 `tests/unit/` 或 `tests/integration/`。测试覆盖脚本分流、生产启动限制、配置保留，以及既有 API、结构化输出、并发标签隔离、消息隔离、超时、异常、工具调用循环、路由注册和共享资源生命周期。真实验收脚本覆盖用户提供的 OCR 输入、完整意图及测试目录中的日志回归集、文字日志和对话，记录写入本地 `verification/agents-live-result.json`；验收记录、日志和缓存不提交 Git。离线与真实模型验收标准见 [意图识别测试说明](docs/intent-testing.md) 和 [日志总结测试说明](docs/log-summary-testing.md)。GitHub Actions 在 Linux 上执行锁定依赖安装、Ruff 和自动化测试，不执行模型下载和真实推理。
 
 业务验收报告的每条 `checks` 记录使用 `request` 保存实际 JSON 输入（含聊天历史），使用 `response` 保存 API 输出，方便逐条核对。
 
@@ -202,8 +198,7 @@ app/
   main.py                 # FastAPI 工厂、生命周期、路由与 HTTP 错误处理注册
   api/
     router.py             # 聚合 Router，由主应用统一 include_router
-    agents.py             # /api/agents：日志总结、意图识别、聊天
-    business.py           # /api/business：业务步骤规划
+    agents.py             # /agents：日志总结、意图识别、聊天
     system.py             # /health、/ready：存活与模型就绪检查
   http_errors.py          # 输入与模型异常的统一 HTTP 映射、校验详情脱敏
   config.py               # .env 配置与默认值
@@ -215,18 +210,16 @@ app/
     middleware.py         # 拒绝、截断、空输出及工具响应检查
     base.py               # 通用 BaseAgent 与结构化 StructuredAgent
     history.py            # 请求局部历史、预算及完整回合裁剪
-    business_plan.py      # 业务步骤规划
     log_summary.py        # 工程表单 OCR 日志描述（兼容通用日志）
     intent.py             # 固定五类页面导航/交流意图及低分澄清
     chat.py               # 对话消息组织和文本回答
   prompts/
     __init__.py           # 按模块路径加载提示词，不依赖当前工作目录
-    business_plan.md      # 各业务独立维护的系统提示词
-    log_summary.md
+    log_summary.md        # 各业务独立维护的系统提示词
     intent.md
     chat.md
 tests/                    # pytest：API、错误处理、Agent 运行时与脚本测试
-  fixtures/               # 日志版本化回归集及路由迁移前完整 OpenAPI 契约
+  fixtures/               # 日志版本化回归集及当前 OpenAPI 契约快照
 data/                     # 用户提供的 OCR 输入、意图评测样例
 interfaces/               # 供其他业务对接的固定输出 Schema、示例和说明
   log_summary/
@@ -273,7 +266,7 @@ CLAUDE.md                 # 引用 AGENTS.md，复用共享规则
 # app/api/example.py
 from fastapi import APIRouter
 
-router = APIRouter(prefix="/api/example", tags=["示例业务"])
+router = APIRouter(prefix="/example", tags=["示例业务"])
 # 在此定义使用已有 Schema 和共享业务实例的 @router.get/post 等入口。
 ```
 

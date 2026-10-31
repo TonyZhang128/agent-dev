@@ -1,6 +1,6 @@
 # 意图识别测试说明
 
-接口：`POST /api/agents/intent`。请求、响应和兼容说明见 [API 文档](agents-api.md#2-意图识别)。
+接口：`POST /agents/intent`。请求、响应和兼容说明见 [API 文档](agents-api.md#2-意图识别)。
 
 ## 验收规则
 
@@ -62,7 +62,7 @@ zsh scripts/dev/services.sh restart-api
 UV_CACHE_DIR="$PWD/.cache/uv" uv run --locked python -m scripts.common.verify_agents
 ```
 
-脚本同时验证用户提供的1条日志输入、`tests/fixtures/log_summary_cases.json` 的11条回归样例（含5条工程 OCR）、两个兼容日志、两个对话及一个业务规划案例，加上24条意图分类和4条非法候选请求，合计45次 HTTP 业务调用（41次成功响应、4次预期 `422`）；日志标准见 [日志总结测试说明](log-summary-testing.md)。报告写入不提交 Git 的 `verification/agents-live-result.json`，包含模型、框架版本、数据集版本、逐条实际请求及响应；意图和数据集日志用例还包含预期及通过状态。每条 `checks[i].request` 是实际发送的 JSON 请求体（包括非法候选请求或聊天历史），`checks[i].response` 是 API 返回结果，`expected` 是对应业务参考答案，`passed` 是比对结果，日志还包含 `acceptance` 事实约束，非法候选检查使用 `expected_http_status` 和 `passed` 记录预期拒绝结果。任一意图或日志不匹配都会使脚本退出失败；有限样例通过不代表所有自然语言输入均能正确分类。
+脚本同时验证用户提供的1条日志输入、`tests/fixtures/log_summary_cases.json` 的11条回归样例（含5条工程 OCR）、两个兼容日志及两个对话，加上24条意图分类和4条非法候选请求，合计44次 HTTP 业务调用（40次成功响应、4次预期 `422`）；日志标准见 [日志总结测试说明](log-summary-testing.md)。报告写入不提交 Git 的 `verification/agents-live-result.json`，包含模型、框架版本、数据集版本、逐条实际请求及响应；意图和数据集日志用例还包含预期及通过状态。每条 `checks[i].request` 是实际发送的 JSON 请求体（包括非法候选请求或聊天历史），`checks[i].response` 是 API 返回结果，`expected` 是对应业务参考答案，`passed` 是比对结果，日志还包含 `acceptance` 事实约束，非法候选检查使用 `expected_http_status` 和 `passed` 记录预期拒绝结果。任一意图或日志不匹配都会使脚本退出失败；有限样例通过不代表所有自然语言输入均能正确分类。
 
 Linux 使用相同业务代码和评测集，重启部署服务后执行通用验收，完整 GPU 验收见 [Linux 部署说明](deployment-linux.md#4-真实验收)。Mac 结果不能代替 Linux + vLLM 实机验收。
 

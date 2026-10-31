@@ -10,7 +10,7 @@ from importlib.metadata import version
 import httpx
 
 from app.config import ROOT, Settings
-from app.schemas import BusinessPlan, ChatResponse, IntentResult, LogSummary
+from app.schemas import ChatResponse, IntentResult, LogSummary
 
 
 def log_matches_expectations(log: LogSummary, sample: dict) -> bool:
@@ -47,7 +47,7 @@ class _VerificationClient:
             "session_id": "verification-session",
             **payload,
         }
-        if path in ("/api/agents/intent", "/api/agents/chat"):
+        if path in ("/agents/intent", "/agents/chat"):
             payload = {"history": [], **payload}
         request_started = time.monotonic()
         response = self.client.post(path, json=payload)
@@ -80,7 +80,7 @@ class _VerificationClient:
 def _verify_logs(verifier: _VerificationClient, report: dict) -> None:
     log = verifier.post(
         "structured_log",
-        "/api/agents/log-summary",
+        "/agents/log-summary",
         {
             "content": {
                 "date": "2026-10-17",
@@ -95,7 +95,7 @@ def _verify_logs(verifier: _VerificationClient, report: dict) -> None:
 
     text_log = verifier.post(
         "text_log",
-        "/api/agents/log-summary",
+        "/agents/log-summary",
         {"content": "已完成：整理接口文档。待办：明天补充调用示例。问题：无。"},
         LogSummary,
     )
@@ -113,7 +113,7 @@ def _verify_logs(verifier: _VerificationClient, report: dict) -> None:
     )
     provided_log = verifier.post(
         "provided_ocr_log",
-        "/api/agents/log-summary",
+        "/agents/log-summary",
         {"content": provided_content},
         LogSummary,
     )
@@ -169,10 +169,10 @@ def _verify_intents(verifier: _VerificationClient, report: dict) -> None:
 
 def _verify_chat(verifier: _VerificationClient) -> None:
     first_message = "请记住项目代号是青松，只回复：已记住。"
-    first = verifier.post("chat", "/api/agents/chat", {"message": first_message}, ChatResponse)
+    first = verifier.post("chat", "/agents/chat", {"message": first_message}, ChatResponse)
     followup = verifier.post(
         "chat_with_history",
-        "/api/agents/chat",
+        "/agents/chat",
         {
             "message": "项目代号是什么？只回答代号。",
             "history": [
@@ -207,20 +207,13 @@ def main():
             document = client.get("/openapi.json")
             document.raise_for_status()
             report["api_version"] = document.json()["info"]["version"]
-            for path in ("/api/agents/log-summary", "/api/agents/intent", "/api/agents/chat"):
+            for path in ("/agents/log-summary", "/agents/intent", "/agents/chat"):
                 assert path in document.json()["paths"], f"route missing: {path}"
 
             verifier = _VerificationClient(client, report["checks"])
             _verify_logs(verifier, report)
             _verify_intents(verifier, report)
             _verify_chat(verifier)
-
-            verifier.post(
-                "existing_business_plan",
-                "/api/business/plan",
-                {"instruction": "检查报销发票，齐全则提交部门经理审批，否则通知员工补齐。"},
-                BusinessPlan,
-            )
         report["passed"] = True
     except Exception as exc:
         report["error"] = f"{type(exc).__name__}: {exc}"

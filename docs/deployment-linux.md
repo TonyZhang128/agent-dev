@@ -101,7 +101,7 @@ API 与模型均运行后，在拥有 NVIDIA 设备的部署主机执行：
 bash scripts/prod/verify.sh
 ```
 
-输出在 `verification/`：`agents-live-result.json`（日志、完整版本化意图评测集、对话及业务规划）、`live-result.json`（Agent 直调、ASGI、TCP）、`nvidia-smi.txt`（驱动/显存信息）。意图识别固定五类及成功标准见 [测试说明](intent-testing.md)。验证不会调用 Ollama。硬件可见不等于模型已使用 GPU，结合 `nvidia-smi` 进程显存及 vLLM 日志确认实际分配。
+输出在 `verification/`：`agents-live-result.json`（日志、完整版本化意图评测集及对话）、`live-result.json`（Agent 直调、ASGI、TCP）、`nvidia-smi.txt`（驱动/显存信息）。意图识别固定五类及成功标准见 [测试说明](intent-testing.md)。验证不会调用 Ollama。硬件可见不等于模型已使用 GPU，结合 `nvidia-smi` 进程显存及 vLLM 日志确认实际分配。
 
 API 主机没有 GPU 时，在该主机执行通用业务验收：
 

@@ -81,7 +81,7 @@ async def test_concurrent_fixed_intent_requests_are_isolated():
 
             async def classify(text):
                 payload = {"text": text, "intents": []}
-                response = await client.post("/api/agents/intent", json=request_payload(payload))
+                response = await client.post("/agents/intent", json=request_payload(payload))
                 assert response.status_code == 200
                 if cases[text] == "chat":
                     assert response.json()["reason"] == "回答：" + text
@@ -104,9 +104,7 @@ async def test_total_timeout_bounds_the_agent():
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:
-            response = await client.post(
-                "/api/agents/chat", json=request_payload({"message": "你好"})
-            )
+            response = await client.post("/agents/chat", json=request_payload({"message": "你好"}))
             assert response.status_code == 504
 
 
@@ -170,7 +168,7 @@ def test_refusal_and_content_filter_return_502(message, finish):
     service = models_for(lambda request, m=message, f=finish: completion(m, f))
     with TestClient(create_app(service)) as client:
         response = client.post(
-            "/api/agents/log-summary", json=request_payload({"content": "已完成文档"})
+            "/agents/log-summary", json=request_payload({"content": "已完成文档"})
         )
         assert response.status_code == 502
 
@@ -186,9 +184,7 @@ def test_unregistered_tool_calls_return_502():
         create_app(models_for(lambda request: completion(response, "tool_calls")))
     ) as client:
         assert (
-            client.post(
-                "/api/agents/chat", json=request_payload({"message": "执行任务"})
-            ).status_code
+            client.post("/agents/chat", json=request_payload({"message": "执行任务"})).status_code
             == 502
         )
 

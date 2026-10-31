@@ -6,15 +6,15 @@
 
 | 业务 | 方法与路径 | 模块 |
 | --- | --- | --- |
-| 总结并生成工作日志 | `POST /api/agents/log-summary` | `app/agents/log_summary.py` |
-| 意图识别 | `POST /api/agents/intent` | `app/agents/intent.py` |
-| 自由对话 | `POST /api/agents/chat` | `app/agents/chat.py` |
+| 总结并生成工作日志 | `POST /agents/log-summary` | `app/agents/log_summary.py` |
+| 意图识别 | `POST /agents/intent` | `app/agents/intent.py` |
+| 自由对话 | `POST /agents/chat` | `app/agents/chat.py` |
 
 当前版本 `0.3.0`。三个智能体均通过 LangChain `create_agent()` 执行，共享 `app/llm.py` 的 `ChatOpenAI` 模型工厂和 `.env` 配置。日志总结、意图识别使用 `ProviderStrategy` 和 JSON Schema 约束生成，最后经过 Pydantic 校验；对话返回普通文本，再包装为 JSON。接口只处理传入内容，不执行外部业务操作，不将用户消息保存为服务端会话。
 
 ## 用户与会话请求契约
 
-四个业务接口（含 `/api/business/plan`）均要求非空字符串 `user_id`、`session_id`，去除首尾空白后各1–128字符。`/intent` 和 `/chat` 还必须传 `history`（首轮为 `[]`）；日志总结和业务规划不接受该字段。旧请求缺少这些必填字段将返回422，接口路径和成功响应结构不变。完整示例、并发隔离、裁剪规则和身份信任边界见 [用户与会话](sessions.md)。
+三个业务接口均要求非空字符串 `user_id`、`session_id`，去除首尾空白后各1–128字符。`/intent` 和 `/chat` 还必须传 `history`（首轮为 `[]`）；日志总结不接受该字段。旧请求缺少这些必填字段将返回422，成功响应结构不变；业务接口路径已统一为 `/agents/...`，不再使用 `/api/agents` 前缀。完整示例、并发隔离、裁剪规则和身份信任边界见 [用户与会话](sessions.md)。
 
 ## 1. 工作日志总结
 
@@ -99,7 +99,7 @@
 
 固定输出接口的 [JSON Schema、示例和对接说明](../interfaces/log_summary/README.md) 位于 `interfaces/log_summary/`。`data/log_summary.json` 只保存用户提供的 OCR 原始对象，发送 HTTP 请求时需提供 `user_id`、`session_id`，并将原始对象放入 `content`。响应固定为 `title`、`date`、`summary`、`completed_items`、`pending_items`、`issues` 六个必填字段，禁止额外字段，空日期使用 `null`，无对应事实的数组使用 `[]`。
 
-调用方读取 `summary` 作为当日日志的一部分；接口继续返回结构化 JSON，路径与响应字段不变；旧文字及对象输入仍放在 content，但请求必须补充 user_id 和 session_id。
+调用方读取 `summary` 作为当日日志的一部分；接口继续返回结构化 JSON，响应字段不变；接口路径已统一为 `/agents/log-summary`；旧文字及对象输入仍放在 content，但请求必须补充 user_id 和 session_id。
 
 当前采用暂行客观描述规则，正式业务话术标准待补充；规则集中在 `app/prompts/log_summary.md`：
 
@@ -131,7 +131,7 @@
 | `chat` | 问候、闲聊或一般交流 | 你好；谢谢；监理日志是什么 |
 
 ```zsh
-curl --noproxy '*' -fsS http://127.0.0.1:8309/api/agents/intent \
+curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/intent \
   -H 'Content-Type: application/json' \
   -d '{"user_id":"example-user","session_id":"example-session","history":[],"text":"你好，帮我打开图片库"}'
 ```
@@ -170,14 +170,14 @@ curl --noproxy '*' -fsS http://127.0.0.1:8309/api/agents/intent \
 
 已取消自定义分类。为兼容已有的空字段请求，保留可选 `intents`，但只能省略或为 `[]`；任何非空列表均返回 `422`，即使其中使用的是当前五类标签，也不允许覆盖或缩减分类。模型不会收到调用方自定义候选。
 
-本次接口路径和四个响应字段保持不变；请求不再接受非空 `intents`，响应 `intent` 的 JSON Schema 和 Pydantic 类型固定为上述五类及 `unknown`。旧调用方应去掉自定义候选并更新标签映射；模型返回集合之外的标签视为非法输出，返回 `502`。测试及真实评测标准见 [意图识别测试说明](intent-testing.md)。
+四个响应字段保持不变，接口路径已由 `/api/agents/intent` 调整为 `/agents/intent`；请求不再接受非空 `intents`，响应 `intent` 的 JSON Schema 和 Pydantic 类型固定为上述五类及 `unknown`。旧调用方应去掉自定义候选并更新标签映射；模型返回集合之外的标签视为非法输出，返回 `502`。测试及真实评测标准见 [意图识别测试说明](intent-testing.md)。
 
 ## 3. 自由对话
 
 最简单的请求只需要 `message`：
 
 ```zsh
-curl --noproxy '*' -fsS http://127.0.0.1:8309/api/agents/chat \
+curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/chat \
   -H 'Content-Type: application/json' \
   -d '{"user_id":"example-user","session_id":"example-session","history":[],"message":"你好，帮我解释一下什么是业务智能体。"}'
 ```
@@ -220,7 +220,7 @@ curl --noproxy '*' -fsS http://127.0.0.1:8309/api/agents/chat \
 
 ## 开发位置与验证
 
-业务规则在 `app/agents/`，系统提示词在 `app/prompts/`，请求及返回类型在 `app/schemas.py`，HTTP 路由在 `app/api/agents.py`、`business.py`、`system.py`，由 `app/api/router.py` 聚合、`app/main.py` 注册。`main.py` 保留应用工厂和共享资源生命周期；`app/http_errors.py` 注册原有全局异常处理器。`app/agents/base.py` 提供对话和结构化业务共用的 `BaseAgent`，以及带 Schema 和结果校验的 `StructuredAgent`；`runtime.py` 统一创建和调用 LangChain Agent，`middleware.py` 检查异常模型响应，`app/llm.py` 负责 OpenAI 兼容模型适配。新增业务的步骤见 [README](../README.md#项目结构与-agent-开发)。
+业务规则在 `app/agents/`，系统提示词在 `app/prompts/`，请求及返回类型在 `app/schemas.py`，HTTP 路由在 `app/api/agents.py`、`system.py`，由 `app/api/router.py` 聚合、`app/main.py` 注册。`main.py` 保留应用工厂和共享资源生命周期；`app/http_errors.py` 注册原有全局异常处理器。`app/agents/base.py` 提供对话和结构化业务共用的 `BaseAgent`，以及带 Schema 和结果校验的 `StructuredAgent`；`runtime.py` 统一创建和调用 LangChain Agent，`middleware.py` 检查异常模型响应，`app/llm.py` 负责 OpenAI 兼容模型适配。新增业务的步骤见 [README](../README.md#项目结构与-agent-开发)。
 
 ```zsh
 # 在项目根目录执行：
@@ -228,7 +228,7 @@ UV_CACHE_DIR="$PWD/.cache/uv" uv run --locked pytest -v
 UV_CACHE_DIR="$PWD/.cache/uv" uv run --locked python -m scripts.common.verify_agents
 ```
 
-真实测试覆盖日志文字与 JSON 输入、`data/intent.json` 的完整版本化评测集、普通对话、携带历史的对话，以及原有业务规划接口。意图逐条比对标签、澄清标记及分数规则；记录和数据集版本保存在 `verification/agents-live-result.json`。每条 `checks` 记录的 `request` 保存实际 JSON 请求体，`response` 保存 API 输出，可直接对照输入和结果。
+真实测试覆盖日志文字与 JSON 输入、`data/intent.json` 的完整版本化评测集、普通对话及携带历史的对话。意图逐条比对标签、澄清标记及分数规则；记录和数据集版本保存在 `verification/agents-live-result.json`。每条 `checks` 记录的 `request` 保存实际 JSON 请求体，`response` 保存 API 输出，可直接对照输入和结果。
 
 输入不合法返回 422；模型不可达返回 503；模型推理超时返回 504；上游错误、响应截断或输出校验失败返回 502。
 
@@ -239,5 +239,3 @@ zsh scripts/dev/services.sh restart-api
 ```
 
 Linux 上线请使用 [部署脚本说明](../scripts/README.md)中的 `scripts/prod/` 入口，并由服务管理器重启 API。
-
-原有 `POST /api/business/plan` 接口继续可用。

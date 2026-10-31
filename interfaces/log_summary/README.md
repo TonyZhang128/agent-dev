@@ -1,6 +1,6 @@
 # 工程日志固定输出接口
 
-接口：`POST /api/agents/log-summary`，JSON 编码为 UTF-8。成功返回 HTTP `200`，响应直接是包含以下六个必填字段的 JSON 对象，不增加额外包装层。
+接口：`POST /agents/log-summary`，JSON 编码为 UTF-8。成功返回 HTTP `200`，响应直接是包含以下六个必填字段的 JSON 对象，不增加额外包装层。
 
 - [response.schema.json](response.schema.json)：供调用方校验、生成类型的 JSON Schema，与 `LogSummary.model_json_schema()` 一致。
 - [response.example.json](response.example.json)：对应 [用户提供的 OCR 输入](../../data/log_summary.json) 的人工参考输出。
@@ -33,7 +33,7 @@ import httpx
 content = json.loads(Path("data/log_summary.json").read_text(encoding="utf-8"))
 with httpx.Client(timeout=190, trust_env=False) as client:
     response = client.post(
-        "http://127.0.0.1:8309/api/agents/log-summary",
+        "http://127.0.0.1:8309/agents/log-summary",
         json={"user_id": "example-user", "session_id": "example-session", "content": content},
     )
     response.raise_for_status()

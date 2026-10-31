@@ -20,7 +20,7 @@ def test_live_verifier_checks_versioned_datasets(
         json.dumps(
             {
                 "version": "test-v2",
-                "endpoint": "/api/agents/intent",
+                "endpoint": "/agents/intent",
                 "samples": [
                     {
                         "id": "test_image_library",
@@ -54,7 +54,7 @@ def test_live_verifier_checks_versioned_datasets(
         json.dumps(
             {
                 "version": "ocr-test-v1",
-                "endpoint": "/api/agents/log-summary",
+                "endpoint": "/agents/log-summary",
                 "samples": [
                     {
                         "id": "ocr_variant",
@@ -96,9 +96,9 @@ def test_live_verifier_checks_versioned_datasets(
         elif path == "/openapi.json":
             result = {
                 "info": {"version": "test"},
-                "paths": {f"/api/agents/{name}": {} for name in ("log-summary", "intent", "chat")},
+                "paths": {f"/agents/{name}": {} for name in ("log-summary", "intent", "chat")},
             }
-        elif path == "/api/agents/log-summary":
+        elif path == "/agents/log-summary":
             content = payload["content"]
             result = {
                 "title": "测试日志",
@@ -115,7 +115,7 @@ def test_live_verifier_checks_versioned_datasets(
                     pending_items=[],
                     issues=[],
                 )
-        elif path == "/api/agents/intent":
+        elif path == "/agents/intent":
             if payload.get("intents") and reject_custom:
                 return httpx.Response(422, json={"detail": [{"type": "too_long"}]})
             result = {
@@ -124,23 +124,10 @@ def test_live_verifier_checks_versioned_datasets(
                 "reason": "识别页面",
                 "needs_clarification": False,
             }
-        elif path == "/api/agents/chat":
+        elif path == "/agents/chat":
             result = {"reply": "青松", "model": "test"}
         else:
-            result = {
-                "goal": "检查发票",
-                "steps": [
-                    {
-                        "step": 1,
-                        "action": "检查",
-                        "responsible_role": "经理",
-                        "condition": "收到发票",
-                        "expected_output": "检查结果",
-                    }
-                ],
-                "assumptions": [],
-                "questions": [],
-            }
+            raise AssertionError(f"unexpected request path: {path}")
         return httpx.Response(200, json=result)
 
     client = httpx.Client(base_url="http://test", transport=httpx.MockTransport(respond))
@@ -181,7 +168,6 @@ def test_live_verifier_checks_versioned_datasets(
             "test_reject_custom",
             "chat",
             "chat_with_history",
-            "existing_business_plan",
         ]
 
 
@@ -221,9 +207,7 @@ def test_live_verifier_records_response_before_validation_failure(
                 200,
                 json={
                     "info": {"version": "test"},
-                    "paths": {
-                        f"/api/agents/{name}": {} for name in ("log-summary", "intent", "chat")
-                    },
+                    "paths": {f"/agents/{name}": {} for name in ("log-summary", "intent", "chat")},
                 },
             )
         return httpx.Response(status, text=body)

@@ -21,7 +21,7 @@ import httpx
 
 content = json.loads(Path("data/log_summary.json").read_text(encoding="utf-8"))
 with httpx.Client(base_url="http://127.0.0.1:8309", timeout=190, trust_env=False) as client:
-    response = client.post("/api/agents/log-summary", json={"user_id": "example-user", "session_id": "example-session", "content": content})
+    response = client.post("/agents/log-summary", json={"user_id": "example-user", "session_id": "example-session", "content": content})
     response.raise_for_status()
     print(response.json()["summary"])
 PY
@@ -35,4 +35,4 @@ PY
 
 `unknown` 不计入五类。分数低于 `0.65` 或需要澄清时必须返回 `unknown`，分数不是校准概率。参考答案不要求原因逐字一致，也不会执行页面跳转或其他业务操作；详见 [意图测试说明](../docs/intent-testing.md)。
 
-`uv run --locked python -m scripts.common.verify_agents` 验证用户给出的日志输入、测试目录中的日志回归集及意图集，并验证文字日志、对话和业务规划。实际请求、响应和验收结果写入本地 `verification/agents-live-result.json`，不写入本目录或接口定义文件。
+`uv run --locked python -m scripts.common.verify_agents` 验证用户给出的日志输入、测试目录中的日志回归集及意图集，并验证文字日志和对话。实际请求、响应和验收结果写入本地 `verification/agents-live-result.json`，不写入本目录或接口定义文件。
