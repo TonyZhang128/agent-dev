@@ -33,7 +33,7 @@ import httpx
 content = json.loads(Path("data/log_summary.json").read_text(encoding="utf-8"))
 with httpx.Client(timeout=190, trust_env=False) as client:
     response = client.post(
-        "http://127.0.0.1:8000/api/agents/log-summary",
+        "http://127.0.0.1:8309/api/agents/log-summary",
         json={"user_id": "example-user", "session_id": "example-session", "content": content},
     )
     response.raise_for_status()

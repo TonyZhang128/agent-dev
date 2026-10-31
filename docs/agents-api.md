@@ -1,8 +1,8 @@
 # 三个业务智能体 API
 
-服务地址：`http://127.0.0.1:8000`。交互文档：`http://127.0.0.1:8000/docs`。
+服务地址：`http://127.0.0.1:8309`。交互文档：`http://127.0.0.1:8309/docs`。
 
-当前公网地址为 `https://107.182.190.191:8443`，接口路径和 JSON 请求/返回保持一致，无需账户、密码、API key 或 `Authorization` 请求头。其他电脑上的系统可直接调用；HTTPS 使用私有 CA，客户端需配置 CA 证书信任，具体示例见 [公网接入与跨电脑调用](frp.md)。`user_id`、`session_id` 仍是必填业务标识，不是登录凭据。
+开发期可通过 frp 使用公网地址 `https://107.182.190.191:8443` 联调，接口路径和 JSON 请求/返回与本地一致；该能力仅用于开发环境，Linux 生产部署不包含 frp。公网访问无需账户、密码、API key 或 `Authorization` 请求头，HTTPS 使用私有 CA，客户端需配置 CA 证书信任，具体示例见 [frp 公网接入（仅开发）](frp.md)。`user_id`、`session_id` 仍是必填业务标识，不是登录凭据。
 
 | 业务 | 方法与路径 | 模块 |
 | --- | --- | --- |
@@ -131,7 +131,7 @@
 | `chat` | 问候、闲聊或一般交流 | 你好；谢谢；监理日志是什么 |
 
 ```zsh
-curl --noproxy '*' -fsS http://127.0.0.1:8000/api/agents/intent \
+curl --noproxy '*' -fsS http://127.0.0.1:8309/api/agents/intent \
   -H 'Content-Type: application/json' \
   -d '{"user_id":"example-user","session_id":"example-session","history":[],"text":"你好，帮我打开图片库"}'
 ```
@@ -177,7 +177,7 @@ curl --noproxy '*' -fsS http://127.0.0.1:8000/api/agents/intent \
 最简单的请求只需要 `message`：
 
 ```zsh
-curl --noproxy '*' -fsS http://127.0.0.1:8000/api/agents/chat \
+curl --noproxy '*' -fsS http://127.0.0.1:8309/api/agents/chat \
   -H 'Content-Type: application/json' \
   -d '{"user_id":"example-user","session_id":"example-session","history":[],"message":"你好，帮我解释一下什么是业务智能体。"}'
 ```
@@ -220,7 +220,7 @@ curl --noproxy '*' -fsS http://127.0.0.1:8000/api/agents/chat \
 
 ## 开发位置与验证
 
-业务规则在 `app/agents/`，系统提示词在 `app/prompts/`，请求及返回类型在 `app/schemas.py`，路由在 `app/main.py`。`app/agents/base.py` 提供对话和结构化业务共用的 `BaseAgent`，以及带 Schema 和结果校验的 `StructuredAgent`；`runtime.py` 统一创建和调用 LangChain Agent，`middleware.py` 检查异常模型响应，`app/llm.py` 负责 OpenAI 兼容模型适配。新增业务的步骤见 [README](../README.md#项目结构与-agent-开发)。
+业务规则在 `app/agents/`，系统提示词在 `app/prompts/`，请求及返回类型在 `app/schemas.py`，HTTP 路由在 `app/api/agents.py`、`business.py`、`system.py`，由 `app/api/router.py` 聚合、`app/main.py` 注册。`main.py` 保留应用工厂和共享资源生命周期；`app/http_errors.py` 注册原有全局异常处理器。`app/agents/base.py` 提供对话和结构化业务共用的 `BaseAgent`，以及带 Schema 和结果校验的 `StructuredAgent`；`runtime.py` 统一创建和调用 LangChain Agent，`middleware.py` 检查异常模型响应，`app/llm.py` 负责 OpenAI 兼容模型适配。新增业务的步骤见 [README](../README.md#项目结构与-agent-开发)。
 
 ```zsh
 # 在项目根目录执行：

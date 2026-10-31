@@ -56,7 +56,7 @@
 ## 调用示例及失败响应
 
 ```zsh
-curl --noproxy '*' -fsS http://127.0.0.1:8000/api/agents/intent \
+curl --noproxy '*' -fsS http://127.0.0.1:8309/api/agents/intent \
   -H 'Content-Type: application/json' \
   -d '{"user_id":"example-user","session_id":"example-session","history":[],"text":"你好，帮我打开图片库"}'
 ```

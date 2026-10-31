@@ -1,23 +1,31 @@
-# Qwen 业务智能体 API
+# 公路工程业务智能体层
 
-基于 LangChain 1.x、FastAPI 和 Pydantic 的业务智能体开发项目。开发环境为 macOS + Ollama + Qwen3.5 9B Q4_K_M，上线环境为 Linux + NVIDIA + 独立 vLLM；业务 API 统一通过 OpenAI 兼容协议调用模型。
+基于 LangChain 1.4.6、FastAPI 和 Pydantic 的公路工程业务智能体开发项目。主要为公路工程数据智采，业务平台，管理平台，归档组卷平台等提供智能体与AI算法服务。
 
-当前版本 `0.3.0`。四个业务均通过 `langchain.agents.create_agent()` 执行，保留原有 HTTP 请求和返回结构。
+开发环境为 macOS + Ollama + Qwen3.5 9B Q4_K_M，上线环境为 Linux + NVIDIA + 独立 vLLM；业务 API 统一通过 OpenAI 兼容协议调用模型。
+
+包版本为 `0.1.0`（`pyproject.toml`）；当前 OpenAPI 标题为“公路工程业务智能体”、版本为 `0.1.0`（`app/main.py`）。两者分别是项目包元信息与 API 文档元信息，当前尚未统一。四个业务均通过 `langchain.agents.create_agent()` 执行，HTTP 层使用按领域组织的 `APIRouter`。
+
+开发者和编程代理的共享规范见 [AGENTS.md](AGENTS.md)；`CLAUDE.md` 引用同一份规则。完整请求/响应契约见 [API 文档](docs/agents-api.md)，脚本入口见 [脚本说明](scripts/README.md)。
 
 | 功能 | 接口 | 输入与输出 |
 | --- | --- | --- |
 | 工程日志描述 | `POST /api/agents/log-summary` | 可变结构的工程表单 OCR JSON（兼容文字）→ 日志段落及结构化字段 |
-| 意图识别 | `POST /api/agents/intent` | 文字 → 固定四个页面或一般交流类别、判断分数、澄清标记；一般交流返回聊天回答 |
-| 自由对话 | `POST /api/agents/chat` | 当前消息、可选历史 → 回答和模型名称 |
+| 意图识别 | `POST /api/agents/intent` | 文字与历史消息 → 固定四个页面或一般交流类别、判断分数、澄清标记；一般交流返回聊天回答 |
+| 自由对话 | `POST /api/agents/chat` | 当前消息、必填历史（首轮 `[]`）→ 回答和模型名称 |
 | 业务步骤规划 | `POST /api/business/plan` | 自然语言业务指令 → 目标、步骤、假设、待确认问题 |
+| 进程存活 | `GET /health` | `{"status":"ok"}`，不访问模型 |
+| 模型就绪 | `GET /ready` | 检查配置模型是否出现在上游模型列表，成功返回 `{"status":"ready"}`，不执行推理 |
 
-服务默认监听 `127.0.0.1:8000`，交互文档为 <http://127.0.0.1:8000/docs>。这些接口生成内容和计划，尚未连接审批、订单或消息发送等业务系统。
+服务默认监听 `127.0.0.1:8309`，交互文档为 <http://127.0.0.1:8309/docs>。这些接口生成内容和计划，尚未连接审批、订单或消息发送等业务系统。
 
-本机 API 已通过 frp 接入公网服务器，访问地址为 `https://107.182.190.191:8443`，Swagger 为 `/docs`。公网调用无需账户、密码或 API key，另一台电脑上的系统可以直接发送 HTTP API 请求；HTTPS 使用私有 CA，需将本机 `.secrets/frp/ca.crt` 复制到调用方并配置证书信任。示例：`curl --cacert ./ca.crt https://107.182.190.191:8443/health`。客户端连接 `107.182.190.191:7000`，将本机 `8000` 转发到服务端回环端口 `18000`，由服务器已有 Caddy 对外提供访问。启动与关闭隧道分别使用 `zsh scripts/dev/services.sh start-frpc`、`stop-frpc`，调用示例与运维见 [frp 部署说明](docs/frp.md)。
+开发期可用 frp 将本机 API 临时接入公网服务器，供其他电脑联调；该能力只存在于开发环境，Linux 生产部署不安装、不启动 frp。地址、证书信任和启动方式见 [frp 公网接入（仅开发）](#frp-公网接入仅开发)，完整运维见 [frp 部署说明](docs/frp.md)。
+
+`ocr/` 是工作区内独立的表单识别应用，见其 `ocr/README.md`；它未挂载到 `app.main:app`，也不在主应用的依赖、CI 和测试覆盖范围内。主应用日志接口接收 OCR 结果，不代表会直接执行该 OCR 服务。该目录当前未纳入 Git，干净克隆可能不存在；不要在主业务 `.venv/` 中直接安装其依赖。
 
 ## 环境与安装
 
-本机已验证：Apple M5 / 24GB、macOS 26.7.1、Ollama 0.40.5、Qwen3.5 9B Q4_K_M、Metal GPU。项目固定 Python 3.12；`uv.lock` 锁定完整依赖，虚拟环境位于 `.venv/`，与其他 Python 项目隔离。
+此前本机验收环境为 Apple M5 / 24GB、macOS 26.7.1、Ollama 0.40.5、Qwen3.5 9B Q4_K_M、Metal GPU；这不是所有部署环境的版本要求。项目固定 Python 3.12；`uv.lock` 锁定完整依赖，虚拟环境位于 `.venv/`，与其他 Python 项目隔离。
 
 主要依赖：LangChain `1.4.6`、langchain-core `1.6.12`、langchain-openai `1.7.2`、FastAPI `0.136.3`、Pydantic `2.13.4`。OpenAI SDK 由 LangChain 模型适配器使用；LangSmith 已安装，默认关闭追踪。`create_agent()` 内部依赖 LangGraph 运行时，项目没有自行维护图工作流或引入 Dify。
 
@@ -53,6 +61,8 @@ test -f .env || cp .env.example .env
 
 配置读取顺序：进程环境变量优先，然后是项目根目录 `.env`，最后是代码默认值。API key 使用 `SecretStr`，不应提交到 Git。
 
+该优先级针对 **API 实际启动进程**。launchd 后台任务不保证继承当前终端临时 `export` 的所有变量；业务配置优先写入根目录 `.env`，修改后重启 API。Ollama 的 `OLLAMA_*` 是模型服务进程配置，不由业务 `Settings` 加载，需要在它的实际启动环境中设置。
+
 | 变量 | 默认值 | 用途 |
 | --- | --- | --- |
 | `LLM_BASE_URL` | `http://127.0.0.1:11434/v1` | OpenAI 兼容模型 API，包含 `/v1` |
@@ -76,11 +86,13 @@ zsh scripts/dev/services.sh start
 zsh scripts/dev/services.sh status
 # 修改代码或 .env 后：
 zsh scripts/dev/services.sh restart-api
-# 停止本项目注册的两个任务：
+# 停止本项目注册的 frpc、API、Ollama 任务：
 zsh scripts/dev/services.sh stop
 ```
 
-脚本注册 `local.qwen-business-dev.ollama`、`local.qwen-business-dev.api` 用户会话任务，复用已运行的服务，不修改 shell profile。任务持续到停止或退出登录；重新登录后运行 `start`。日志在 `.logs/*-service.*.log`。其他方式启动的进程不会被脚本停止。
+脚本按需注册 `local.qwen-business-dev.ollama`、`local.qwen-business-dev.api` 用户会话任务，复用已运行的服务，不修改 shell profile。任务持续到停止或退出登录；重新登录后运行 `start`。日志在 `.logs/*-service.*.log`。普通 `start` 不启动公网隧道；仅开发联调需要时单独执行 `start-frpc`，`stop` 会先停止本项目注册的 frpc，再处理 API/Ollama。
+
+其他方式启动的进程不会被脚本停止。若 `restart-api` 提示端口 8309 被占用，说明尚未完成当前代码的重启部署；应确认进程归属并通过原启动方式管理，不直接杀进程。临时回环端口上的验证也不代表端口 8309 已更新。
 
 前台开发时，先停止本项目后台任务，再在两个终端分别执行：
 
@@ -92,7 +104,25 @@ zsh scripts/dev/start-ollama.sh
 zsh scripts/dev/start-api.sh --reload
 ```
 
-如 Ollama 已由其他方式启动，直接复用。默认 Ollama 上下文 `8192`、单模型、单并发；Apple Silicon 的 GPU 由 Ollama 自动选择，使用 `ollama ps` 查看 `PROCESSOR` 列。不要同时在端口 8000 启动前台和后台 API。
+如 Ollama 已由其他方式启动，直接复用。默认 Ollama 上下文 `8192`、单模型、单并发；Apple Silicon 的 GPU 由 Ollama 自动选择，使用 `ollama ps` 查看 `PROCESSOR` 列。不要同时在端口 8309 启动前台和后台 API。
+
+## frp 公网接入（仅开发）
+
+frp 隧道只用于开发联调：把 Mac 本机 API 临时暴露给其他电脑。它不属于上线能力，Linux 生产部署不安装、不启动 frpc/frps，也不复制 `config/dev/frp/` 或 `.secrets/frp/`。生产对外入口由实际部署环境单独设计和配置。
+
+开发期公网入口为 `https://107.182.190.191:8443`，Swagger 为 `/docs`；是否在线取决于本机 API、frpc 和服务器状态。frpc 主动连接 `107.182.190.191:7000`，将本机 `127.0.0.1:8309` 转发到服务端回环端口 `18000`，再由服务器 Caddy 提供 HTTPS。主应用没有自定义身份认证，调用方的 `user_id`、`session_id` 不是权限凭据；公网隧道本身也不增加认证。
+
+HTTPS 使用私有 CA。调用方需取得 `.secrets/frp/ca.crt` 并配置证书信任，勿分发 CA 私钥或隧道 token。示例：
+
+```zsh
+curl --cacert ./ca.crt -fsS https://107.182.190.191:8443/health
+# 需本机 API 已启动；仅管理本项目注册的隧道任务
+zsh scripts/dev/services.sh start-frpc
+zsh scripts/dev/services.sh stop-frpc
+zsh scripts/dev/services.sh restart-frpc
+```
+
+隧道配置在 `config/dev/frp/`，凭据在 Git 忽略的 `.secrets/frp/`，日志在 `.logs/frpc-service.*.log`。服务端文件、跨电脑调用示例和验收边界见 [frp 部署说明](docs/frp.md)。
 
 ## 代理与下载
 
@@ -118,16 +148,16 @@ zsh scripts/dev/setup.sh
 ## 调用与验证
 
 ```zsh
-curl --noproxy '*' -fsS http://127.0.0.1:8000/health
-curl --noproxy '*' -fsS http://127.0.0.1:8000/ready
+curl --noproxy '*' -fsS http://127.0.0.1:8309/health
+curl --noproxy '*' -fsS http://127.0.0.1:8309/ready
 uv run --locked python -c 'import json; from pathlib import Path; print(json.dumps({"user_id": "example-user", "session_id": "example-session", "content": json.loads(Path("data/log_summary.json").read_text())}, ensure_ascii=False))' | \
-  curl --noproxy '*' -fsS http://127.0.0.1:8000/api/agents/log-summary \
+  curl --noproxy '*' -fsS http://127.0.0.1:8309/api/agents/log-summary \
     -H 'Content-Type: application/json' --data-binary @-
-curl --noproxy '*' -fsS http://127.0.0.1:8000/api/agents/intent \
+curl --noproxy '*' -fsS http://127.0.0.1:8309/api/agents/intent \
   -H 'Content-Type: application/json' -d '{"user_id":"example-user","session_id":"example-session","history":[],"text":"打开监理日志页面"}'
-curl --noproxy '*' -fsS http://127.0.0.1:8000/api/agents/chat \
+curl --noproxy '*' -fsS http://127.0.0.1:8309/api/agents/chat \
   -H 'Content-Type: application/json' -d '{"user_id":"example-user","session_id":"example-session","history":[],"message":"你好，请解释业务智能体。"}'
-curl --noproxy '*' -fsS http://127.0.0.1:8000/api/business/plan \
+curl --noproxy '*' -fsS http://127.0.0.1:8309/api/business/plan \
   -H 'Content-Type: application/json' \
   -d '{"user_id":"example-user","session_id":"example-session","instruction":"检查报销发票，齐全则提交经理审批，否则通知员工补齐。"}'
 ```
@@ -153,15 +183,29 @@ uv run --locked python -m scripts.dev.verify_live
 ollama ps
 ```
 
-自动化测试使用 pytest / pytest-asyncio，运行真实 LangChain Agent 和模拟模型 HTTP 传输，不需要 Ollama、联网或云端凭据。测试覆盖脚本分流、生产启动限制、配置保留，以及既有 API、结构化输出、并发标签隔离、消息隔离、超时、异常以及工具调用循环。真实验收脚本覆盖用户提供的 OCR 输入、完整意图及测试目录中的日志回归集、文字日志、对话和业务规划，记录写入本地 `verification/agents-live-result.json`；验收记录、日志和缓存不提交 Git。离线与真实模型验收标准见 [意图识别测试说明](docs/intent-testing.md) 和 [日志总结测试说明](docs/log-summary-testing.md)。GitHub Actions 在 Linux 上执行锁定依赖安装、Ruff 和自动化测试，不执行模型下载和真实推理。
+自动化测试使用 pytest / pytest-asyncio，运行真实 LangChain Agent 和模拟模型 HTTP 传输，不需要 Ollama、联网或云端凭据；首次安装依赖可能需要联网。测试文件直接位于 `tests/test_*.py`，目前没有 `tests/unit/` 或 `tests/integration/`。测试覆盖脚本分流、生产启动限制、配置保留，以及既有 API、结构化输出、并发标签隔离、消息隔离、超时、异常、工具调用循环、路由注册和共享资源生命周期。真实验收脚本覆盖用户提供的 OCR 输入、完整意图及测试目录中的日志回归集、文字日志、对话和业务规划，记录写入本地 `verification/agents-live-result.json`；验收记录、日志和缓存不提交 Git。离线与真实模型验收标准见 [意图识别测试说明](docs/intent-testing.md) 和 [日志总结测试说明](docs/log-summary-testing.md)。GitHub Actions 在 Linux 上执行锁定依赖安装、Ruff 和自动化测试，不执行模型下载和真实推理。
 
 业务验收报告的每条 `checks` 记录使用 `request` 保存实际 JSON 输入（含聊天历史），使用 `response` 保存 API 输出，方便逐条核对。
+
+离线检查证明代码和协议行为，不证明正在运行的服务已加载新代码。推理协议、提示词、模型配置或 Agent 流程变更后，应重启目标服务并运行真实验收；纯文档修改不需要重启或推理。可通过 `BUSINESS_API_URL` 指定业务验收目标，但模型直调仍读取当前 `LLM_*`，二者应对应同一部署。
+
+### OpenAPI 快照与当前工作区差异
+
+`tests/test_routing.py` 将完整 OpenAPI 与 `tests/fixtures/api-openapi.json` 比较，覆盖路径、方法、字段、模型、状态码、operationId、tags、summary，以及应用标题和版本，并额外检查重复注册、Router 独立挂载和多应用资源隔离。
+
+当前快照仍记录 `Qwen 业务智能体 API / 0.3.0`，而主应用已改为 `公路工程业务智能体 / 0.0.1`，因此完整快照测试存在已知失败。应先确认这项元信息变更，再审查并同步快照；不要跳过测试、删除元信息断言或自动覆盖整个基线。此差异也可能使 `setup.sh` 在前置测试阶段退出。历史记录中的测试通过数量属于当时版本，当前状态以实际运行结果为准。
 
 ## 项目结构与 Agent 开发
 
 ```text
 app/
-  main.py                 # FastAPI 路由、生命周期、错误到 HTTP 状态的映射
+  main.py                 # FastAPI 工厂、生命周期、路由与 HTTP 错误处理注册
+  api/
+    router.py             # 聚合 Router，由主应用统一 include_router
+    agents.py             # /api/agents：日志总结、意图识别、聊天
+    business.py           # /api/business：业务步骤规划
+    system.py             # /health、/ready：存活与模型就绪检查
+  http_errors.py          # 输入与模型异常的统一 HTTP 映射、校验详情脱敏
   config.py               # .env 配置与默认值
   schemas.py              # 请求、响应的 Pydantic 模型和校验
   llm.py                  # ChatOpenAI 工厂、共享 HTTP 客户端、模型就绪检查
@@ -177,12 +221,12 @@ app/
     chat.py               # 对话消息组织和文本回答
   prompts/
     __init__.py           # 按模块路径加载提示词，不依赖当前工作目录
-    business_plan.md     # 各业务独立维护的系统提示词
+    business_plan.md      # 各业务独立维护的系统提示词
     log_summary.md
     intent.md
     chat.md
 tests/                    # pytest：API、错误处理、Agent 运行时与脚本测试
-  fixtures/               # 日志版本化回归集，独立于业务输入
+  fixtures/               # 日志版本化回归集及路由迁移前完整 OpenAPI 契约
 data/                     # 用户提供的 OCR 输入、意图评测样例
 interfaces/               # 供其他业务对接的固定输出 Schema、示例和说明
   log_summary/
@@ -190,33 +234,57 @@ interfaces/               # 供其他业务对接的固定输出 Schema、示例
 scripts/
   dev/                    # macOS：Homebrew、Ollama、launchd、Metal GPU 验收
   prod/                   # Linux：运行依赖、API、独立 vLLM、NVIDIA 验收
-  common/                 # 两种环境共用的业务与模型真实推理验收
+  common/                 # 两种环境共用的业务与模型真实推理验收，按日志/意图/会话组织
   README.md               # 脚本入口和迁移说明
   *.sh / verify_*.py      # 原路径兼容入口
-config/frp/              # frpc 配置、专用 frps 和公开访问的 Caddy HTTPS 模板
-docs/frp.md              # 公网接入、凭据、服务托管与分层验收
+config/dev/frp/          # 仅开发：frpc 配置、专用 frps 和公开访问的 Caddy HTTPS 模板
+docs/frp.md              # 仅开发：frp 公网接入、凭据与服务端运维
 docs/agents-api.md        # 对外 API 约定和示例
 docs/log-summary-testing.md # OCR 日志描述规则及离线、真实模型验收
 .github/workflows/ci.yml # Linux 自动检查
 pyproject.toml / uv.lock  # 直接依赖与完整锁文件
 .env.example             # 可提交的配置模板；实际 .env 不提交
 AGENTS.md                 # 后续编码 Agent 的仓库约定
+CLAUDE.md                 # 引用 AGENTS.md，复用共享规则
 ```
 
 业务输入说明见 [data/README.md](data/README.md)。`data/log_summary.json` 只保留用户提供的一条 OCR 原始对象，调用时提供 `user_id`、`session_id` 并将该对象放入 `content`；意图样例仍提取单条 `request`。日志固定输出六个必填字段，JSON Schema、输出示例及字段说明见 [interfaces/log_summary/README.md](interfaces/log_summary/README.md)。响应中的 `summary` 为可纳入当日日志的客观中文段落；原有日志回归集独立放在 `tests/fixtures/log_summary_cases.json`。工程 OCR 对象的字段和层级可变化，保留指标、实测值及单位；计划日期不作为实际日期，缺失合格率不推断合格，表单存在不代表已完成检测。当前采用暂行描述规则，正式业务话术待补充，统一维护在 `app/prompts/log_summary.md`。请求外层新增必填用户与会话ID，响应字段保持兼容；content 序列化后仍限 4000 字符。
 
 意图识别固定输出 `intent`、`confidence`、`reason`、`needs_clarification` 四个必填字段。供调用方对接的固定枚举 JSON Schema、分开维护的五类主示例和兜底示例见 [interfaces/intent/README.md](interfaces/intent/README.md)。
 
-调用链：`FastAPI → 业务 Agent → runtime.create_agent → ChatOpenAI → Ollama/vLLM`。结构化业务显式使用 `ProviderStrategy(JSON Schema, strict=True)`，最后再通过 Pydantic 校验；自由对话使用同一 Agent 运行时返回文本。业务代码不直接调用 OpenAI SDK。
+调用链：`FastAPI → APIRouter → 业务 Agent → runtime.create_agent → ChatOpenAI → Ollama/vLLM`。结构化业务显式使用 `ProviderStrategy(JSON Schema, strict=True)`，最后再通过 Pydantic 校验；自由对话使用同一 Agent 运行时返回文本。业务代码不直接调用 OpenAI SDK。
+
+路由按业务领域组织在 `app/api/`，通过 `router.py` 聚合；公共路径前缀和文档分组由领域 Router 定义。业务层继续复用 `app/agents/`。共享模型服务和 Agent 在 `main.py` 的 lifespan 中初始化一次，路由通过当前请求的 `request.app.state` 取得资源，关闭时由原生命周期释放 HTTP 客户端。迁移对照和验证见 [APIRouter 审查记录](docs/apirouter-review-2026-10-31.md)。
+
+`main.py` 负责应用装配，不再直接注册业务接口。Router 只接收、校验 HTTP 参数并调用业务层，不导入全局 `app`；Agent 不依赖 HTTP 请求对象。lifespan 使用 `@asynccontextmanager` 和 `AsyncGenerator[None, None]` 类型注解，启动时构建资源，`yield` 期间处理请求，`finally` 释放资源；每个应用工作进程各自持有实例。不要每次请求创建 Agent，也不要把会话状态写入共享实例。当前分层已足够，不需要额外增加只做转发的 Service 层。
 
 `BaseAgent` 统一加载提示词、构建和调用 Agent，子类通过 `messages()` 组织请求消息、`parse_result()` 转换结果。`ChatAgent` 直接继承它，保留文本输出及请求提供的历史；`StructuredAgent` 在此基础上提供 Schema 和 Pydantic 校验，结构化业务仍只需实现 `user_content()`。
 
-新增结构化业务通常修改四处：
+新增结构化业务按以下顺序推进：
 
-1. 在 `app/schemas.py` 定义请求与结果类型，在 `app/prompts/` 添加同名 `.md` 提示词。
+1. 先确定验收标准和正常、边界、失败用例，增加预期失败的 pytest 测试；在 `app/schemas.py` 定义请求与结果类型，在 `app/prompts/` 添加同名 `.md` 提示词。
 2. 在 `app/agents/` 继承 `StructuredAgent[请求类型, 结果类型]`，定义 `name`、`result_type` 和 `user_content()`。日志总结模块可作为起点。
-3. 在 `app/main.py` 生命周期中创建实例，增加携带 `response_model` 的路由。
-4. 为正常、非法输入和模型失败增加测试，更新 API 文档并运行检查。
+3. 在 `app/main.py` 生命周期中创建实例，在 `app/api/` 对应领域 Router 中增加携带 `response_model` 的路由；新领域创建 Router 并在 `app/api/router.py` 注册。
+4. 最小实现使测试通过，覆盖输入校验、模型失败和资源隔离；同步 API 文档、固定输出接口和 README。纯路由整理应对比完整 OpenAPI，确认无非预期变化。
+
+新增 Router 的注册关系示例（已定义对应模块后再添加）：
+
+```python
+# app/api/example.py
+from fastapi import APIRouter
+
+router = APIRouter(prefix="/api/example", tags=["示例业务"])
+# 在此定义使用已有 Schema 和共享业务实例的 @router.get/post 等入口。
+```
+
+```python
+# app/api/router.py
+from app.api import example
+
+api_router.include_router(example.router)
+```
+
+主应用已有 `app.include_router(api_router)`，无需重复注册。代码风格、契约、测试驱动、依赖和提交规则统一见 [开发规范](AGENTS.md)。
 
 意图识别复用固定 Schema 的 Agent，五类定义由服务端维护；请求消息保持隔离，不接受调用方自定义分类。系统提示词修改后需重启 API，以刷新缓存。
 
@@ -266,7 +334,7 @@ bash scripts/prod/start-api.sh
 bash scripts/prod/verify.sh
 ```
 
-API 默认监听 `127.0.0.1:8000`，拒绝 `--reload`，启动时不安装或同步依赖。上线需由 systemd 等服务管理器托管，详见 [部署说明](docs/deployment-linux.md)。API 与模型可以部署在不同 Linux 主机；API 主机无需 GPU，`start-vllm.sh` 和完整 `verify.sh` 用于 GPU 主机，远端 API 可单独运行通用业务验收。
+API 默认监听 `127.0.0.1:8309`，拒绝 `--reload`，启动时不安装或同步依赖。上线需由 systemd 等服务管理器托管，详见 [部署说明](docs/deployment-linux.md)。API 与模型可以部署在不同 Linux 主机；API 主机无需 GPU，`start-vllm.sh` 和完整 `verify.sh` 用于 GPU 主机，远端 API 可单独运行通用业务验收。生产部署不包含 frp 公网隧道；frp 只用于 macOS 开发联调。
 
 模型服务需支持 Chat Completions 和原生 JSON Schema 输出；以真实业务验收结果判断具体模型和 vLLM 组合是否可用。验收文件写入 `verification/`，`nvidia-smi` 成功仅确认驱动和设备可见，模型 GPU 占用需另看服务日志和设备监控。本机未执行 Linux GPU 部署。
 
@@ -274,17 +342,22 @@ API 默认监听 `127.0.0.1:8000`，拒绝 `--reload`，启动时不安装或同
 
 远端：<https://github.com/TonyZhang128/agent-dev>。提交 `app/`、测试、文档、脚本、依赖锁文件与 CI；忽略 `.env`、虚拟环境、模型、缓存、日志、验收输出和本地 `skills/`。
 
-后续开发可从 `main` 创建功能分支，运行检查后提交：
+开始前检查当前分支与工作区，按任务需要创建功能分支，保留已有修改。以下示例展示已跟踪文件的逐块暂存；新增文件应审查后按明确路径单独加入，避免把其他任务内容带入提交：
 
 ```zsh
+git status --short
+git branch --show-current
 git switch -c feature/your-agent
 # 开发并运行上述检查
-git add app tests docs README.md pyproject.toml uv.lock
+git diff --check
+git add -p
+git diff --cached
+git status --short
 git commit -m "feat: add a business agent"
 git push -u origin feature/your-agent
 ```
 
-升级依赖时使用 `uv add` / `uv lock` 同步更新 `pyproject.toml` 和 `uv.lock`，通过测试后一起提交，不手改锁文件。
+升级依赖时使用 `uv add` 管理声明和锁文件，通过测试后将 `pyproject.toml` 和 `uv.lock` 一起提交，不手改锁文件；LangChain 相关版本固定，升级前核实官方文档和模型服务兼容性。`.env`、`.secrets/`、真实追踪和未跟踪的独立应用不因主项目修改自动提交。
 
 ## 官方资料
 

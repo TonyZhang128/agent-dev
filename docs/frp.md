@@ -1,8 +1,10 @@
-# 通过 frp 访问本机 FastAPI
+# 通过 frp 访问本机 FastAPI（仅开发）
 
-## 当前部署
+> **仅开发环境。** frp 公网接入用于把 Mac 开发机 API 临时暴露给其他电脑联调，不进入上线部署。Linux 生产环境不安装、不启动 frpc/frps，不使用 `config/dev/frp/`；生产对外入口按实际部署环境的网关、TLS 和权限方案单独设计。
 
-2026-10-24 已完成本机到公网服务器的真实部署与验收：
+## 开发隧道部署
+
+2026-10-24 已完成本机到公网服务器的真实开发隧道部署与验收：
 
 | 组件 | 位置 / 版本 |
 | --- | --- |
@@ -20,12 +22,12 @@
                                       |
                               TLS 隧道，frpc 主动连接 :7000
                                       |
-                               Mac 127.0.0.1:8000 (FastAPI)
+                               Mac 127.0.0.1:8309 (FastAPI)
                                       |
                                本机 Ollama 模型推理
 ```
 
-本次只在 Linux 部署网络接入组件，模型仍运行在 Mac；没有部署 Linux GPU/vLLM。服务器已有站点、443端口和本机业务 `.env` 均保留。服务器的 TCP 18000 仅监听回环地址，7000为隧道入口，8443为 HTTPS 业务入口。
+本次只在 Linux 公网服务器部署开发隧道接入组件，模型仍运行在 Mac；没有部署 Linux GPU/vLLM，也不代表生产 API 已上线。服务器已有站点、443端口和本机业务 `.env` 均保留。服务器的 TCP 18000 仅监听回环地址，7000为隧道入口，8443为 HTTPS 业务入口。
 
 ## 另一台电脑上的系统如何调用
 
@@ -95,9 +97,9 @@ zsh scripts/dev/services.sh stop-frpc
 zsh scripts/dev/services.sh status
 ```
 
-frpc 任务名为 `local.qwen-business-dev.frpc`，配置为 `config/frp/frpc.toml`，日志为 `.logs/frpc-service.out.log` 和 `.logs/frpc-service.err.log`。通过项目脚本启动可确保相对路径始终从项目根目录解析。
+frpc 任务名为 `local.qwen-business-dev.frpc`，配置为 `config/dev/frp/frpc.toml`，日志为 `.logs/frpc-service.out.log` 和 `.logs/frpc-service.err.log`。通过项目脚本启动可确保相对路径始终从项目根目录解析。
 
-普通 `services.sh start` 仍只启动 Ollama/API，公网转发通过 `start-frpc` 显式启用。`services.sh stop` 会先停止本项目隧道，再停止 API/Ollama。任务属于当前用户会话，退出登录后按需重新启动。Mac 休眠、断网或 API 停止时，公网服务会中断；网络恢复后 frpc 会尝试重连，进行中的请求需要调用方自行处理失败。
+普通 `services.sh start` 只启动 Ollama/API（API 默认监听 `127.0.0.1:8309`），公网转发通过 `start-frpc` 显式启用。`services.sh stop` 会先停止本项目隧道，再停止 API/Ollama。任务属于当前用户会话，退出登录后按需重新启动。Mac 休眠、断网或 API 停止时，公网服务会中断；网络恢复后 frpc 会尝试重连，进行中的请求需要调用方自行处理失败。该隧道只在开发期使用，上线环境不部署本节脚本和配置。
 
 不要同时使用 `brew services start frpc`，它使用 Homebrew 的另一份配置。前台调试前先运行 `stop-frpc`，然后执行 `zsh scripts/dev/start-frpc.sh`，避免重复注册同一代理。
 
@@ -106,14 +108,14 @@ frpc 任务名为 `local.qwen-business-dev.frpc`，配置为 `config/frp/frpc.to
 | 文件 | 用途 |
 | --- | --- |
 | `/usr/local/bin/frps` | 已校验官方发布包的0.71.1可执行文件 |
-| `/etc/frp/frps.toml` | 专用 frps 配置，模板在 `config/frp/frps.toml.example` |
+| `/etc/frp/frps.toml` | 专用 frps 配置，模板在 `config/dev/frp/frps.toml.example` |
 | `/etc/frp/token` | 隧道 token，与本机 `.secrets/frp/token` 一致 |
 | `/etc/frp/server.crt`、`server.key` | 隧道服务端证书 / 私钥 |
 | `/etc/systemd/system/qwen-frps.service` | 专用低权限用户 `frp` 托管服务 |
 | `/etc/caddy/qwen-frp/Caddyfile` | HTTPS 和公开访问的反向代理配置 |
 | `/etc/caddy/qwen-frp/server.crt`、`server.key` | 公网入口证书 / 私钥 |
 
-原 `/etc/caddy/Caddyfile` 新增了对专用配置的 import，原站点继续保留；初次部署前备份为 `/root/qwen-frp-deploy-20261024/Caddyfile.before`。模板在 `config/frp/Caddyfile.example`，当前没有 BasicAuth 配置。移除鉴权前的专用站点配置另有私有备份。
+原 `/etc/caddy/Caddyfile` 新增了对专用配置的 import，原站点继续保留；初次部署前备份为 `/root/qwen-frp-deploy-20261024/Caddyfile.before`。模板在 `config/dev/frp/Caddyfile.example`，当前没有 BasicAuth 配置。移除鉴权前的专用站点配置另有私有备份。
 
 服务端通过已授权的 SSH 登录后，可执行：
 

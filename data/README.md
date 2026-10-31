@@ -20,7 +20,7 @@ from pathlib import Path
 import httpx
 
 content = json.loads(Path("data/log_summary.json").read_text(encoding="utf-8"))
-with httpx.Client(base_url="http://127.0.0.1:8000", timeout=190, trust_env=False) as client:
+with httpx.Client(base_url="http://127.0.0.1:8309", timeout=190, trust_env=False) as client:
     response = client.post("/api/agents/log-summary", json={"user_id": "example-user", "session_id": "example-session", "content": content})
     response.raise_for_status()
     print(response.json()["summary"])

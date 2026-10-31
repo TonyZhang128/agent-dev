@@ -53,7 +53,7 @@ bash scripts/prod/start-vllm.sh \
 bash scripts/prod/start-api.sh
 ```
 
-默认 `127.0.0.1:8000`，可追加 uvicorn 参数，例如 `--workers 2`。每个 worker 有独立模型客户端，先验证模型并发容量。生产入口禁止 `--reload`，启动时使用 `uv run --locked --no-sync --no-dev`。升级代码或 `.env` 后由服务管理器重启 API。
+默认 `127.0.0.1:8309`，可追加 uvicorn 参数，例如 `--workers 2`。每个 worker 有独立模型客户端，先验证模型并发容量。生产入口禁止 `--reload`，启动时使用 `uv run --locked --no-sync --no-dev`。升级代码或 `.env` 后由服务管理器重启 API。生产部署不包含 frp 公网隧道；`config/dev/frp/` 和 `scripts/dev/start-frpc.sh` 仅用于 macOS 开发联调，上线环境不安装、不启动 frpc/frps。
 
 后台托管可采用 systemd。以下示例假定代码在 `/opt/agent-dev`、运行用户为 `qwen`、uv 位于 `/home/qwen/.local/bin`，安装前替换为服务器实际路径：
 
