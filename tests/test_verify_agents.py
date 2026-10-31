@@ -2,6 +2,7 @@ import json
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
 from scripts.common import verify_agents
 
@@ -170,6 +171,80 @@ def test_live_verifier_checks_versioned_datasets(
             assert rejected["expected_http_status"] == 422
             assert rejected["passed"] is reject_custom
     assert report["passed"] is (matched and log_matched and reject_custom)
+    if report["passed"]:
+        assert [item["name"] for item in report["checks"]] == [
+            "structured_log",
+            "text_log",
+            "provided_ocr_log",
+            "ocr_variant",
+            "test_image_library",
+            "test_reject_custom",
+            "chat",
+            "chat_with_history",
+            "existing_business_plan",
+        ]
+
+
+def test_live_verifier_records_readiness_failure(tmp_path, monkeypatch):
+    client = httpx.Client(
+        base_url="http://test",
+        transport=httpx.MockTransport(lambda request: httpx.Response(503)),
+    )
+    monkeypatch.setattr(verify_agents.httpx, "Client", lambda **kwargs: client)
+    monkeypatch.setattr(verify_agents, "ROOT", tmp_path)
+    with pytest.raises(httpx.HTTPStatusError):
+        verify_agents.main()
+    report = json.loads((tmp_path / "verification/agents-live-result.json").read_text())
+    assert report["checks"] == []
+    assert report["passed"] is False
+    assert report["error"].startswith("HTTPStatusError:")
+    assert client.is_closed
+
+
+@pytest.mark.parametrize(
+    "status,body,error",
+    [
+        (200, "not-json", json.JSONDecodeError),
+        (200, "{}", ValidationError),
+        (503, '{"detail":"unavailable"}', httpx.HTTPStatusError),
+    ],
+    ids=["not-json", "invalid-schema", "upstream-failure"],
+)
+def test_live_verifier_records_response_before_validation_failure(
+    tmp_path, monkeypatch, status, body, error
+):
+    def respond(request):
+        if request.url.path == "/ready":
+            return httpx.Response(200)
+        if request.url.path == "/openapi.json":
+            return httpx.Response(
+                200,
+                json={
+                    "info": {"version": "test"},
+                    "paths": {
+                        f"/api/agents/{name}": {} for name in ("log-summary", "intent", "chat")
+                    },
+                },
+            )
+        return httpx.Response(status, text=body)
+
+    client = httpx.Client(base_url="http://test", transport=httpx.MockTransport(respond))
+    monkeypatch.setattr(verify_agents.httpx, "Client", lambda **kwargs: client)
+    monkeypatch.setattr(verify_agents, "ROOT", tmp_path)
+    with pytest.raises(error):
+        verify_agents.main()
+    report = json.loads((tmp_path / "verification/agents-live-result.json").read_text())
+    assert report["passed"] is False
+    assert len(report["checks"]) == 1
+    check = report["checks"][0]
+    assert check["name"] == "structured_log"
+    assert check["http_status"] == status
+    assert check["response"] == (body if body == "not-json" else json.loads(body))
+    assert check["request"]["user_id"] == "verification-user"
+    assert check["request"]["session_id"] == "verification-session"
+    assert check["request"]["content"]["date"] == "2026-10-17"
+    assert report["error"].startswith(error.__name__ + ":")
+    assert client.is_closed
 
 
 @pytest.mark.parametrize(
