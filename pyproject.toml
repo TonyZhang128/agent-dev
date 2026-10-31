@@ -14,10 +14,19 @@ dependencies = [
   "langchain-openai==1.7.2",
   "langsmith==0.14.11",
   "httpx>=0.28.1,<1",
+  "pymupdf>=1.24,<2",
+  "openpyxl>=3.1,<4",
+  "opencv-python>=4.10,<5",
+  "numpy>=1.26,<3",
+  "rapidocr>=3.10,<4",
+  "onnxruntime>=1.18,<2",
+  "pillow>=10,<13",
 ]
 
 [tool.uv]
 package = false
+# rapidocr 声明 opencv-python-headless，但本项目统一使用 opencv-python；避免同时安装两份 cv2。
+exclude-dependencies = ["opencv-python-headless"]
 
 [tool.ruff]
 target-version = "py312"

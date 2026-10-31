@@ -1,5 +1,7 @@
 # 三个业务智能体 API
 
+本文说明原有 `/agents/*` 契约。合并后的文档加工接口 `/ocr/*`、`/wbs/draft`、`/health/deps` 见 [OCR API 与路径配置](ocr.md)，与本文共用 `app.main:app` 和 8309 端口。
+
 服务地址：`http://127.0.0.1:8309`。交互文档：`http://127.0.0.1:8309/docs`。
 
 开发期可通过 frp 使用公网地址 `https://107.182.190.191:8443` 联调，接口路径和 JSON 请求/返回与本地一致；该能力仅用于开发环境，Linux 生产部署不包含 frp。公网访问无需账户、密码、API key 或 `Authorization` 请求头，HTTPS 使用私有 CA，客户端需配置 CA 证书信任，具体示例见 [frp 公网接入（仅开发）](frp.md)。`user_id`、`session_id` 仍是必填业务标识，不是登录凭据。
@@ -10,7 +12,7 @@
 | 意图识别 | `POST /agents/intent` | `app/agents/intent.py` |
 | 自由对话 | `POST /agents/chat` | `app/agents/chat.py` |
 
-当前版本 `0.3.0`。三个智能体均通过 LangChain `create_agent()` 执行，共享 `app/llm.py` 的 `ChatOpenAI` 模型工厂和 `.env` 配置。日志总结、意图识别使用 `ProviderStrategy` 和 JSON Schema 约束生成，最后经过 Pydantic 校验；对话返回普通文本，再包装为 JSON。接口只处理传入内容，不执行外部业务操作，不将用户消息保存为服务端会话。
+当前 API 文档版本 `0.1.0`（以 `app/main.py` 为准）。三个智能体均通过 LangChain `create_agent()` 执行，共享 `app/llm.py` 的 `ChatOpenAI` 模型工厂和 `.env` 配置。日志总结、意图识别使用 `ProviderStrategy` 和 JSON Schema 约束生成，最后经过 Pydantic 校验；对话返回普通文本，再包装为 JSON。接口只处理传入内容，不执行外部业务操作，不将用户消息保存为服务端会话。
 
 ## 用户与会话请求契约
 

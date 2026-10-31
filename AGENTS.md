@@ -8,6 +8,7 @@
 - macOS 开发使用 Ollama；Linux 部署使用独立的 vLLM 服务，通过 `.env` 中的 OpenAI 兼容端点切换。业务环境与模型服务环境分离。
 - 当前提供工程日志总结、意图识别和聊天三类业务；尚未接入审批、订单修改、通知发送等外部业务动作，也没有数据库或服务端持久会话。
 - 工作区中的 `ocr/` 是独立应用，有自己的依赖和启动方式，未挂载到主应用。修改前阅读其 README；不要把主应用的检查结果当作 OCR 验收，也不要擅自合并环境、路由或依赖。
+- `../docsvc` 的文档加工功能已合并到 `app/ocr/`，由 `app/api/ocr.py`、`app/api/wbs.py` 接入同一主应用；它与上面的未跟踪 `ocr/` 是不同项目。模板与数据路径见 `docs/ocr.md`，脚本统一为 `scripts/ocr/`。
 - 以当前源码、配置、锁文件和实际测试为依据。历史审查报告记录当时结果，不代表当前部署已更新或当前测试必然通过。
 
 ## 二、开始工作前
@@ -31,6 +32,9 @@
 | `app/prompts/<name>.md` | 系统提示词，使用 `load_prompt()` 加载 |
 | `app/config.py` | `Settings`、配置默认值及配置校验 |
 | `app/llm.py` | `ChatOpenAI` 工厂、HTTP 客户端及模型列表就绪检查；不放业务规则 |
+| `app/ocr/` | 从 docsvc 迁入的照片/简表识别、公式/引用、PDF/Excel 填表、WBS；不得反向导入 scripts 或 FastAPI |
+| `app/api/ocr.py`、`app/api/wbs.py` | 文档加工入口、数据池路径限制和文档异常 HTTP 映射；原 `/health` 优先 |
+| `scripts/ocr/` | 模板生成、PDF/Excel 检查和演示工具，使用主项目 Python 3.12 环境 |
 | `app/errors.py`、`app/http_errors.py` | 前者定义非 HTTP 业务/模型异常，后者负责统一 HTTP 映射及错误脱敏 |
 
 依赖方向保持为 `main → 路由聚合 → 领域 Router → Schema/业务资源`。Router 不导入 `app.main` 或全局 `app`；业务层不依赖 FastAPI `Request`、`HTTPException` 或响应对象。当前 `app/agents/` 已承担业务层职责，不为目录整齐增加只做转发的 Service、Repository 或 Core 层。
@@ -67,6 +71,9 @@
 - 意图固定为 `work_list`、`supervision_log`、`image_library`、`business_management`、`chat` 五类，加 `unknown` 兜底。`intents` 只能省略或为 `[]`，非空在推理前返回 422。
 - 意图分数低于 `0.65` 或需要澄清时必须回退 `unknown` 且 `needs_clarification=true`；分数不是校准概率。有效 `chat` 继续调用共享 ChatAgent，将回答放入 `reason`，两次推理共享总超时；不因聊天失败返回分类理由冒充答案。
 - `/health` 只检查进程存活；`/ready` 通过模型列表检查配置模型，不执行推理。
+- 文档接口新增 `/health/deps`、`/ocr/*`、`/wbs/draft`；成功保留 `{"status":200,"data":...}`。模板和 OCR 引擎按需加载，应用资源保存在 `app.state.ocr_resources`，缓存与模型不得跨应用串用；缺模板仅影响相关请求。
+- OCR 路径由 Settings 的 `TEMPLATES_ROOT`、`ADMIN_ROOT`、`ASSET_ROOT`、`PROJECTS_ROOT` 配置；相对路径以仓库根目录解析。输入输出不得越过数据池，空 out 不写文件；辅助脚本的报告/打包输出写到忽略提交的 `verification/ocr/`。
+- 字段 ID、格子键和坐标语义沿用 docsvc；保留隐藏文字层过滤、OCR 锁、模板引用优先级与 JS 风格舍入。Excel 跳过字段通过本次 `ExcelOutput` / `xlsxSkipped` 返回，不恢复共享函数属性。
 - 错误状态保持：非法输入/上下文超限 422，模型不可达 503，推理超时 504，上游错误或非法输出 502。统一保留 `detail` 响应，禁止泄露密钥、原始输入、身份、历史和上游错误正文。
 
 ## 五、新增业务的流程

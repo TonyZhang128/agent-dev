@@ -23,6 +23,20 @@ class Settings(BaseSettings):
     agent_recursion_limit: int = Field(default=8, ge=3, le=50)
     langsmith_tracing: bool = False
 
+    templates_root: Path = ROOT / "data/ocr/templates"
+    admin_root: Path = ROOT / "data/ocr/admin"
+    asset_root: Path = ROOT / "data/ocr/assets"
+    projects_root: Path = ROOT / "data/ocr/projects"
+    ocr_model_root: Path = ROOT / "data/ocr/models"
+
+    @field_validator(
+        "templates_root", "admin_root", "asset_root", "projects_root", "ocr_model_root"
+    )
+    @classmethod
+    def resolve_ocr_path(cls, value: Path) -> Path:
+        """相对路径始终以仓库根目录为基准，不受启动目录影响。"""
+        return (ROOT / value.expanduser()).resolve()
+
     @model_validator(mode="after")
     def validate_context_budget(self) -> "Settings":
         if self.llm_max_tokens + self.llm_context_margin_tokens >= self.llm_context_tokens:

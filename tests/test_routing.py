@@ -24,7 +24,7 @@ def test_full_openapi_matches_contract_snapshot():
     # OpenAPI merges duplicate paths; inspect registration as well as documentation.
     routes = [route for route in app.routes if isinstance(route, APIRoute)]
     operations = [(method, route.path) for route in routes for method in route.methods]
-    assert len(operations) == len(set(operations)) == 5
+    assert len(operations) == len(set(operations)) == 12
 
 
 def test_aggregate_router_can_be_mounted_in_another_application():
@@ -47,6 +47,13 @@ def test_aggregate_router_can_be_mounted_in_another_application():
             "/agents/log-summary",
             "/agents/intent",
             "/agents/chat",
+            "/health/deps",
+            "/ocr/recognize",
+            "/ocr/jianbiao",
+            "/ocr/fill",
+            "/ocr/blank/{form}.png",
+            "/ocr/sheet/{form}",
+            "/wbs/draft",
         }
 
 

@@ -1,8 +1,12 @@
 .venv/
 .env
+# Compose 生产变量文件含真实密钥，只提交模板。
+/docker/prod.env
 .cache/
 .logs/
 .models/
+# RapidOCR 下载的 ONNX 模型按机器重新生成，不提交。
+data/ocr/models/
 __pycache__/
 *.pyc
 verification/
@@ -19,7 +23,6 @@ build/
 
 skills
 
-ocr/
 
 # Tunnel tokens, private keys and local certificate material.
 .secrets/
