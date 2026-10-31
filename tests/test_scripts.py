@@ -193,6 +193,57 @@ def test_legacy_mac_api_entry_preserves_root_and_reload(deployment):
     assert "--reload" in commands
 
 
+@pytest.mark.skipif(not shutil.which("zsh"), reason="macOS compatibility scripts require zsh")
+@pytest.mark.parametrize("port", (None, "5679"))
+def test_legacy_mac_api_starts_under_debugpy_on_request(deployment, port):
+    deployment.stub("uname", "echo Darwin")
+    if port is not None:
+        deployment.env["DEBUGPY_PORT"] = port
+    result = subprocess.run(
+        ["zsh", str(deployment.root / "scripts" / "start-api.sh"), "--debug"],
+        cwd="/",
+        env=deployment.env,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    args = deployment.trace.read_text().splitlines()
+    assert args == [
+        str(deployment.root),
+        "run",
+        "--locked",
+        "python",
+        "-m",
+        "debugpy",
+        "--listen",
+        f"127.0.0.1:{port or '5678'}",
+        "-m",
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8309",
+    ]
+
+
+@pytest.mark.skipif(not shutil.which("zsh"), reason="macOS compatibility scripts require zsh")
+def test_legacy_mac_api_rejects_reload_with_debugpy(deployment):
+    deployment.stub("uname", "echo Darwin")
+    result = subprocess.run(
+        ["zsh", str(deployment.root / "scripts" / "start-api.sh"), "--debug", "--reload"],
+        cwd="/",
+        env=deployment.env,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 2
+    assert "不支持" in result.stderr
+    assert not deployment.trace.exists()
+
+
 def test_production_entry_points_do_not_include_frp_tunnel():
     for path in (ROOT / "scripts" / "prod").iterdir():
         if path.suffix in {".sh", ".py"}:

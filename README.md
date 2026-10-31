@@ -105,6 +105,14 @@ zsh scripts/dev/start-api.sh --reload
 
 如 Ollama 已由其他方式启动，直接复用。默认 Ollama 上下文 `8192`、单模型、单并发；Apple Silicon 的 GPU 由 Ollama 自动选择，使用 `ollama ps` 查看 `PROCESSOR` 列。不要同时在端口 8309 启动前台和后台 API。
 
+需要断点调试时，可使用本机 `.vscode/launch.json`（该目录不纳入 Git）：
+
+- 选择 `Debug API (launch)`，由 VS Code 直接启动并调试；
+- 或先执行 `zsh scripts/dev/services.sh debug-api`，后台启动带 debugpy 的 API，再选择 `Debug API (attach)`；
+- 前台调试也可执行 `zsh scripts/dev/start-api.sh --debug`。
+
+`start-api.sh --debug` 和 `debug-api` 默认监听 `127.0.0.1:5678`，不支持 `--reload`；VS Code 的 launch 配置不需要该端口。执行普通 `zsh scripts/dev/services.sh restart-api` 会恢复非调试启动。
+
 ## frp 公网接入（仅开发）
 
 frp 隧道只用于开发联调：把 Mac 本机 API 临时暴露给其他电脑。它不属于上线能力，Linux 生产部署不安装、不启动 frpc/frps，也不复制 `config/dev/frp/` 或 `.secrets/frp/`。生产对外入口由实际部署环境单独设计和配置。

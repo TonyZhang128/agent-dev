@@ -6,6 +6,8 @@
 | --- | --- | --- |
 | Mac 完整开发安装 | `zsh scripts/dev/setup.sh` | Homebrew/uv、dev 依赖、Ollama 模型、本项目服务及真实验收 |
 | Mac 前台 API | `zsh scripts/dev/start-api.sh --reload` | 仅用于 macOS 开发 |
+| Mac 前台调试 API | `zsh scripts/dev/start-api.sh --debug` | 前台启动并监听 `127.0.0.1:5678`，供 VS Code Attach |
+| Mac 后台调试 API | `zsh scripts/dev/services.sh debug-api` | launchd 启动带 debugpy 的 API，供 VS Code Attach；仅用于开发 |
 | Mac 前台 Ollama | `zsh scripts/dev/start-ollama.sh` | 复用本机模型存储 |
 | Mac 后台任务 | `zsh scripts/dev/services.sh start\|stop\|status\|restart-api` | launchd；仅管理本项目注册任务 |
 | Mac 公网隧道（仅开发） | `zsh scripts/dev/services.sh start-frpc\|stop-frpc\|restart-frpc` | 显式管理本项目 frpc；配置、凭据和健康检查通过后启动 |
