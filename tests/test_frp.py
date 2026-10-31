@@ -16,7 +16,7 @@ def tunnel(tmp_path):
         pytest.skip("macOS tunnel entry points require zsh")
     root = tmp_path / "project with spaces"
     shutil.copytree(ROOT / "scripts" / "dev", root / "scripts" / "dev")
-    config = root / "config" / "frp"
+    config = root / "config" / "dev" / "frp"
     config.mkdir(parents=True)
     (config / "frpc.toml").write_text('serverAddr = "107.182.190.191"\n')
     secrets = root / ".secrets" / "frp"
@@ -68,7 +68,7 @@ def tunnel(tmp_path):
 
 
 def test_frpc_configuration_targets_business_api_and_verifies_server_identity():
-    config = tomllib.loads((ROOT / "config" / "frp" / "frpc.toml").read_text())
+    config = tomllib.loads((ROOT / "config" / "dev" / "frp" / "frpc.toml").read_text())
     assert config["serverAddr"] == "107.182.190.191"
     assert config["serverPort"] == 7000
     assert config["auth"]["tokenSource"]["type"] == "file"
@@ -77,7 +77,7 @@ def test_frpc_configuration_targets_business_api_and_verifies_server_identity():
     proxy = config["proxies"][0]
     assert (proxy["localIP"], proxy["localPort"], proxy["remotePort"]) == (
         "127.0.0.1",
-        8000,
+        8309,
         18000,
     )
 
@@ -89,8 +89,8 @@ def test_frpc_starts_from_other_directory_without_changing_business_env(tunnel):
     result = run()
     assert result.returncode == 0, result.stderr
     commands = trace.read_text()
-    assert f"{root}\nverify\n-c\nconfig/frp/frpc.toml\n" in commands
-    assert commands.endswith(f"{root}\n-c\nconfig/frp/frpc.toml\n")
+    assert f"{root}\nverify\n-c\nconfig/dev/frp/frpc.toml\n" in commands
+    assert commands.endswith(f"{root}\n-c\nconfig/dev/frp/frpc.toml\n")
     assert env_file.read_text() == "LLM_API_KEY=preserve-this\n"
     assert "test-token-never-print" not in result.stdout + result.stderr + commands
 
@@ -110,7 +110,7 @@ def test_frpc_rejects_unhealthy_local_api(tunnel):
     env["API_EXIT"] = "7"
     result = run()
     assert result.returncode != 0
-    assert "8000" in result.stderr
+    assert "8309" in result.stderr
     assert trace.read_text().count("-c\n") == 1
 
 

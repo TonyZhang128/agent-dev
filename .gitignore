@@ -19,7 +19,12 @@ build/
 
 skills
 
-template_pipeline/
+ocr/
 
 # Tunnel tokens, private keys and local certificate material.
 .secrets/
+
+config/dev/frp
+
+.agents/
+.codex/

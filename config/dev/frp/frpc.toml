@@ -18,5 +18,5 @@ log.level = "info"
 name = "qwen-business-api"
 type = "tcp"
 localIP = "127.0.0.1"
-localPort = 8000
+localPort = 8309
 remotePort = 18000

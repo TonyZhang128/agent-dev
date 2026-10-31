@@ -93,6 +93,7 @@ def test_api_start_works_outside_project_and_does_not_sync(deployment):
     commands = deployment.trace.read_text()
     assert str(deployment.root) in commands
     assert "--no-sync\n--no-dev\nuvicorn\napp.main:app" in commands
+    assert "--port\n8309" in commands
     assert "--workers\n2" in commands
 
 
@@ -188,7 +189,15 @@ def test_legacy_mac_api_entry_preserves_root_and_reload(deployment):
     commands = deployment.trace.read_text()
     assert str(deployment.root) in commands
     assert "uvicorn\napp.main:app" in commands
+    assert "--port\n8309" in commands
     assert "--reload" in commands
+
+
+def test_production_entry_points_do_not_include_frp_tunnel():
+    for path in (ROOT / "scripts" / "prod").iterdir():
+        if path.suffix in {".sh", ".py"}:
+            assert "frp" not in path.read_text(encoding="utf-8").lower(), path.name
+    assert not (ROOT / "config" / "frp").exists()
 
 
 def test_legacy_python_entry_points_resolve_to_expected_environments():
