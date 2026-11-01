@@ -1,0 +1,21 @@
+# 安装 VS Code 插件 REST Client
+
+@baseUrl = http://127.0.0.1:8309
+
+### GET 请求
+# GET {{baseUrl}}/docs
+
+### POST 请求
+POST {{baseUrl}}/agents/chat
+Content-Type: application/json
+
+{
+    "user_id":"example-user",
+    "session_id":"example-session",
+    "history":[],
+    "message":"你好，请解释业务智能体。"
+}
+
+### 携带 Token
+# GET {{baseUrl}}/api/projects
+# Authorization: Bearer your-token
