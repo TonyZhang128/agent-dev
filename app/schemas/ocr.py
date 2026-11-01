@@ -3,7 +3,7 @@
 import math
 import re
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class OCRRequest(BaseModel):
@@ -55,8 +55,17 @@ class OCRRequest(BaseModel):
 
 
 class RecognizeReq(OCRRequest):
-    path: str = Field(min_length=1)
+    path: str = Field(default="", description="PROJECTS_ROOT 数据池内的照片路径")
     form: str = ""
+    img: str = Field(default="", description="base64 编码的图片数据；path 与 img 至少提供一个")
+
+    @model_validator(mode="after")
+    def validate_source(self) -> "RecognizeReq":
+        self.path = self.path.strip()
+        self.img = self.img.strip()
+        if not self.path and not self.img:
+            raise ValueError("path 与 img 至少提供一个")
+        return self
 
 
 class JianbiaoReq(OCRRequest):

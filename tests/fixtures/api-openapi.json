@@ -883,20 +883,24 @@
         "properties": {
           "path": {
             "type": "string",
-            "minLength": 1,
-            "title": "Path"
+            "title": "Path",
+            "description": "PROJECTS_ROOT 数据池内的照片路径",
+            "default": ""
           },
           "form": {
             "type": "string",
             "title": "Form",
             "default": ""
+          },
+          "img": {
+            "type": "string",
+            "title": "Img",
+            "description": "base64 编码的图片数据；path 与 img 至少提供一个",
+            "default": ""
           }
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "path"
-        ],
         "title": "RecognizeReq"
       }
     }

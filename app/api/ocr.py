@@ -1,7 +1,7 @@
 """现场照片、简表与填表接口；CPU 操作由同步路由在线程池执行。"""
 
 import time
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Annotated
@@ -25,7 +25,7 @@ router = APIRouter(tags=["ocr"])
 
 
 @contextmanager
-def document_resources(request: Request) -> Iterator[OCRResources]:
+def document_resources(request: Request) -> Generator[OCRResources, None, None]:
     resources = request.app.state.ocr_resources
     with use_resources(resources):
         try:
@@ -78,11 +78,14 @@ def health_deps():
 @router.post("/ocr/recognize")
 def recognize(req: RecognizeReq, request: Request):
     with document_resources(request) as resources:
-        path = project_path(resources, req.path)
-        if not path.is_file():
-            raise HTTPException(400, "照片必须为数据池内的文件")
         started = time.monotonic()
-        result = form_ocr.recognize(path, req.form.strip())
+        if req.img:
+            result = form_ocr.recognize(None, req.form.strip(), req.img)
+        else:
+            path = project_path(resources, req.path)
+            if not path.is_file():
+                raise HTTPException(400, "照片必须为数据池内的文件")
+            result = form_ocr.recognize(path, req.form.strip())
         result["ms"] = round((time.monotonic() - started) * 1000)
         return {"status": 200, "data": result}
 

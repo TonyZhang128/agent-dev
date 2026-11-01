@@ -5,6 +5,7 @@
 集成用例跳过，干净克隆和 CI 不要求模型文件。
 """
 
+import base64
 from pathlib import Path
 
 import cv2
@@ -35,6 +36,13 @@ def polygon(x0: float, y0: float, x1: float, y1: float) -> list[list[float]]:
 
 def write_image(path: Path, width: int, height: int) -> None:
     cv2.imencode(".png", np.full((height, width, 3), 255, np.uint8))[1].tofile(str(path))
+
+
+def encode_image(width: int, height: int) -> str:
+    """返回可直接放进 img 字段的 base64 PNG。"""
+    ok, buffer = cv2.imencode(".png", np.full((height, width, 3), 255, np.uint8))
+    assert ok
+    return base64.b64encode(buffer.tobytes()).decode("ascii")
 
 
 @pytest.fixture
@@ -204,9 +212,26 @@ def test_recognize_validates_request_and_path(client, settings):
 
     assert client.post("/ocr/recognize", json={"path": "照片.png", "extra": 1}).status_code == 422
     assert client.post("/ocr/recognize", json={"path": ""}).status_code == 422
+    assert client.post("/ocr/recognize", json={"img": ""}).status_code == 422
+    assert client.post("/ocr/recognize", json={"path": " ", "img": " "}).status_code == 422
     assert client.post("/ocr/recognize", json={}).status_code == 422
     assert client.post("/ocr/recognize", json={"path": "missing.png"}).status_code == 400
     assert client.post("/ocr/recognize", json={"path": "folder"}).status_code == 400
+    assert client.post("/ocr/recognize", json={"img": "not-base64"}).status_code == 400
+
+
+@pytest.mark.parametrize("prefix", ["", "data:image/png;base64,"])
+def test_recognize_accepts_base64_image_without_path(client, prefix):
+    client.app.state.ocr_resources.engine = lambda image: ocr_result(
+        (polygon(10, 10, 300, 40), "监理单位：测试公司", 0.99),
+    )
+
+    response = client.post("/ocr/recognize", json={"img": prefix + encode_image(600, 400)})
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["image"] == {"width": 600, "height": 400}
+    assert data["fields"]["fld_supervisor"] == "测试公司"
 
 
 def test_recognize_without_templates_returns_503(tmp_path):

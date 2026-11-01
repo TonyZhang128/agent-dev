@@ -10,6 +10,7 @@
   没有表样坐标的表(如 ZJ 施工用表)只按栏目文字取 inline / right。
 结果只是初稿,由业务端 / App 人工核对后再提交。"""
 
+import base64
 import re
 from pathlib import Path
 
@@ -78,6 +79,17 @@ def read_image(path: Path):
     )  # 中文路径不能用 cv2.imread
     if img is None:
         raise ValueError(f"不是可识别的图片:{path.name}")
+    return img
+
+
+def decode_base64_image(data: str):
+    """base64 图片 -> BGR 图像；兼容 data:image/jpeg;base64,... 前缀。"""
+    if data.startswith("data:") and "," in data:
+        data = data.split(",", 1)[1]
+    buffer = np.frombuffer(base64.b64decode(data), dtype=np.uint8)
+    img = cv2.imdecode(buffer, cv2.IMREAD_COLOR)
+    if img is None:
+        raise ValueError("不是可识别的图片:base64 内容无效")
     return img
 
 
@@ -294,13 +306,19 @@ def right_value(lab, boxes, printed):
     return b if b["box"][0] - x1 < 12 * h else None
 
 
-def recognize(path: Path, code: str) -> dict:
-    img = read_image(path)
-    boxes = ocr(img)
+def recognize(path: Path | None, code: str, img: str = "") -> dict:
+    """照片路径与 base64 图片至少提供一个；同时提供时优先用 base64。"""
+    if img:
+        image = decode_base64_image(img)
+    else:
+        if path is None:
+            raise ValueError("path 与 img 至少提供一个")
+        image = read_image(path)
+    boxes = ocr(image)
     book, fields, keys = layout_of(code)
     labels = LABELS[book]
     printed = {norm(r[0]) for r in template_runs(code)}
-    tf = fit(code, boxes, img.shape[:2]) if fields else {"anchors": 0, "how": "none"}
+    tf = fit(code, boxes, image.shape[:2]) if fields else {"anchors": 0, "how": "none"}
     rects_ok = tf["how"] == "anchors"
     if rects_ok:
         warn = ""
@@ -376,7 +394,7 @@ def recognize(path: Path, code: str) -> dict:
         bs = in_rect(k["rect"], 0.05)
         if bs:
             key_vals[k["name"]] = _clean(_join(bs))
-    h, w = img.shape[:2]
+    h, w = image.shape[:2]
     return {
         "form": code,
         "formName": (forms().get(code) or {}).get("name", "") if code else "",

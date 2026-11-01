@@ -2,7 +2,7 @@
 
 import json
 import threading
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import lru_cache, wraps
@@ -88,7 +88,7 @@ def get_resources() -> OCRResources:
 
 
 @contextmanager
-def use_resources(resources: OCRResources) -> Iterator[None]:
+def use_resources(resources: OCRResources) -> Generator[None, None, None]:
     token = _current.set(resources)
     try:
         yield
