@@ -30,3 +30,5 @@ skills
 .agents/
 .codex/
 .vscode/
+
+data/ocr/imgs/

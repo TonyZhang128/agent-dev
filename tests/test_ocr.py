@@ -2,7 +2,6 @@
 
 import json
 from concurrent.futures import ThreadPoolExecutor
-from types import SimpleNamespace
 
 import cv2
 import numpy as np
@@ -15,18 +14,7 @@ from app.config import Settings
 from app.main import create_app
 from app.ocr import form_ocr, grid, jianbiao, wbs_draft
 from app.ocr.resources import OCRResources, forms, use_resources
-from tests.ocr_helpers import CODE, fill_config, make_ocr_settings
-
-
-def ocr_result(*items):
-    """RapidOCR 3.x 输出边界：boxes / txts / scores 三个平级字段。"""
-    if not items:
-        return SimpleNamespace(boxes=None, txts=None, scores=None)
-    return SimpleNamespace(
-        boxes=np.array([item[0] for item in items], dtype=np.float32),
-        txts=tuple(item[1] for item in items),
-        scores=tuple(item[2] for item in items),
-    )
+from tests.ocr_helpers import CODE, fill_config, make_ocr_settings, ocr_result
 
 
 @pytest.fixture

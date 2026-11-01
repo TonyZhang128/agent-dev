@@ -2,7 +2,9 @@
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
+import numpy as np
 import openpyxl
 import pymupdf
 from openpyxl.styles import Border, Side
@@ -10,6 +12,17 @@ from openpyxl.styles import Border, Side
 from app.config import Settings
 
 CODE = "TEST"
+
+
+def ocr_result(*items):
+    """RapidOCR 3.x 输出边界：boxes / txts / scores 三个平级字段。"""
+    if not items:
+        return SimpleNamespace(boxes=None, txts=None, scores=None)
+    return SimpleNamespace(
+        boxes=np.array([item[0] for item in items], dtype=np.float32),
+        txts=tuple(item[1] for item in items),
+        scores=tuple(item[2] for item in items),
+    )
 
 
 def make_ocr_settings(root: Path, *, name: str = "测试表", height: int = 300) -> Settings:
