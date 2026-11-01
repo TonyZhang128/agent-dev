@@ -1,5 +1,12 @@
-"""下载脚本的校验逻辑：GGUF 头解析与体积格式化，不联网、不读真实权重。"""
+"""下载脚本的校验逻辑：GGUF 头解析、体积格式化与 OCR 模型清单，不联网。"""
 
+import hashlib
+
+from scripts.models.download_ocr_models import (
+    download_config,
+    expected_models,
+    verify_models,
+)
 from scripts.models.download_qwen35_gguf import format_bytes, gguf_metadata
 
 
@@ -70,3 +77,51 @@ def test_format_bytes():
     assert format_bytes(512) == "512 B"
     assert format_bytes(1536) == "1.5 KiB"
     assert format_bytes(5680522464) == "5.3 GiB"
+
+
+def test_ocr_download_config_matches_runtime_models(tmp_path):
+    config = download_config(tmp_path / "ocr")
+
+    assert config["Global"] == {
+        "use_det": True,
+        "use_cls": True,
+        "use_rec": True,
+        "model_root_dir": str(tmp_path / "ocr"),
+    }
+    assert config["Det"]["ocr_version"] == "PP-OCRv6"
+    assert config["Det"]["model_type"] == "medium"
+    assert config["Rec"]["ocr_version"] == "PP-OCRv6"
+    assert config["Rec"]["model_type"] == "medium"
+    assert config["Cls"]["ocr_version"] == "PP-OCRv5"
+    assert config["Cls"]["model_type"] == "server"
+    assert {config[section]["engine_type"] for section in ("Det", "Cls", "Rec")} == {"onnxruntime"}
+
+
+def test_expected_ocr_models_lists_runtime_onnx_files():
+    models = expected_models()
+
+    assert set(models) == {
+        "PP-OCRv6_det_medium.onnx",
+        "PP-OCRv6_rec_medium.onnx",
+        "ch_PP-LCNet_x1_0_textline_ori_cls_server.onnx",
+    }
+    assert all(len(sha) == 64 for sha in models.values())
+
+
+def test_verify_models_reports_missing_and_corrupt_files(tmp_path):
+    good = tmp_path / "good.onnx"
+    good.write_bytes(b"model")
+    corrupt = tmp_path / "corrupt.onnx"
+    corrupt.write_bytes(b"broken")
+    expected = {
+        "good.onnx": hashlib.sha256(b"model").hexdigest(),
+        "corrupt.onnx": hashlib.sha256(b"model").hexdigest(),
+        "missing.onnx": hashlib.sha256(b"model").hexdigest(),
+    }
+
+    problems = verify_models(tmp_path, expected)
+
+    assert len(problems) == 2
+    assert any("corrupt.onnx" in problem for problem in problems)
+    assert any("missing.onnx" in problem for problem in problems)
+    assert verify_models(tmp_path, {"good.onnx": expected["good.onnx"]}) == []

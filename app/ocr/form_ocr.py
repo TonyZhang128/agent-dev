@@ -34,7 +34,7 @@ ANY_LABEL = re.compile(
     "|".join(f"(?:{rx})" for rx, _ in [*LABELS["jb12"].values(), *LABELS["book1"].values()])
 )
 DATE = re.compile(r"date$")
-MODEL_UNAVAILABLE = "OCR 模型不可用，请检查 OCR_MODEL_ROOT 是否可写并已准备模型文件"
+MODEL_UNAVAILABLE = "OCR 模型不可用，请检查 OCR_MODEL_ROOT 是否已准备模型文件；开发环境该目录需可写"
 
 
 def rapidocr_params(model_root: Path) -> dict:

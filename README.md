@@ -87,12 +87,13 @@ test -f .env || cp .env.example .env
 | `ADMIN_ROOT` | `data/ocr/admin` | 管理端资料目录（优先查找 PDF/Excel） |
 | `ASSET_ROOT` | `data/ocr/assets` | 规范 PDF/Excel 资料目录 |
 | `PROJECTS_ROOT` | `data/ocr/projects` | 与 Java 共用的业务数据池，限制文件读写边界 |
+| `OCR_MODEL_ROOT` | `.cache/models/ocr` | RapidOCR ONNX 模型目录；开发环境自动下载，离线部署预置后只读使用 |
 
 云端回退默认关闭：只有提供非空 `LLM_FALLBACK_API_KEY` 时才启用。启用后，本地 Ollama/vLLM 的模型调用因连接失败、超时或上游 HTTP 错误抛出异常时，本次调用改用回退模型重试一次，总预算为 `LLM_TIMEOUT_SECONDS + LLM_FALLBACK_TIMEOUT_SECONDS`。回退不重试已返回但未通过 Schema 校验的输出，`/ready` 仍只检查本地模型。DeepSeek 不支持严格 `json_schema`，回退时改用 JSON 模式并继续用 Pydantic 校验，不会退回宽松文本解析。启用回退意味着业务输入会发送到云端，需按数据合规要求决定。
 
 开启 LangSmith 时，还需在进程环境提供其凭据；追踪可能包含业务输入和模型输出。项目默认不会上传追踪。
 
-OCR 相对路径均以仓库根目录解析。没有模板时仍可启动智能体；模板接口返回 `503` 提示配置资源。已有 daolu_v6 资料的本机配置示例见 [OCR 路径配置](docs/ocr.md#路径配置)。模板和业务文件不随代码迁移或提交。
+OCR 相对路径均以仓库根目录解析。没有模板时仍可启动智能体；模板接口返回 `503` 提示配置资源。已有 daolu_v6 资料的本机配置示例见 [OCR 路径配置](docs/ocr.md#路径配置)。模板和业务文件不随代码迁移或提交。RapidOCR 的 ONNX 模型开发环境首次识别时自动下载；离线或容器部署用 `uv run --locked python -m scripts.models.download_ocr_models` 预置到 `.cache/models/ocr/` 后只读挂载，详见 [Docker 生产部署](docs/docker.md#2-准备权重)。
 
 Mac 后台运行：
 

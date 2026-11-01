@@ -31,6 +31,8 @@ LLM_REASONING_EFFORT=
 
 Qwen3.5-9B 的 GGUF 权重可用仓库脚本在业务环境下载，不需要 GPU：`uv run --locked python -m scripts.models.download_qwen35_gguf`。它把 `.gguf` 与 `config.json`、tokenizer 组装到同一目录；GGUF 的 `VLLM_MODEL_PATH` 必须指向 `.gguf` 文件而不是目录，详见 [Docker 生产部署 · 准备权重](docker.md#2-准备权重)。
 
+业务 API 的 RapidOCR ONNX 模型同样可以预置：`uv run --locked python -m scripts.models.download_ocr_models --root <目录>`，再把 `OCR_MODEL_ROOT` 指向该目录。离线主机可先在有网环境下载后拷贝整个目录，用 `--check` 校验；不预置时首次真实识别才会联网下载。
+
 模型入口只读取进程变量，不会将业务 `.env` 当作 Shell 脚本加载：
 
 | 变量 | 要求 |

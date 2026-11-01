@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     admin_root: Path = ROOT / "data/ocr/admin"
     asset_root: Path = ROOT / "data/ocr/assets"
     projects_root: Path = ROOT / "data/ocr/projects"
-    ocr_model_root: Path = ROOT / "data/ocr/models"
+    ocr_model_root: Path = ROOT / ".cache/models/ocr"
 
     @field_validator(
         "templates_root", "admin_root", "asset_root", "projects_root", "ocr_model_root"

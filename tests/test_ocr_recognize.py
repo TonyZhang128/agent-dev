@@ -1,7 +1,7 @@
 """`POST /ocr/recognize` 的响应契约、字段提取与真实照片回归。
 
 离线用例模拟 RapidOCR 边界，覆盖无表号、表号对不上、坐标对齐和错误映射。
-真实照片位于 `data/ocr/imgs`，OCR 模型位于 `data/ocr/models`；任一素材缺失时
+真实照片位于 `data/ocr/imgs`，OCR 模型位于 `.cache/models/ocr`；任一素材缺失时
 集成用例跳过，干净克隆和 CI 不要求模型文件。
 """
 
@@ -20,7 +20,7 @@ from tests.ocr_helpers import CODE, make_ocr_settings, ocr_result
 
 ROOT = Path(__file__).resolve().parents[1]
 IMAGES = ROOT / "data/ocr/imgs"
-MODELS = ROOT / "data/ocr/models"
+MODELS = ROOT / ".cache/models/ocr"
 REAL_IMAGES = ("CJ5.jpg", "test.jpg")
 MODEL_FILES = (
     "PP-OCRv6_det_medium.onnx",

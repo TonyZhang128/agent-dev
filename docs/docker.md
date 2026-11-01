@@ -66,6 +66,21 @@ GGUF 文件与 tokenizer/`config.json` 必须来自同一模型版本。文件�
 
 用官方镜像加载 `.gguf` 会失败。若组织内禁止第三方镜像，改用反量化 BF16 权重并把 `VLLM_BASE_IMAGE` 切回官方镜像。
 
+### OCR 模型（RapidOCR）
+
+业务 API 使用 3 个 ONNX 模型：PP-OCRv6 Medium 检测、PP-OCRv6 Medium 识别、PP-OCRv5 Server 方向分类（约 139 MiB）。它们同样不打包进镜像，由仓库脚本按运行时参数下载并校验 sha256：
+
+```bash
+# 下载到仓库 .cache/models/ocr/；已存在且校验通过的文件会跳过
+uv run --locked python -m scripts.models.download_ocr_models
+# 离线校验目标目录，不联网
+uv run --locked python -m scripts.models.download_ocr_models --check --root /srv/models/ocr
+# 直接下载到宿主机部署目录
+uv run --locked python -m scripts.models.download_ocr_models --root /srv/models/ocr
+```
+
+把该目录配到 `OCR_MODEL_DIR`，容器只读挂载到 `/app/data/ocr/models`。完全离线的部署可在有网机器下载后整目录拷贝到目标主机，再用 `--check` 校验。目录不存在时 Compose 直接报错；缺少模型时 `/ocr/*` 返回 `503`，其他接口不受影响。不要用 `docker cp` 或命名卷代替挂载，升级、迁移和回滚都以宿主机目录为准。
+
 ## 3. 配置
 
 ```bash
@@ -83,11 +98,12 @@ OCR_TEMPLATES_DIR=/srv/highway-agent/data/ocr/templates
 OCR_ADMIN_DIR=/srv/highway-agent/data/ocr/admin
 OCR_ASSETS_DIR=/srv/highway-agent/data/ocr/assets
 OCR_PROJECTS_DIR=/srv/highway-agent/data/ocr/projects
+OCR_MODEL_DIR=/srv/models/ocr
 ```
 
 要点：
 
-- `VLLM_MODEL_DIR` 与四个 `OCR_*_DIR` 必须是**已存在的宿主机绝对路径**；Compose 配置了 `create_host_path: false`，路径不存在会直接报错，而不是静默创建空目录。
+- `VLLM_MODEL_DIR` 与五个 `OCR_*_DIR` 必须是**已存在的宿主机绝对路径**；Compose 配置了 `create_host_path: false`，路径不存在会直接报错，而不是静默创建空目录。`OCR_MODEL_DIR` 需先用下载脚本预置。
 - `VLLM_MODEL_PATH` 指向 `.gguf` 文件而不是目录，且必须与 `VLLM_MODEL_DIR` 里的文件名一致；换量化版本（`--quant Q5_K_M` 等）后要同步修改。
 - `VLLM_MAX_MODEL_LEN` 必须与 `LLM_CONTEXT_TOKENS` 一致（默认 8192）。vLLM 默认上下文远大于业务预算，会浪费显存。
 - `LLM_MODEL` 固定为 `VLLM_SERVED_MODEL_NAME`（默认 `highway-agent`），`/ready` 以此校验服务端模型列表。
@@ -96,11 +112,11 @@ OCR_PROJECTS_DIR=/srv/highway-agent/data/ocr/projects
 
   ```bash
   sudo chown -R 10001:10001 /srv/highway-agent/data/ocr/projects
-  sudo chmod -R a+rX /srv/highway-agent/data/ocr/{templates,admin,assets}
+  sudo chmod -R a+rX /srv/highway-agent/data/ocr/{templates,admin,assets} /srv/models/ocr
   ```
 
 - 容器启动时会执行 `scripts/prod/check_config.py`，拒绝 Ollama 地址、`qwen3.5:*` 开发模型名和 `CHANGE_ME`/`ollama` 占位密钥。
-- RapidOCR 首次识别时从 ModelScope 下载 PP-OCRv6 Medium（检测/识别）与 PP-OCRv5 Server（方向分类）模型，保存在命名卷 `ocr-models`（容器内 `/app/data/ocr/models`）。完全离线的部署需先把这些 ONNX 文件导入该卷（`docker cp` 或临时挂载宿主机目录）；缺少模型时 `/ocr/*` 返回 503，其他接口不受影响。
+- OCR 模型以只读 bind mount 挂到 `/app/data/ocr/models`，来源是 `OCR_MODEL_DIR`；Compose 已把容器内 `OCR_MODEL_ROOT` 固定为同一路径，容器内目录不可写，也不会在运行时重新下载。缺少模型时 `/ocr/*` 返回 `503`，其他接口不受影响。
 
 ## 4. 构建与启动
 
@@ -160,7 +176,7 @@ BUSINESS_API_URL=http://127.0.0.1:8309 \
 | `VLLM_MAX_MODEL_LEN` | vLLM 上下文上限，必须等于 `LLM_CONTEXT_TOKENS` |
 | `VLLM_GPU_COUNT` / `VLLM_GPU_MEMORY_UTILIZATION` | GPU 数量与显存占比 |
 | `API_BIND_ADDRESS` / `API_HOST_PORT` | 业务 API 对外绑定，默认仅 `127.0.0.1:8309` |
-| `OCR_*_DIR` | OCR 数据池宿主机路径 |
+| `OCR_*_DIR` | OCR 数据池宿主机路径；`OCR_MODEL_DIR` 为预置的 ONNX 模型目录 |
 | `LANGSMITH_TRACING` / `LANGSMITH_API_KEY` | 默认关闭；开启后追踪可能包含业务输入 |
 
 模型服务只在 Compose 内部网络暴露 `8001`，不发布宿主机端口。业务 API 默认只绑定回环地址；对外入口由部署平台的反向代理负责 TLS 与访问控制。**主应用没有自定义身份认证**，`user_id`/`session_id` 不是权限凭据，不要直接把 8309 暴露到公网。

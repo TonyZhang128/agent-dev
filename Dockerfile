@@ -46,6 +46,7 @@ COPY app ./app
 # 生产启动前的配置自检，拒绝 Mac/Ollama 默认值与占位密钥。
 COPY scripts/prod/check_config.py ./scripts/prod/check_config.py
 COPY docker/entrypoint-api.sh /usr/local/bin/entrypoint-api.sh
+# 只创建运行时目录与挂载点；LLM 与 OCR 模型都不打进镜像，由宿主机预置后只读挂载。
 RUN chmod 0755 /usr/local/bin/entrypoint-api.sh \
  && mkdir -p data/ocr/templates data/ocr/admin data/ocr/assets data/ocr/projects data/ocr/models \
  && chown -R app:app data scripts

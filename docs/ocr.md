@@ -14,7 +14,7 @@ uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 8309
 
 继续使用原有 Mac/Linux 服务脚本和 VS Code `Debug API (launch)` 即可。无需启动第二套 docsvc，也不安装其旧 `requirements.txt`。运行依赖统一由 `pyproject.toml` 的 `dependencies` 和 `uv.lock` 管理：PyMuPDF、openpyxl、OpenCV、NumPy、RapidOCR、CPU ONNX Runtime、Pillow。Pillow 被造样图脚本直接使用，因此显式声明。保留现有 FastAPI/Uvicorn/Pydantic/LangChain 版本。
 
-未引入原 requirements 中没有调用代码的 `python-multipart`、预留统计学习依赖 `scikit-learn`，以及仅用于另建训练环境的 `ultralytics`/PyTorch。演示上传脚本使用标准库构造 multipart，服务端接口仍接收 JSON 路径。文字识别使用 RapidOCR 3.x，按识别质量优先选用 PP-OCRv6 Medium（检测与识别）+ PP-OCRv5 Server（方向分类）；这些模型不在安装包内，首次真实识别时从 ModelScope 下载到 `OCR_MODEL_ROOT`，因此该目录必须可写，离线部署需在构建或部署阶段预先放入模型文件。无需下载 LLM 或安装 CUDA。本项目统一使用 `opencv-python`，`uv` 通过 `exclude-dependencies` 忽略 `rapidocr` 声明的 `opencv-python-headless`，避免同时安装两份 `cv2`；也不要同时安装 CPU/GPU 两种 ONNX Runtime 包。Linux 极简系统若导入 OpenCV 提示缺少 `libGL.so.1`，需由部署环境提供对应系统库。
+未引入原 requirements 中没有调用代码的 `python-multipart`、预留统计学习依赖 `scikit-learn`，以及仅用于另建训练环境的 `ultralytics`/PyTorch。演示上传脚本使用标准库构造 multipart，服务端接口仍接收 JSON 路径。文字识别使用 RapidOCR 3.x，按识别质量优先选用 PP-OCRv6 Medium（检测与识别）+ PP-OCRv5 Server（方向分类）；这些模型不在安装包内。开发环境首次真实识别时从 ModelScope 自动下载到 `OCR_MODEL_ROOT`（该目录必须可写）；离线或容器部署先用 `uv run --locked python -m scripts.models.download_ocr_models --root <目录>` 预置，再通过 `OCR_MODEL_DIR` 只读挂载，避免运行时联网。无需下载 LLM 或安装 CUDA。本项目统一使用 `opencv-python`，`uv` 通过 `exclude-dependencies` 忽略 `rapidocr` 声明的 `opencv-python-headless`，避免同时安装两份 `cv2`；也不要同时安装 CPU/GPU 两种 ONNX Runtime 包。Linux 极简系统若导入 OpenCV 提示缺少 `libGL.so.1`，需由部署环境提供对应系统库。
 
 ## 路径配置
 
@@ -26,7 +26,7 @@ uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 8309
 | `ADMIN_ROOT` | `data/ocr/admin` | 管理端 `pdf/`、`excel/`、`review/`，查找优先 |
 | `ASSET_ROOT` | `data/ocr/assets` | 规范 PDF/Excel；兼容 `library/pdf_dirs.json` 目录改名 |
 | `PROJECTS_ROOT` | `data/ocr/projects` | 与 Java 共用的业务数据池，读写边界 |
-| `OCR_MODEL_ROOT` | `data/ocr/models` | RapidOCR 模型缓存，必须可写；离线部署预先放入模型 |
+| `OCR_MODEL_ROOT` | `.cache/models/ocr` | RapidOCR 模型缓存，开发环境可写自动下载；离线部署用下载脚本预置后只读挂载 |
 
 当前相邻 daolu_v6 资料可在根目录 `.env` 配置为：
 
@@ -132,7 +132,7 @@ uv run --locked pytest -v
 
 离线测试由临时 PDF/Excel/JSON 和图片构成，OCR 只在模型边界模拟；覆盖真实文件生成、合并单元格与印刷文字、公式/引用、WBS、资源隔离和目录限制。原 docsvc 测试依赖 Java 并且兜底 cfg 缺 PDF 锚点，已用确定性夹具替换。
 
-`tests/test_ocr_recognize.py` 覆盖 `/ocr/recognize` 的响应契约、表号缺省/未知/不匹配、模板坐标对齐和错误映射。其中真实照片用例读取 `data/ocr/imgs/CJ5.jpg`、`data/ocr/imgs/test.jpg` 与 `data/ocr/models/` 下的 RapidOCR 模型；照片或模型缺失时自动跳过，干净克隆和 CI 不要求这些本地素材。真实识别结果用于回归印刷体表格字段和页眉文字，手写内容不作准确性断言。
+`tests/test_ocr_recognize.py` 覆盖 `/ocr/recognize` 的响应契约、表号缺省/未知/不匹配、模板坐标对齐和错误映射。其中真实照片用例读取 `data/ocr/imgs/CJ5.jpg`、`data/ocr/imgs/test.jpg` 与 `.cache/models/ocr/` 下的 RapidOCR 模型；照片或模型缺失时自动跳过，干净克隆和 CI 不要求这些本地素材。真实识别结果用于回归印刷体表格字段和页眉文字，手写内容不作准确性断言。
 
 运行中的 API、已有模板和真实简表照片齐备后执行：
 
