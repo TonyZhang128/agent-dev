@@ -1,22 +1,11 @@
+"""日志总结、意图识别与聊天业务的请求、响应和校验。"""
+
 import json
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, StringConstraints, model_validator
+from pydantic import Field, JsonValue, StringConstraints, model_validator
 
-
-class StrictModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-
-
-Identifier = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
-
-
-class RequestContext(StrictModel):
-    """调用方提供的身份元数据，不能替代身份认证。"""
-
-    user_id: Identifier
-    session_id: Identifier
-
+from app.schemas.base import ConversationRequest, RequestContext, StrictModel
 
 ShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
 IntentLabel = Literal[
@@ -81,24 +70,6 @@ class IntentDefinition(StrictModel):
 
     label: IntentLabel
     description: Description
-
-
-class ChatMessage(StrictModel):
-    role: Literal["user", "assistant"]
-    content: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
-
-
-class ConversationRequest(RequestContext):
-    history: list[ChatMessage] = Field(description="当前用户当前会话的完整历史，首轮为[]")
-
-    @model_validator(mode="after")
-    def validate_history(self) -> "ConversationRequest":
-        if len(self.history) % 2 or any(
-            item.role != ("user" if index % 2 == 0 else "assistant")
-            for index, item in enumerate(self.history)
-        ):
-            raise ValueError("history must contain complete user/assistant turns in order")
-        return self
 
 
 class IntentRequest(ConversationRequest):

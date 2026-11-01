@@ -27,7 +27,7 @@
 | `app/api/router.py` | 统一聚合领域 Router；同一个领域仅注册一次 |
 | `app/api/agents.py` | `/agents` 下的日志、意图、聊天入口；分组为“智能体” |
 | `app/api/system.py` | `/health`、`/ready`；保留原路径和 OpenAPI 元信息 |
-| `app/schemas.py` | Pydantic 请求、响应与校验；拒绝额外字段，保留长度、枚举及跨字段约束 |
+| `app/schemas/` | Pydantic 请求、响应与校验；`base.py` 共用严格模型与会话基础类型，`agents.py` 智能体业务，`ocr.py` 文档加工；拒绝额外字段，保留长度、枚举及跨字段约束 |
 | `app/agents/` | 与 HTTP 请求对象无关的业务逻辑；复用共享基类和运行时 |
 | `app/prompts/<name>.md` | 系统提示词，使用 `load_prompt()` 加载 |
 | `app/config.py` | `Settings`、配置默认值及配置校验 |
@@ -79,7 +79,7 @@
 ## 五、新增业务的流程
 
 1. 先定义验收标准和正常、边界、失败用例，再增加测试。
-2. 在 `app/schemas.py` 定义请求/响应，在 `app/prompts/` 增加提示词。
+2. 在 `app/schemas/` 对应模块（智能体业务为 `agents.py`，文档加工为 `ocr.py`）定义请求/响应，在 `app/prompts/` 增加提示词。
 3. 在 `app/agents/` 继承共享基类。结构化业务实现 `name`、`result_type`、`user_content()`；其他业务实现 `name`、`messages()`、`parse_result()`。意图分类内部 Schema 与最终响应有区别，参照现有 `intent.py`，不要机械合并。
 4. 在 `main.py` 的 lifespan 中创建共享实例，在对应领域 Router 中增加 HTTP 入口和 `response_model`；新增领域时创建 Router 并在 `app/api/router.py` 注册。
 5. 补齐契约、资源隔离、错误及必要的并发测试；同步 API 文档、README 目录和接口示例。

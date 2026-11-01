@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from app.schemas import LogSummary, LogSummaryRequest
+from app.schemas.agents import LogSummary, LogSummaryRequest
 from tests.helpers import request_payload
 
 ROOT = Path(__file__).parents[1]

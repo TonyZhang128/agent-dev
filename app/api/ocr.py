@@ -19,7 +19,7 @@ from app.ocr.resources import (
     forms,
     use_resources,
 )
-from app.ocr.schemas import FillReq, JianbiaoReq, RecognizeReq
+from app.schemas.ocr import FillReq, JianbiaoReq, RecognizeReq
 
 router = APIRouter(tags=["ocr"])
 

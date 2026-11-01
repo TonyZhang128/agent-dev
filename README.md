@@ -231,7 +231,11 @@ app/
   ocr/                    # 文档加工业务：资源隔离、识别、公式、PDF/Excel、WBS
   http_errors.py          # 输入与模型异常的统一 HTTP 映射、校验详情脱敏
   config.py               # .env 配置与默认值
-  schemas.py              # 请求、响应的 Pydantic 模型和校验
+  schemas/                # 请求、响应的 Pydantic 模型和校验
+    __init__.py           # 汇总导出，保持 app.schemas 导入路径
+    base.py               # 共用严格模型、身份上下文与会话类型
+    agents.py             # 日志、意图、聊天的请求与响应
+    ocr.py                # 文档加工的请求与配置校验
   llm.py                  # ChatOpenAI 工厂、共享 HTTP 客户端、模型就绪检查
   errors.py               # 与 HTTP 无关的模型输出错误
   agents/
@@ -290,7 +294,7 @@ CLAUDE.md                 # 引用 AGENTS.md，复用共享规则
 
 新增结构化业务按以下顺序推进：
 
-1. 先确定验收标准和正常、边界、失败用例，增加预期失败的 pytest 测试；在 `app/schemas.py` 定义请求与结果类型，在 `app/prompts/` 添加同名 `.md` 提示词。
+1. 先确定验收标准和正常、边界、失败用例，增加预期失败的 pytest 测试；在 `app/schemas/` 对应模块定义请求与结果类型，在 `app/prompts/` 添加同名 `.md` 提示词。
 2. 在 `app/agents/` 继承 `StructuredAgent[请求类型, 结果类型]`，定义 `name`、`result_type` 和 `user_content()`。日志总结模块可作为起点。
 3. 在 `app/main.py` 生命周期中创建实例，在 `app/api/` 对应领域 Router 中增加携带 `response_model` 的路由；新领域创建 Router 并在 `app/api/router.py` 注册。
 4. 最小实现使测试通过，覆盖输入校验、模型失败和资源隔离；同步 API 文档、固定输出接口和 README。纯路由整理应对比完整 OpenAPI，确认无非预期变化。

@@ -11,7 +11,7 @@ from app.agents.intent import DEFAULT_INTENTS
 from app.config import Settings
 from app.llm import ModelService
 from app.main import create_app
-from app.schemas import IntentClassification, IntentRequest, IntentResult
+from app.schemas.agents import IntentClassification, IntentRequest, IntentResult
 from tests.helpers import request_payload
 
 INTERFACE = Path(__file__).parents[1] / "interfaces/intent"

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Request
 
 from app.api.ocr import document_resources, project_path
 from app.ocr import wbs_draft
-from app.ocr.schemas import DraftReq
+from app.schemas.ocr import DraftReq
 
 router = APIRouter(prefix="/wbs", tags=["wbs"])
 

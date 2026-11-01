@@ -14,7 +14,7 @@ from app.agents.chat import ChatAgent
 from app.config import ROOT, Settings
 from app.llm import ModelService
 from app.main import create_app
-from app.schemas import ChatRequest, ChatResponse
+from app.schemas.agents import ChatRequest, ChatResponse
 
 MESSAGE = "请只回复：你好。"
 CHAT_REQUEST = {

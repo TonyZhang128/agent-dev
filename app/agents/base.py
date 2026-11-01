@@ -11,7 +11,7 @@ from app.agents.runtime import build_agent, invoke_agent, prepared_schema, syste
 from app.errors import InvalidModelOutput
 from app.llm import ModelService
 from app.prompts import load_prompt
-from app.schemas import ConversationRequest, RequestContext
+from app.schemas.base import ConversationRequest, RequestContext
 
 
 class BaseAgent[RequestT: BaseModel, ResultT: BaseModel](ABC):

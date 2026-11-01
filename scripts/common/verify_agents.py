@@ -10,7 +10,7 @@ from importlib.metadata import version
 import httpx
 
 from app.config import ROOT, Settings
-from app.schemas import ChatResponse, IntentResult, LogSummary
+from app.schemas.agents import ChatResponse, IntentResult, LogSummary
 
 
 def log_matches_expectations(log: LogSummary, sample: dict) -> bool:

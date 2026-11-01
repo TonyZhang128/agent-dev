@@ -6,7 +6,7 @@ from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 
 from app.config import Settings
 from app.errors import ConversationInputTooLarge
-from app.schemas import ChatMessage
+from app.schemas.base import ChatMessage
 
 
 def message_budget(text: str) -> int:

@@ -1,6 +1,6 @@
 # 业务输出接口
 
-各业务使用独立目录保存供其他系统对接的成功响应契约。接口定义由 `app/schemas.py` 中的 Pydantic 模型生成，与 FastAPI OpenAPI 及模型原生严格 JSON Schema 保持一致。
+各业务使用独立目录保存供其他系统对接的成功响应契约。接口定义由 `app/schemas/agents.py` 中的 Pydantic 模型生成，与 FastAPI OpenAPI 及模型原生严格 JSON Schema 保持一致。
 
 | 业务 | 路径 | 接口资料 |
 | --- | --- | --- |

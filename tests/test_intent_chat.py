@@ -12,7 +12,7 @@ from pydantic import ValidationError
 from app.config import Settings
 from app.llm import ModelService
 from app.main import create_app
-from app.schemas import IntentResult
+from app.schemas.agents import IntentResult
 from tests.helpers import request_payload
 
 CLASSIFICATION = {

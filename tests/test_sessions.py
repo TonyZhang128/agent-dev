@@ -14,7 +14,7 @@ from app.agents.history import trim_history
 from app.config import Settings
 from app.llm import ModelService
 from app.main import create_app
-from app.schemas import ChatMessage
+from app.schemas.base import ChatMessage
 
 IDENTITY = {"user_id": "user-alpha", "session_id": "session-alpha"}
 CLASSIFICATION = {

@@ -4,7 +4,7 @@ import json
 from app.agents.base import StructuredAgent
 from app.agents.chat import ChatAgent
 from app.llm import ModelService
-from app.schemas import (
+from app.schemas.agents import (
     ChatRequest,
     IntentClassification,
     IntentDefinition,

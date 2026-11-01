@@ -255,7 +255,7 @@ def test_live_verifier_records_response_before_validation_failure(
     ],
 )
 def test_log_evaluation_rejects_unsupported_facts(changes, expected):
-    from app.schemas import LogSummary
+    from app.schemas.agents import LogSummary
 
     result = LogSummary.model_validate(
         {
