@@ -73,11 +73,24 @@ PROJECTS_ROOT=../6_shujuchi/yewu
 
 ```zsh
 curl --noproxy '*' -fsS http://127.0.0.1:8309/health/deps
+
+# 普通照片识别：path 相对 PROJECTS_ROOT，只读取，不写文件。
+curl --noproxy '*' -fsS http://127.0.0.1:8309/ocr/recognize \
+  -H 'Content-Type: application/json' \
+  -d '{"path":"projects/现场照片.jpg"}'
+
+# 已知表号时传 form：按模板坐标对齐；对齐失败会返回 warning，仅按栏目文字取值。
+curl --noproxy '*' -fsS http://127.0.0.1:8309/ocr/recognize \
+  -H 'Content-Type: application/json' \
+  -d '{"path":"projects/简表照片.jpg","form":"JB12-4.2.2"}'
+
 curl --noproxy '*' -fsS http://127.0.0.1:8309/ocr/sheet/JB12-4.2.2
 curl --noproxy '*' -fsS http://127.0.0.1:8309/ocr/fill \
   -H 'Content-Type: application/json' \
   -d '{"form":"JB12-4.2.2","cfg":{"formulas":[{"target":"rate","expr":"PASS_RATE(94, @{v1}, @{v2})"}]},"values":{"v1":"96.1","v2":"93.2"}}'
 ```
+
+`/ocr/recognize` 返回 `fields`、`detail`、`lines`、`align`、`warning` 等草稿结果：`fields` 为按栏目提取的字段值，`detail` 说明取值方式（`inline`/`rect`/`right`），`lines` 为原始 OCR 文本框，`align.how` 为 `anchors`/`mismatch`/`none`。识别结果需人工核对，`200` 不代表每个字段都准确。
 
 `cfg` 保留配置平台的 fields/anchors/edges/formulas 元数据；处理所需字段会校验，非法结构返回 `422`。`EXCEL_RANGE.range` 为单个单元格地址（如 `A3`），合并单元格归到左上角。`PDF_REGION.rect` 和 `rects` 是 `{x,y,w,h}` 页面比例坐标；简表 `cells[].rect` 是 `[x,y,w,h]` 外框比例，二者不可混用。
 
@@ -111,13 +124,15 @@ curl --noproxy '*' -fsS http://127.0.0.1:8309/ocr/fill \
 ## 测试与验收
 
 ```zsh
-uv run --locked pytest tests/test_ocr.py tests/test_ocr_integration.py -v
+uv run --locked pytest tests/test_ocr.py tests/test_ocr_recognize.py tests/test_ocr_integration.py -v
 uv run --locked ruff check app tests scripts
 uv run --locked ruff format --check app tests scripts
 uv run --locked pytest -v
 ```
 
 离线测试由临时 PDF/Excel/JSON 和图片构成，OCR 只在模型边界模拟；覆盖真实文件生成、合并单元格与印刷文字、公式/引用、WBS、资源隔离和目录限制。原 docsvc 测试依赖 Java 并且兜底 cfg 缺 PDF 锚点，已用确定性夹具替换。
+
+`tests/test_ocr_recognize.py` 覆盖 `/ocr/recognize` 的响应契约、表号缺省/未知/不匹配、模板坐标对齐和错误映射。其中真实照片用例读取 `data/ocr/imgs/CJ5.jpg`、`data/ocr/imgs/test.jpg` 与 `data/ocr/models/` 下的 RapidOCR 模型；照片或模型缺失时自动跳过，干净克隆和 CI 不要求这些本地素材。真实识别结果用于回归印刷体表格字段和页眉文字，手写内容不作准确性断言。
 
 运行中的 API、已有模板和真实简表照片齐备后执行：
 
