@@ -127,9 +127,9 @@ Linux 使用 `scripts/prod/` 对应入口；远端业务验收使用 `BUSINESS_A
 - `Settings` 的读取顺序为 API 进程环境、根目录 `.env`、源码默认值；新增配置同步更新 `Settings`、`.env.example` 和 README，保留本机 `.env`。
 - launchd 启动的后台任务不保证继承当前终端临时导出的所有变量。持久业务配置优先维护根目录 `.env`，不要声称 `export LLM_*` 或 `OLLAMA_*` 一定传入后台任务；Ollama 自身配置需由其实际启动环境提供。
 - `LANGSMITH_TRACING=false` 为默认值，只有显式配置才启用；凭据运行时注入，不记录或提交真实业务 traces。`SecretStr` 不替代日志、错误和提交内容的脱敏。
-- 使用 `scripts/dev/services.sh` 管理本项目 Mac 任务。frp 公网接入仅用于开发联调，生产部署不安装、不启动 frpc/frps；普通 `start` 不启动 frp，`stop` 会先停止本项目 frpc，再处理 API/Ollama；不停止其他方式启动的进程，不编辑 shell profile。
-- 日志在 `.logs/`，模型由 Ollama 或独立 vLLM 环境管理；密钥、隧道凭据和私有证书在受控运行环境或 `.secrets/`，不写入业务代码、命令输出或仓库。
-- 公网隧道仅用于开发期接入，不等于增加身份认证；主应用的用户/会话 ID 仍不提供权限保护。生产环境不包含 frp，生产暴露或外部动作的权限设计应单独明确。
+- 使用 `scripts/dev/services.sh` 管理本项目 Mac 任务；不停止其他方式启动的进程，不编辑 shell profile。
+- 日志在 `.logs/`，模型由 Ollama 或独立 vLLM 环境管理；密钥和私有证书在受控运行环境或 `.secrets/`，不写入业务代码、命令输出或仓库。
+- 主应用的用户/会话 ID 不提供权限保护；生产暴露或外部动作的权限设计应单独明确。
 
 ## 八、Git 与交付要求
 

@@ -10,8 +10,6 @@
 | Mac 后台调试 API | `zsh scripts/dev/services.sh debug-api` | launchd 启动带 debugpy 的 API，供 VS Code Attach；仅用于开发 |
 | Mac 前台 Ollama | `zsh scripts/dev/start-ollama.sh` | 复用本机模型存储 |
 | Mac 后台任务 | `zsh scripts/dev/services.sh start\|stop\|status\|restart-api` | launchd；仅管理本项目注册任务 |
-| Mac 公网隧道（仅开发） | `zsh scripts/dev/services.sh start-frpc\|stop-frpc\|restart-frpc` | 显式管理本项目 frpc；配置、凭据和健康检查通过后启动 |
-| Mac 隧道预检 / 前台（仅开发） | `zsh scripts/dev/start-frpc.sh [--check]` | Homebrew frpc；不会修改业务 `.env` |
 | Mac 下载网络检查 | `zsh scripts/dev/check-network.sh [proxy_url]` | Homebrew、PyPI、Ollama 连通性 |
 | Mac 真实模型及 GPU | `uv run --locked python -m scripts.dev.verify_live` | 通用推理验收 + 本机 Ollama Q4_K_M/GPU 分配 |
 | Linux 业务环境安装 | `bash scripts/prod/setup.sh` | Python 3.12、锁定运行依赖、保留已有 `.env` |
@@ -24,8 +22,6 @@
 | OCR 真实验收 | `uv run --locked python -m scripts.common.verify_ocr --photo <数据池相对路径> --form JB12-4.2.2` | 调运行中 API，检查真实识别、简表、填表与 WBS；报告在 verification/ocr |
 
 Linux 完整步骤、配置和后台托管见 [部署说明](../docs/deployment-linux.md)。Mac 步骤见 [项目 README](../README.md#环境与安装)。
-
-通过 `107.182.190.191` 暴露 Mac 开发 API 的步骤见 [frp 公网接入](../docs/frp.md)。frp 只在开发期使用，Linux 生产入口不安装、不启动 frpc/frps；普通 `start` 不自动打开公网隧道，`stop` 会先停止本项目 frpc，再停止 API/Ollama。frpc 配置在 `config/dev/frp/`，日志为 `.logs/frpc-service.*.log`，不使用 Homebrew 的后台服务配置。
 
 `dev/` 使用 zsh，只接受 macOS；`prod/` 使用 Bash，只接受 Linux。Linux API 可以独立运行在没有 GPU 的主机；模型服务和硬件验收需要 NVIDIA。通用 Python 验收不依赖 Homebrew、Ollama 或 `nvidia-smi`。
 

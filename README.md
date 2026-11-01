@@ -23,8 +23,6 @@
 
 服务默认监听 `127.0.0.1:8309`，交互文档为 <http://127.0.0.1:8309/docs>。这些接口生成内容和计划，尚未连接审批、订单或消息发送等业务系统。
 
-开发期可用 frp 将本机 API 临时接入公网服务器，供其他电脑联调；该能力只存在于开发环境，Linux 生产部署不安装、不启动 frp。地址、证书信任和启动方式见 [frp 公网接入（仅开发）](#frp-公网接入仅开发)，完整运维见 [frp 部署说明](docs/frp.md)。
-
 `docsvc` 的全部运行代码和辅助脚本已合并到 `app/ocr/`、`scripts/ocr/`，共用当前应用入口、Python 3.12、依赖锁和 CI。配置、接口与验收见 [文档加工与 OCR](docs/ocr.md)。工作区原先未跟踪的 `ocr/` 是另一个表单匹配项目，仍保持独立；本次迁移来源为 `../docsvc`。
 
 ## 环境与安装
@@ -103,11 +101,11 @@ zsh scripts/dev/services.sh start
 zsh scripts/dev/services.sh status
 # 修改代码或 .env 后：
 zsh scripts/dev/services.sh restart-api
-# 停止本项目注册的 frpc、API、Ollama 任务：
+# 停止本项目注册的 API、Ollama 任务：
 zsh scripts/dev/services.sh stop
 ```
 
-脚本按需注册 `local.highway-agent.ollama`、`local.highway-agent.api` 用户会话任务，复用已运行的服务，不修改 shell profile。任务持续到停止或退出登录；重新登录后运行 `start`。日志在 `.logs/*-service.*.log`。普通 `start` 不启动公网隧道；仅开发联调需要时单独执行 `start-frpc`，`stop` 会先停止本项目注册的 frpc，再处理 API/Ollama。
+脚本按需注册 `local.highway-agent.ollama`、`local.highway-agent.api` 用户会话任务，复用已运行的服务，不修改 shell profile。任务持续到停止或退出登录；重新登录后运行 `start`。日志在 `.logs/*-service.*.log`。
 
 其他方式启动的进程不会被脚本停止。若 `restart-api` 提示端口 8309 被占用，说明尚未完成当前代码的重启部署；应确认进程归属并通过原启动方式管理，不直接杀进程。临时回环端口上的验证也不代表端口 8309 已更新。
 
@@ -130,24 +128,6 @@ zsh scripts/dev/start-api.sh --reload
 - 前台调试也可执行 `zsh scripts/dev/start-api.sh --debug`。
 
 `start-api.sh --debug` 和 `debug-api` 默认监听 `127.0.0.1:5678`，不支持 `--reload`；VS Code 的 launch 配置不需要该端口。执行普通 `zsh scripts/dev/services.sh restart-api` 会恢复非调试启动。
-
-## frp 公网接入（仅开发）
-
-frp 隧道只用于开发联调：把 Mac 本机 API 临时暴露给其他电脑。它不属于上线能力，Linux 生产部署不安装、不启动 frpc/frps，也不复制 `config/dev/frp/` 或 `.secrets/frp/`。生产对外入口由实际部署环境单独设计和配置。
-
-开发期公网入口为 `https://107.182.190.191:8443`，Swagger 为 `/docs`；是否在线取决于本机 API、frpc 和服务器状态。frpc 主动连接 `107.182.190.191:7000`，将本机 `127.0.0.1:8309` 转发到服务端回环端口 `18000`，再由服务器 Caddy 提供 HTTPS。主应用没有自定义身份认证，调用方的 `user_id`、`session_id` 不是权限凭据；公网隧道本身也不增加认证。
-
-HTTPS 使用私有 CA。调用方需取得 `.secrets/frp/ca.crt` 并配置证书信任，勿分发 CA 私钥或隧道 token。示例：
-
-```zsh
-curl --cacert ./ca.crt -fsS https://107.182.190.191:8443/health
-# 需本机 API 已启动；仅管理本项目注册的隧道任务
-zsh scripts/dev/services.sh start-frpc
-zsh scripts/dev/services.sh stop-frpc
-zsh scripts/dev/services.sh restart-frpc
-```
-
-隧道配置在 `config/dev/frp/`，凭据在 Git 忽略的 `.secrets/frp/`，日志在 `.logs/frpc-service.*.log`。服务端文件、跨电脑调用示例和验收边界见 [frp 部署说明](docs/frp.md)。
 
 ## 代理与下载
 
@@ -265,8 +245,6 @@ scripts/
   models/                 # 下载 Qwen3.5 GGUF 权重并组装 vLLM 模型目录
   README.md               # 脚本入口和迁移说明
   *.sh / verify_*.py      # 原路径兼容入口
-config/dev/frp/          # 仅开发：frpc 配置、专用 frps 和公开访问的 Caddy HTTPS 模板
-docs/frp.md              # 仅开发：frp 公网接入、凭据与服务端运维
 docs/agents-api.md        # 对外 API 约定和示例
 docs/log-summary-testing.md # OCR 日志描述规则及离线、真实模型验收
 .github/workflows/ci.yml # Linux 自动检查
@@ -368,7 +346,7 @@ bash scripts/prod/start-api.sh
 bash scripts/prod/verify.sh
 ```
 
-API 默认监听 `127.0.0.1:8309`，拒绝 `--reload`，启动时不安装或同步依赖。上线需由 systemd 等服务管理器托管，详见 [部署说明](docs/deployment-linux.md)。API 与模型可以部署在不同 Linux 主机；API 主机无需 GPU，`start-vllm.sh` 和完整 `verify.sh` 用于 GPU 主机，远端 API 可单独运行通用业务验收。生产部署不包含 frp 公网隧道；frp 只用于 macOS 开发联调。
+API 默认监听 `127.0.0.1:8309`，拒绝 `--reload`，启动时不安装或同步依赖。上线需由 systemd 等服务管理器托管，详见 [部署说明](docs/deployment-linux.md)。API 与模型可以部署在不同 Linux 主机；API 主机无需 GPU，`start-vllm.sh` 和完整 `verify.sh` 用于 GPU 主机，远端 API 可单独运行通用业务验收。
 
 模型服务需支持 Chat Completions 和原生 JSON Schema 输出；以真实业务验收结果判断具体模型和 vLLM 组合是否可用。验收文件写入 `verification/`，`nvidia-smi` 成功仅确认驱动和设备可见，模型 GPU 占用需另看服务日志和设备监控。本机未执行 Linux GPU 部署。
 

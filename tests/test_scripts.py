@@ -244,13 +244,6 @@ def test_legacy_mac_api_rejects_reload_with_debugpy(deployment):
     assert not deployment.trace.exists()
 
 
-def test_production_entry_points_do_not_include_frp_tunnel():
-    for path in (ROOT / "scripts" / "prod").iterdir():
-        if path.suffix in {".sh", ".py"}:
-            assert "frp" not in path.read_text(encoding="utf-8").lower(), path.name
-    assert not (ROOT / "config" / "frp").exists()
-
-
 def test_legacy_python_entry_points_resolve_to_expected_environments():
     from scripts import verify_agents, verify_live
     from scripts.common import verify_agents as common_agents
