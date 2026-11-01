@@ -5,6 +5,7 @@
 | 接口 | 当前输入 | 历史字段 |
 | --- | --- | --- |
 | `/agents/intent` | `text` | 必填 `history`，首轮为 `[]` |
+| `/agents/intent/archive` | `text` | 必填 `history`，首轮为 `[]` |
 | `/agents/chat` | `message` | 必填 `history`，首轮为 `[]` |
 | `/agents/log-summary` | `content` | 不接受 `history` |
 

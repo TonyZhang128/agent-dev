@@ -19,9 +19,10 @@ class BaseAgent[RequestT: BaseModel, ResultT: BaseModel](ABC):
     temperature = 0.0
     dynamic_schema = False
 
-    def __init__(self, models: ModelService):
+    def __init__(self, models: ModelService, *, prompt_name: str | None = None):
         self.models = models
-        self.prompt = load_prompt(self.name)
+        # 同一能力的不同业务端可共享 Agent 实现，但使用各自的提示词文件。
+        self.prompt = load_prompt(prompt_name or self.name)
         self.agent = None if self.dynamic_schema else self._build()
 
     def _build(self, schema: dict | None = None):

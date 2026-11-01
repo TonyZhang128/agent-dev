@@ -2,6 +2,8 @@
 
 接口：`POST /agents/intent`。请求、响应和兼容说明见 [API 文档](agents-api.md#2-意图识别)。
 
+归档端接口为 `POST /agents/intent/archive`，当前使用 `A`–`D` 占位分类及 `unknown` 兜底，真实业务含义补齐前只做离线契约与流程测试，不纳入本文件描述的真实模型语义评测。`tests/test_intent_archive.py` 覆盖档案隔离、枚举、分数边界、回退、非法标签和 Schema 发布。
+
 ## 验收规则
 
 业务分类固定为五类，`unknown` 作为分类之外的兜底状态：

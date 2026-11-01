@@ -1,6 +1,6 @@
-# 意图识别输出接口
+# 业务端意图识别输出接口
 
-接口：`POST /agents/intent`，JSON 编码为 UTF-8。成功返回 HTTP `200`，响应直接是包含以下四个必填字段的 JSON 对象，不增加包装层。
+接口：`POST /agents/intent`，JSON 编码为 UTF-8。文件归档系统的 `POST /agents/intent/archive` 使用独立的 `A`–`D` 占位分类，见 [归档端接口](archive/README.md)。成功返回 HTTP `200`，响应直接是包含以下四个必填字段的 JSON 对象，不增加包装层。
 
 | 文件 | 用途 |
 | --- | --- |

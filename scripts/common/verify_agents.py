@@ -207,7 +207,12 @@ def main():
             document = client.get("/openapi.json")
             document.raise_for_status()
             report["api_version"] = document.json()["info"]["version"]
-            for path in ("/agents/log-summary", "/agents/intent", "/agents/chat"):
+            for path in (
+                "/agents/log-summary",
+                "/agents/intent",
+                "/agents/intent/archive",
+                "/agents/chat",
+            ):
                 assert path in document.json()["paths"], f"route missing: {path}"
 
             verifier = _VerificationClient(client, report["checks"])

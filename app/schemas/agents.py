@@ -11,8 +11,12 @@ ShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1
 IntentLabel = Literal[
     "work_list", "supervision_log", "image_library", "business_management", "chat", "unknown"
 ]
+ArchiveIntentLabel = Literal["A", "B", "C", "D", "unknown"]
 Description = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 SummaryItem = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
+IntentReason = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)
+]
 
 
 class LogSummaryRequest(RequestContext):
@@ -66,9 +70,9 @@ class LogSummary(StrictModel):
 
 
 class IntentDefinition(StrictModel):
-    """固定意图的内部描述；调用方不能提供候选意图。"""
+    """服务端维护的意图描述；允许的标签集合由具体 IntentProfile 限定。"""
 
-    label: IntentLabel
+    label: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)]
     description: Description
 
 
@@ -97,7 +101,20 @@ class IntentResult(StrictModel):
 class IntentClassification(IntentResult):
     """意图分类器的内部输出；聊天回答由另一次调用生成。"""
 
-    reason: SummaryItem
+    reason: IntentReason
+
+
+class ArchiveIntentResult(StrictModel):
+    """文件归档系统的意图识别结果；当前无聊天分流，理由始终简短。"""
+
+    intent: ArchiveIntentLabel
+    confidence: float = Field(ge=0, le=1)
+    reason: IntentReason
+    needs_clarification: bool
+
+
+class ArchiveIntentClassification(ArchiveIntentResult):
+    """归档意图分类器的内部输出；当前与最终响应字段一致。"""
 
 
 class ChatRequest(ConversationRequest):

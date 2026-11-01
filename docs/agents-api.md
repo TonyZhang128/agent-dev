@@ -1,4 +1,4 @@
-# 三个业务智能体 API
+# 业务智能体 API
 
 本文说明原有 `/agents/*` 契约。合并后的文档加工接口 `/ocr/*`、`/wbs/draft`、`/health/deps` 见 [OCR API 与路径配置](ocr.md)，与本文共用 `app.main:app` 和 8309 端口。
 
@@ -9,14 +9,15 @@
 | 业务 | 方法与路径 | 模块 |
 | --- | --- | --- |
 | 总结并生成工作日志 | `POST /agents/log-summary` | `app/agents/log_summary.py` |
-| 意图识别 | `POST /agents/intent` | `app/agents/intent.py` |
+| 业务端意图识别 | `POST /agents/intent` | `app/agents/intent.py` |
+| 归档端意图识别 | `POST /agents/intent/archive` | `app/agents/intent.py`，配置见 `app/agents/profiles.py` |
 | 自由对话 | `POST /agents/chat` | `app/agents/chat.py` |
 
-当前 API 文档版本 `0.1.0`（以 `app/main.py` 为准）。三个智能体均通过 LangChain `create_agent()` 执行，共享 `app/llm.py` 的 `ChatOpenAI` 模型工厂和 `.env` 配置。日志总结、意图识别使用 `ProviderStrategy` 和 JSON Schema 约束生成，最后经过 Pydantic 校验；对话返回普通文本，再包装为 JSON。接口只处理传入内容，不执行外部业务操作，不将用户消息保存为服务端会话。
+当前 API 文档版本 `0.1.0`（以 `app/main.py` 为准）。三类智能体均通过 LangChain `create_agent()` 执行，共享 `app/llm.py` 的 `ChatOpenAI` 模型工厂和 `.env` 配置。日志总结、意图识别使用 `ProviderStrategy` 和 JSON Schema 约束生成，最后经过 Pydantic 校验；对话返回普通文本，再包装为 JSON。接口只处理传入内容，不执行外部业务操作，不将用户消息保存为服务端会话。
 
 ## 用户与会话请求契约
 
-三个业务接口均要求非空字符串 `user_id`、`session_id`，去除首尾空白后各1–128字符。`/intent` 和 `/chat` 还必须传 `history`（首轮为 `[]`）；日志总结不接受该字段。旧请求缺少这些必填字段将返回422，成功响应结构不变；业务接口路径已统一为 `/agents/...`，不再使用 `/api/agents` 前缀。完整示例、并发隔离、裁剪规则和身份信任边界见 [用户与会话](sessions.md)。
+各智能体接口均要求非空字符串 `user_id`、`session_id`，去除首尾空白后各1–128字符。意图识别（含归档端）和 `/chat` 还必须传 `history`（首轮为 `[]`）；日志总结不接受该字段。旧请求缺少这些必填字段将返回422，成功响应结构不变；业务接口路径已统一为 `/agents/...`，不再使用 `/api/agents` 前缀。完整示例、并发隔离、裁剪规则和身份信任边界见 [用户与会话](sessions.md)。
 
 ## 1. 工作日志总结
 
@@ -173,6 +174,29 @@ curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/intent \
 已取消自定义分类。为兼容已有的空字段请求，保留可选 `intents`，但只能省略或为 `[]`；任何非空列表均返回 `422`，即使其中使用的是当前五类标签，也不允许覆盖或缩减分类。模型不会收到调用方自定义候选。
 
 四个响应字段保持不变，接口路径已由 `/api/agents/intent` 调整为 `/agents/intent`；请求不再接受非空 `intents`，响应 `intent` 的 JSON Schema 和 Pydantic 类型固定为上述五类及 `unknown`。旧调用方应去掉自定义候选并更新标签映射；模型返回集合之外的标签视为非法输出，返回 `502`。测试及真实评测标准见 [意图识别测试说明](intent-testing.md)。
+
+## 2.1 归档端意图识别
+
+文件归档系统使用同一套分类流程和独立的 profile 配置，接口为 `POST /agents/intent/archive`。请求契约与业务端完全一致：`text` 最多 2000 字符，必须携带 `history`，`intents` 只能省略或为 `[]`。响应四个字段相同，但 `intent` 只能取当前占位分类 `A`、`B`、`C`、`D` 或兜底 `unknown`。
+
+```zsh
+curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/intent/archive \
+  -H 'Content-Type: application/json' \
+  -d '{"user_id":"example-user","session_id":"example-session","history":[],"text":"把这份文件归档"}'
+```
+
+```json
+{
+  "intent": "A",
+  "confidence": 0.95,
+  "reason": "用户要求归档当前文件。",
+  "needs_clarification": false
+}
+```
+
+`A`–`D` 的业务含义尚未确定，当前只是占位标签；补充真实含义时修改 `app/agents/profiles.py` 的 `ARCHIVE_INTENTS` 与 `app/prompts/intent/archive.md`，无需复制 Agent 实现。归档端没有 `chat` 分类，问候或一般交流返回 `unknown`，不会触发聊天调用。模型返回 `A`–`D` 之外的业务端标签、旧标签或非法分数均视为非法输出并返回 `502`。低分、需澄清和显式 `unknown` 的统一回退规则与业务端相同，阈值 `0.65` 由 profile 配置。
+
+归档端响应的 [Schema 和示例](../interfaces/intent/archive/README.md) 位于 `interfaces/intent/archive/`。在真实分类含义补齐前，归档端不纳入真实模型语义评测；离线测试只验证档案隔离、枚举、回退、错误映射和契约。
 
 ## 3. 自由对话
 

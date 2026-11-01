@@ -28,8 +28,8 @@
 | `app/api/agents.py` | `/agents` 下的日志、意图、聊天入口；分组为“智能体” |
 | `app/api/system.py` | `/health`、`/ready`；保留原路径和 OpenAPI 元信息 |
 | `app/schemas/` | Pydantic 请求、响应与校验；`base.py` 共用严格模型与会话基础类型，`agents.py` 智能体业务，`ocr.py` 文档加工；拒绝额外字段，保留长度、枚举及跨字段约束 |
-| `app/agents/` | 与 HTTP 请求对象无关的业务逻辑；复用共享基类和运行时 |
-| `app/prompts/<name>.md` | 系统提示词，使用 `load_prompt()` 加载 |
+| `app/agents/` | 与 HTTP 请求对象无关的业务逻辑；复用共享基类和运行时；同一能力在不同业务端的差异在 `profiles.py` 声明 |
+| `app/prompts/<name>.md` | 系统提示词，使用 `load_prompt()` 加载；可按能力分子目录，如 `intent/business.md` |
 | `app/config.py` | `Settings`、配置默认值及配置校验 |
 | `app/llm.py` | `ChatOpenAI` 工厂、HTTP 客户端及模型列表就绪检查；不放业务规则 |
 | `app/ocr/` | 从 docsvc 迁入的照片/简表识别、公式/引用、PDF/Excel 填表、WBS；不得反向导入 scripts 或 FastAPI |
@@ -62,13 +62,14 @@
 | --- | --- | --- |
 | `POST /agents/log-summary` | `LogSummaryRequest` | `LogSummary` |
 | `POST /agents/intent` | `IntentRequest` | `IntentResult` |
+| `POST /agents/intent/archive` | `IntentRequest` | `ArchiveIntentResult` |
 | `POST /agents/chat` | `ChatRequest` | `ChatResponse` |
 
 - 三类业务均要求 `user_id`、`session_id`；intent/chat 还要求当前会话完整 `history`，首轮为 `[]`；日志拒绝 history。
 - 身份通过请求局部 LangChain metadata 传递，不写入模型提示词。调用方 ID 不等于身份认证；当前应用没有自定义认证机制。
 - 历史仅接受完整、交替的 user/assistant 回合，拒绝调用方 system 消息。使用共享历史工具按上下文预算裁剪最早完整回合，保留当前输入和系统提示词；遵守完整输入上限，不恢复旧的 10 条消息或 4000 字符会话限制。UTF-8 字节估算是保守预算，不是精确 tokenizer。
 - 日志接受文字或 JSON 对象，保留原始事实、数值和单位；不得虚构日期、成果、任务或合格结论。具体字段约束以 Schema 和 `interfaces/log_summary/` 为准。
-- 意图固定为 `work_list`、`supervision_log`、`image_library`、`business_management`、`chat` 五类，加 `unknown` 兜底。`intents` 只能省略或为 `[]`，非空在推理前返回 422。
+- 业务端意图固定为 `work_list`、`supervision_log`、`image_library`、`business_management`、`chat` 五类，加 `unknown` 兜底。归档端使用独立 profile，当前固定为 `A`、`B`、`C`、`D` 加 `unknown`，不含聊天分流。两端共享同一分类流程、基类和运行时，标签、提示词、输出模型与阈值只在 `app/agents/profiles.py` 声明。`intents` 只能省略或为 `[]`，非空在推理前返回 422。
 - 意图分数低于 `0.65` 或需要澄清时必须回退 `unknown` 且 `needs_clarification=true`；分数不是校准概率。有效 `chat` 继续调用共享 ChatAgent，将回答放入 `reason`，两次推理共享总超时；不因聊天失败返回分类理由冒充答案。
 - `/health` 只检查进程存活；`/ready` 通过模型列表检查配置模型，不执行推理。
 - 文档接口新增 `/health/deps`、`/ocr/*`、`/wbs/draft`；成功保留 `{"status":200,"data":...}`。模板和 OCR 引擎按需加载，应用资源保存在 `app.state.ocr_resources`，缓存与模型不得跨应用串用；缺模板仅影响相关请求。

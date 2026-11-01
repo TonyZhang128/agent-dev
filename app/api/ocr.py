@@ -1,4 +1,4 @@
-"""现场照片、简表与填表接口；CPU 操作由同步路由在线程池执行。"""
+"""现场照片、监理日志、简表与填表接口；CPU 操作由同步路由在线程池执行。"""
 
 import time
 from collections.abc import Generator
@@ -11,7 +11,7 @@ import pymupdf
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 
-from app.ocr import deps, form_ocr, grid, jianbiao
+from app.ocr import daily_logs, deps, form_ocr, grid, jianbiao
 from app.ocr.resources import (
     OCRModelError,
     OCRResourceError,
@@ -19,7 +19,7 @@ from app.ocr.resources import (
     forms,
     use_resources,
 )
-from app.schemas.ocr import FillReq, JianbiaoReq, RecognizeReq
+from app.schemas.ocr import DailyLogsReq, FillReq, JianbiaoReq, RecognizeReq
 
 router = APIRouter(tags=["ocr"])
 
@@ -86,6 +86,21 @@ def recognize(req: RecognizeReq, request: Request):
             if not path.is_file():
                 raise HTTPException(400, "照片必须为数据池内的文件")
             result = form_ocr.recognize(path, req.form.strip())
+        result["ms"] = round((time.monotonic() - started) * 1000)
+        return {"status": 200, "data": result}
+
+
+@router.post("/ocr/daily-logs")
+def daily_logs_recognize(req: DailyLogsReq, request: Request):
+    with document_resources(request) as resources:
+        started = time.monotonic()
+        if req.img:
+            result = daily_logs.run(None, req.img)
+        else:
+            path = project_path(resources, req.path)
+            if not path.is_file():
+                raise HTTPException(400, "照片必须为数据池内的文件")
+            result = daily_logs.run(path)
         result["ms"] = round((time.monotonic() - started) * 1000)
         return {"status": 200, "data": result}
 

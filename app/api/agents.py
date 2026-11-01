@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Request
 
 from app.schemas.agents import (
+    ArchiveIntentResult,
     ChatRequest,
     ChatResponse,
     IntentRequest,
@@ -20,6 +21,15 @@ async def log_summary(payload: LogSummaryRequest, request: Request):
 @router.post("/intent", response_model=IntentResult, summary="识别页面导航或一般交流意图")
 async def intent(payload: IntentRequest, request: Request):
     return await request.app.state.intent_agent.run(payload)
+
+
+@router.post(
+    "/intent/archive",
+    response_model=ArchiveIntentResult,
+    summary="识别文件归档系统意图",
+)
+async def archive_intent(payload: IntentRequest, request: Request):
+    return await request.app.state.archive_intent_agent.run(payload)
 
 
 @router.post("/chat", response_model=ChatResponse, summary="自由对话")

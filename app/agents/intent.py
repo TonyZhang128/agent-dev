@@ -1,54 +1,63 @@
 import asyncio
 import json
 
+from pydantic import BaseModel
+
 from app.agents.base import StructuredAgent
 from app.agents.chat import ChatAgent
+from app.agents.profiles import BUSINESS_INTENT_PROFILE, IntentProfile
 from app.llm import ModelService
-from app.schemas.agents import (
-    ChatRequest,
-    IntentClassification,
-    IntentDefinition,
-    IntentRequest,
-    IntentResult,
-)
+from app.schemas.agents import ChatRequest, IntentRequest
 
-DEFAULT_INTENTS = (
-    IntentDefinition(label="work_list", description="工作列表：查看工作任务、待办事项或工作清单"),
-    IntentDefinition(
-        label="supervision_log", description="监理日志页面：查看、填写或管理监理日志、监理日记"
-    ),
-    IntentDefinition(
-        label="image_library", description="图片库：查看、查找或管理现场照片、图片、相册"
-    ),
-    IntentDefinition(
-        label="business_management", description="业务管理页面：进入业务管理、办理业务"
-    ),
-    IntentDefinition(label="chat", description="问候、闲聊或一般交流"),
-)
+# 保留旧导入路径，供接口测试和已有调用方读取业务端固定候选。
+DEFAULT_INTENTS = BUSINESS_INTENT_PROFILE.intents
 
 
-class IntentAgent(StructuredAgent[IntentRequest, IntentResult]):
-    name = "intent"
-    result_type = IntentClassification
+class IntentAgent[ResultT: BaseModel](StructuredAgent[IntentRequest, ResultT]):
+    """按 IntentProfile 复用同一分类流程，业务端差异只来自配置。"""
 
-    def __init__(self, models: ModelService, chat_agent: ChatAgent | None = None):
-        super().__init__(models)
-        self.chat_agent = chat_agent if chat_agent is not None else ChatAgent(models)
+    def __init__(
+        self,
+        models: ModelService,
+        profile: IntentProfile,
+        chat_agent: ChatAgent | None = None,
+    ):
+        self.profile = profile
+        self.name = profile.agent_name
+        self.result_type = profile.classification_type
+        if profile.chat_label is None:
+            self.chat_agent = None
+        else:
+            self.chat_agent = chat_agent if chat_agent is not None else ChatAgent(models)
+        super().__init__(models, prompt_name=profile.prompt_name)
 
     def user_content(self, request: IntentRequest) -> str:
         return json.dumps(
-            {"text": request.text, "intents": [item.model_dump() for item in DEFAULT_INTENTS]},
+            {
+                "text": request.text,
+                "intents": [item.model_dump() for item in self.profile.intents],
+            },
             ensure_ascii=False,
         )
 
-    async def run(self, request: IntentRequest) -> IntentResult:
+    async def run(self, request: IntentRequest) -> ResultT:
         async with asyncio.timeout(self.models.settings.llm_timeout_seconds):
-            result = await super().run(request)
-            if result.intent == "unknown" or result.confidence < 0.65 or result.needs_clarification:
-                return IntentResult(
-                    **(result.model_dump() | {"intent": "unknown", "needs_clarification": True})
+            classification = await super().run(request)
+            data = classification.model_dump()
+            if (
+                classification.intent == self.profile.fallback_label
+                or classification.confidence < self.profile.min_confidence
+                or classification.needs_clarification
+            ):
+                return self.profile.response_type.model_validate(
+                    data | {"intent": self.profile.fallback_label, "needs_clarification": True}
                 )
-            if result.intent == "chat":
+            if (
+                self.profile.chat_label is not None
+                and classification.intent == self.profile.chat_label
+            ):
+                if self.chat_agent is None:
+                    raise RuntimeError(f"{self.profile.name}: chat profile requires a chat agent")
                 chat = await self.chat_agent.run(
                     ChatRequest(
                         user_id=request.user_id,
@@ -57,5 +66,5 @@ class IntentAgent(StructuredAgent[IntentRequest, IntentResult]):
                         history=request.history,
                     )
                 )
-                return IntentResult(**(result.model_dump() | {"reason": chat.reply}))
-            return result
+                return self.profile.response_type.model_validate(data | {"reason": chat.reply})
+            return self.profile.response_type.model_validate(data)

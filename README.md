@@ -11,9 +11,10 @@
 | 功能 | 接口 | 输入与输出 |
 | --- | --- | --- |
 | 工程日志描述 | `POST /agents/log-summary` | 可变结构的工程表单 OCR JSON（兼容文字）→ 日志段落及结构化字段 |
-| 意图识别 | `POST /agents/intent` | 文字与历史消息 → 固定四个页面或一般交流类别、判断分数、澄清标记；一般交流返回聊天回答 |
+| 业务端意图识别 | `POST /agents/intent` | 文字与历史消息 → 固定四个页面或一般交流类别、判断分数、澄清标记；一般交流返回聊天回答 |
+| 归档端意图识别 | `POST /agents/intent/archive` | 文字与历史消息 → `A`–`D` 占位分类或 `unknown`、判断分数、澄清标记 |
 | 自由对话 | `POST /agents/chat` | 当前消息、必填历史（首轮 `[]`）→ 回答和模型名称 |
-| 照片/简表 OCR | `POST /ocr/recognize`、`POST /ocr/jianbiao` | 数据池照片 → 草稿字段、定位与识别详情 |
+| 照片/简表/监理日志 OCR | `POST /ocr/recognize`、`POST /ocr/jianbiao`、`POST /ocr/daily-logs` | 数据池照片或 base64 图片 → 草稿字段、定位与识别详情 |
 | 公式与填表 | `POST /ocr/fill` | 核对后的值 + 配置 → 公式/引用结果，可输出同源 PDF/Excel |
 | 表样预览与字段 | `GET /ocr/blank/{form}.png`、`GET /ocr/sheet/{form}` | 空白表 PNG、版面栏与格子字段 |
 | 施工图划分 | `POST /wbs/draft` | PDF/工可 → WBS 划分初稿 |
@@ -147,7 +148,7 @@ zsh scripts/dev/setup.sh
 
 ## 用户与会话
 
-所有业务请求必须提供 `user_id`、`session_id`（非空字符串，各最多128字符）。意图识别和聊天还必须提供 `history`，首轮为 `[]`；日志不接收历史。旧调用方必须补齐字段，成功响应结构不变。
+所有业务请求必须提供 `user_id`、`session_id`（非空字符串，各最多128字符）。意图识别（含归档端）和聊天还必须提供 `history`，首轮为 `[]`；日志不接收历史。旧调用方必须补齐字段，成功响应结构不变。
 
 调用方传入当前会话全部历史；服务端按每次调用的系统提示词、Schema、输出预留和上下文容量，以保守UTF-8字节估算裁剪最早完整回合，不修改原始历史，不持久保存会话。精确token数量取决于模型，估算可能提前裁剪；`LLM_CONTEXT_TOKENS` 必须与实际服务配置一致。身份字段作为 LangChain 调用元数据传递，不送入模型提示词，不代表完成身份认证。详细契约和边界见 [用户与会话说明](docs/sessions.md)。
 
@@ -161,13 +162,15 @@ uv run --locked python -c 'import json; from pathlib import Path; print(json.dum
     -H 'Content-Type: application/json' --data-binary @-
 curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/intent \
   -H 'Content-Type: application/json' -d '{"user_id":"example-user","session_id":"example-session","history":[],"text":"打开监理日志页面"}'
+curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/intent/archive \
+  -H 'Content-Type: application/json' -d '{"user_id":"example-user","session_id":"example-session","history":[],"text":"把这份文件归档"}'
 curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/chat \
   -H 'Content-Type: application/json' -d '{"user_id":"example-user","session_id":"example-session","history":[],"message":"你好，请解释业务智能体。"}'
 ```
 
 完整字段、返回示例、意图标签及历史消息限制见 [智能体 API 文档](docs/agents-api.md)。`/health` 检查 API 存活，`/ready` 检查上游列出配置模型；只有业务调用会实际推理。
 
-意图识别固定五类：`work_list`（工作列表）、`supervision_log`（监理日志页面）、`image_library`（图片库）、`business_management`（业务管理页面）、`chat`（问候、闲聊或一般交流）。无法确定目标、目标不支持、分数低于 `0.65` 或需要澄清时返回 `unknown`；它是兜底结果，不计入五类。四个页面类别由调用方执行跳转；有效 `chat` 会继续调用 `ChatAgent`，将回答放入现有 `reason` 字段，其余字段不变。聊天回答不受分类理由300字符限制，两次推理共享总超时；低分或需澄清时先回退为 `unknown`，不触发聊天。已取消自定义分类；`intents` 仅兼容省略或 `[]`，非空返回 `422`。调用方统一使用上述五类标签，`unknown` 仅作兜底。
+业务端意图识别固定五类：`work_list`（工作列表）、`supervision_log`（监理日志页面）、`image_library`（图片库）、`business_management`（业务管理页面）、`chat`（问候、闲聊或一般交流）。归档端 `/agents/intent/archive` 复用同一分类流程，当前固定为 `A`、`B`、`C`、`D` 四个占位分类，不含聊天分流，真实含义后续在 `app/agents/profiles.py` 补充。无法确定目标、目标不支持、分数低于 `0.65` 或需要澄清时返回 `unknown`；它是兜底结果，不计入五类。四个页面类别由调用方执行跳转；有效 `chat` 会继续调用 `ChatAgent`，将回答放入现有 `reason` 字段，其余字段不变。聊天回答不受分类理由300字符限制，两次推理共享总超时；低分或需澄清时先回退为 `unknown`，不触发聊天。已取消自定义分类；`intents` 仅兼容省略或 `[]`，非空返回 `422`。调用方统一使用上述五类标签，`unknown` 仅作兜底。
 
 错误状态：输入校验失败 `422`，模型服务不可达 `503`，调用超时 `504`，上游错误、拒绝、截断或不合法结果 `502`。模型失败不会返回伪造的成功结果。
 
@@ -207,7 +210,7 @@ app/
     router.py             # 聚合 Router，由主应用统一 include_router
     agents.py             # /agents：日志总结、意图识别、聊天
     system.py             # /health、/ready：存活与模型就绪检查
-    ocr.py                # /health/deps、/ocr：识别、简表、填表与表样
+    ocr.py                # /health/deps、/ocr：识别、监理日志、简表、填表与表样
     wbs.py                # /wbs/draft：施工图划分初稿
   ocr/                    # 文档加工业务：资源隔离、识别、公式、PDF/Excel、WBS
   http_errors.py          # 输入与模型异常的统一 HTTP 映射、校验详情脱敏
@@ -224,20 +227,24 @@ app/
     middleware.py         # 拒绝、截断、空输出及工具响应检查
     base.py               # 通用 BaseAgent 与结构化 StructuredAgent
     history.py            # 请求局部历史、预算及完整回合裁剪
+    profiles.py           # 意图能力在各业务端的标签、提示词与输出模型配置
     log_summary.py        # 工程表单 OCR 日志描述（兼容通用日志）
-    intent.py             # 固定五类页面导航/交流意图及低分澄清
+    intent.py             # 按 profile 复用的页面导航/归档意图及低分澄清
     chat.py               # 对话消息组织和文本回答
   prompts/
     __init__.py           # 按模块路径加载提示词，不依赖当前工作目录
     log_summary.md        # 各业务独立维护的系统提示词
-    intent.md
+    intent/
+      business.md         # 业务端五类页面导航与一般交流
+      archive.md          # 归档端 A–D 占位分类
     chat.md
 tests/                    # pytest：API、错误处理、Agent 运行时与脚本测试
   fixtures/               # 日志版本化回归集及当前 OpenAPI 契约快照
 data/                     # 用户提供的 OCR 输入、意图评测样例
 interfaces/               # 供其他业务对接的固定输出 Schema、示例和说明
   log_summary/
-  intent/                 # 四字段固定枚举响应、五类主示例及独立兜底示例
+  intent/                 # 业务端四字段固定枚举响应、五类主示例及独立兜底示例
+    archive/              # 归档端 A–D 枚举响应与示例
 scripts/
   dev/                    # macOS：Homebrew、Ollama、launchd、Metal GPU 验收
   prod/                   # Linux：运行依赖、API、独立 vLLM、NVIDIA 验收
@@ -261,7 +268,7 @@ CLAUDE.md                 # 引用 AGENTS.md，复用共享规则
 
 业务输入说明见 [data/README.md](data/README.md)。`data/log_summary.json` 只保留用户提供的一条 OCR 原始对象，调用时提供 `user_id`、`session_id` 并将该对象放入 `content`；意图样例仍提取单条 `request`。日志固定输出六个必填字段，JSON Schema、输出示例及字段说明见 [interfaces/log_summary/README.md](interfaces/log_summary/README.md)。响应中的 `summary` 为可纳入当日日志的客观中文段落；原有日志回归集独立放在 `tests/fixtures/log_summary_cases.json`。工程 OCR 对象的字段和层级可变化，保留指标、实测值及单位；计划日期不作为实际日期，缺失合格率不推断合格，表单存在不代表已完成检测。当前采用暂行描述规则，正式业务话术待补充，统一维护在 `app/prompts/log_summary.md`。请求外层新增必填用户与会话ID，响应字段保持兼容；content 序列化后仍限 4000 字符。
 
-意图识别固定输出 `intent`、`confidence`、`reason`、`needs_clarification` 四个必填字段。供调用方对接的固定枚举 JSON Schema、分开维护的五类主示例和兜底示例见 [interfaces/intent/README.md](interfaces/intent/README.md)。
+意图识别固定输出 `intent`、`confidence`、`reason`、`needs_clarification` 四个必填字段。业务端固定五类及兜底示例见 [interfaces/intent/README.md](interfaces/intent/README.md)，归档端 `A`–`D` 占位分类的 Schema 与示例见 [interfaces/intent/archive/README.md](interfaces/intent/archive/README.md)。
 
 调用链：`FastAPI → APIRouter → 业务 Agent → runtime.create_agent → ChatOpenAI → Ollama/vLLM`。结构化业务显式使用 `ProviderStrategy(JSON Schema, strict=True)`，最后再通过 Pydantic 校验；自由对话使用同一 Agent 运行时返回文本。业务代码不直接调用 OpenAI SDK。
 
@@ -277,6 +284,8 @@ CLAUDE.md                 # 引用 AGENTS.md，复用共享规则
 2. 在 `app/agents/` 继承 `StructuredAgent[请求类型, 结果类型]`，定义 `name`、`result_type` 和 `user_content()`。日志总结模块可作为起点。
 3. 在 `app/main.py` 生命周期中创建实例，在 `app/api/` 对应领域 Router 中增加携带 `response_model` 的路由；新领域创建 Router 并在 `app/api/router.py` 注册。
 4. 最小实现使测试通过，覆盖输入校验、模型失败和资源隔离；同步 API 文档、固定输出接口和 README。纯路由整理应对比完整 OpenAPI，确认无非预期变化。
+
+同一能力面向多个业务端时，应新增 `IntentProfile` 配置并复用现有 Agent；标签、提示词文件、输出模型和阈值放在 `app/agents/profiles.py`，不要复制 `app/agents/intent.py`、`base.py` 或 `runtime.py`。
 
 新增 Router 的注册关系示例（已定义对应模块后再添加）：
 
@@ -297,7 +306,7 @@ api_router.include_router(example.router)
 
 主应用已有 `app.include_router(api_router)`，无需重复注册。代码风格、契约、测试驱动、依赖和提交规则统一见 [开发规范](AGENTS.md)。
 
-意图识别复用固定 Schema 的 Agent，五类定义由服务端维护；请求消息保持隔离，不接受调用方自定义分类。系统提示词修改后需重启 API，以刷新缓存。
+意图识别复用同一 Agent 与分类流程，各业务端的标签、提示词、输出模型和阈值由 `app/agents/profiles.py` 声明，业务端五类及归档端 `A`–`D` 都由服务端维护；请求消息保持隔离，不接受调用方自定义分类。系统提示词修改后需重启 API，以刷新缓存。
 
 需要调用真实业务系统时，用 LangChain `@tool` 定义工具，通过 `build_agent(..., tools=(... ,))` 注册；统一调用 `invoke_agent()` 保留超时、追踪和步数控制。现有业务未注册工具，测试中已覆盖完整工具循环。会改变业务状态的工具应先设计身份、权限、幂等和确认机制，再接入对应业务 API。
 

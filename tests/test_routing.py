@@ -24,7 +24,7 @@ def test_full_openapi_matches_contract_snapshot():
     # OpenAPI 会合并重复路径，因此除文档外还要检查实际注册。
     routes = [route for route in app.routes if isinstance(route, APIRoute)]
     operations = [(method, route.path) for route in routes for method in route.methods]
-    assert len(operations) == len(set(operations)) == 12
+    assert len(operations) == len(set(operations)) == 14
 
 
 def test_aggregate_router_can_be_mounted_in_another_application():
@@ -38,6 +38,7 @@ def test_aggregate_router_can_be_mounted_in_another_application():
         for path in (
             "/agents/log-summary",
             "/agents/intent",
+            "/agents/intent/archive",
             "/agents/chat",
         ):
             assert client.post(path, json={}).status_code == 422
@@ -46,9 +47,11 @@ def test_aggregate_router_can_be_mounted_in_another_application():
             "/ready",
             "/agents/log-summary",
             "/agents/intent",
+            "/agents/intent/archive",
             "/agents/chat",
             "/health/deps",
             "/ocr/recognize",
+            "/ocr/daily-logs",
             "/ocr/jianbiao",
             "/ocr/fill",
             "/ocr/blank/{form}.png",
@@ -141,6 +144,7 @@ def test_routers_reuse_agents_within_each_application_and_isolate_applications()
         "log_summary_agent",
         "chat_agent",
         "intent_agent",
+        "archive_intent_agent",
     )
     with TestClient(first_app) as first, TestClient(second_app) as second:
         first_resources = [getattr(first_app.state, name) for name in resource_names]

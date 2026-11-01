@@ -14,4 +14,5 @@ def test_ocr_routes_exist_without_changing_agent_liveness(tmp_path):
         assert response.status_code == 503
         assert set(response.json()) == {"detail"}
         assert client.post("/agents/chat", json={}).status_code == 422
+        assert client.post("/ocr/daily-logs", json={}).status_code == 422
         assert client.post("/wbs/draft", json={}).status_code == 422

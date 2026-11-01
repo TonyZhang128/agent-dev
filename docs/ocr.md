@@ -59,6 +59,7 @@ PROJECTS_ROOT=../6_shujuchi/yewu
 | --- | --- | --- |
 | `GET /health/deps` | 无 | 运行库版本、OpenCV 特征与推理设备；`data.ok` 汇总依赖可用性 |
 | `POST /ocr/recognize` | `path` 或 `img`（至少提供一个），可选 `form=""` | `fields`、`keys`、`lines`、`detail`、`align`、`warning`、`image`、`ms` |
+| `POST /ocr/daily-logs` | `path` 或 `img`（至少提供一个） | 监理日志（JLB13）固定栏目识别、原始框、`frame`、`processed` 占位、`ms` |
 | `POST /ocr/jianbiao` | `path`、`form`、`cfg`；可选 `bound={}`、`out=""` | 简表定位/识别、公式结果、锚点、PDF/Excel 路径 |
 | `POST /ocr/fill` | `form`、`cfg`、`values`；可选 `out=""`、`rects={}` | `values`、`errors`、`anchors`、`pdf`、`xlsx`、`xlsxSkipped` |
 | `GET /ocr/blank/{form}.png` | 可选 `width=1400`，正整数，上限按 2400 渲染 | 第 1 页 PNG，带缓存头 |
@@ -67,7 +68,7 @@ PROJECTS_ROOT=../6_shujuchi/yewu
 
 除 PNG 外，成功为 `{"status":200,"data":...}`；原 `/health` 继续返回 `{"status":"ok"}`。依赖自检只检查库能否导入，不代表模板齐全或 OCR 准确率达标。
 
-`/ocr/recognize` 的 `path` 为数据池内照片路径，`img` 为 base64 编码的图片（兼容 `data:image/...;base64,` 前缀）；两者至少提供一个，同时提供时优先使用 `img`，都为空白返回 `422`。`path`、`out`、`drawings` 为数据池相对路径，兼容 `projects/` 前缀。拒绝绝对路径、目录穿越与越界符号链接；照片必须是文件，施工图支持 PDF 或 `_N.pdf` 单页拆分目录。返回的 `pdf`、`xlsx` 相对 `PROJECTS_ROOT`。`out` 为空不写 PDF、Excel、校正图；非空须以 `.pdf` 结尾，Excel 和校正图分别为同名 `.xlsx`、`.warp.jpg`。文档接口未新增鉴权，应由可信调用方在既有部署边界内使用。
+`/ocr/recognize` 的 `path` 为数据池内照片路径，`img` 为 base64 编码的图片（兼容 `data:image/...;base64,` 前缀）；两者至少提供一个，同时提供时优先使用 `img`，都为空白返回 `422`。`/ocr/daily-logs` 使用相同的图片来源规则，但固定识别 JLB13 监理日志的页面栏目，不读取表号、配置、模板或输出文件。`path`、`out`、`drawings` 为数据池相对路径，兼容 `projects/` 前缀。拒绝绝对路径、目录穿越与越界符号链接；照片必须是文件，施工图支持 PDF 或 `_N.pdf` 单页拆分目录。返回的 `pdf`、`xlsx` 相对 `PROJECTS_ROOT`。`out` 为空不写 PDF、Excel、校正图；非空须以 `.pdf` 结尾，Excel 和校正图分别为同名 `.xlsx`、`.warp.jpg`。文档接口未新增鉴权，应由可信调用方在既有部署边界内使用。
 
 示例：
 
@@ -84,6 +85,11 @@ curl --noproxy '*' -fsS http://127.0.0.1:8309/ocr/recognize \
   -H 'Content-Type: application/json' \
   -d '{"path":"projects/简表照片.jpg","form":"JB12-4.2.2"}'
 
+# 监理日志：固定按 JLB13 表样裁栏，返回原始识别草稿；也可用 img 传 base64。
+curl --noproxy '*' -fsS http://127.0.0.1:8309/ocr/daily-logs \
+  -H 'Content-Type: application/json' \
+  -d '{"path":"projects/监理日志照片.jpg"}'
+
 curl --noproxy '*' -fsS http://127.0.0.1:8309/ocr/sheet/JB12-4.2.2
 curl --noproxy '*' -fsS http://127.0.0.1:8309/ocr/fill \
   -H 'Content-Type: application/json' \
@@ -91,6 +97,8 @@ curl --noproxy '*' -fsS http://127.0.0.1:8309/ocr/fill \
 ```
 
 `/ocr/recognize` 返回 `fields`、`detail`、`lines`、`align`、`warning` 等草稿结果：`fields` 为按栏目提取的字段值，`detail` 说明取值方式（`inline`/`rect`/`right`），`lines` 为原始 OCR 文本框，`align.how` 为 `anchors`/`mismatch`/`none`。识别结果需人工核对，`200` 不代表每个字段都准确。
+
+`/ocr/daily-logs` 复用「找外框 → 透视校正 → 逐格 OCR」，按 JLB13 的固定栏目返回 `recognized`（`project`、`number`、`supervision_org`、`recorder`、`date`、`reviewer`、`weather`、`construction`、`supervision_work`、`issues`）和 `detail`；`date` 归一为 `yyyy-mm-dd`，长文本栏保留 OCR 拼接结果。`frame.how` 为 `contour`/`contour+table`/`whole` 等定位方式，`whole` 时 `warning` 提示核对定位。`processed` 是监理日志专用后处理占位，当前固定为 `{}`；调用方应先使用 `recognized`/`detail`，待后处理实现后再接入业务结构。该接口只读取照片，不写 PDF/Excel。
 
 `cfg` 保留配置平台的 fields/anchors/edges/formulas 元数据；处理所需字段会校验，非法结构返回 `422`。`EXCEL_RANGE.range` 为单个单元格地址（如 `A3`），合并单元格归到左上角。`PDF_REGION.rect` 和 `rects` 是 `{x,y,w,h}` 页面比例坐标；简表 `cells[].rect` 是 `[x,y,w,h]` 外框比例，二者不可混用。
 
@@ -124,7 +132,7 @@ curl --noproxy '*' -fsS http://127.0.0.1:8309/ocr/fill \
 ## 测试与验收
 
 ```zsh
-uv run --locked pytest tests/test_ocr.py tests/test_ocr_recognize.py tests/test_ocr_integration.py -v
+uv run --locked pytest tests/test_ocr.py tests/test_ocr_recognize.py tests/test_ocr_daily_logs.py tests/test_ocr_integration.py -v
 uv run --locked ruff check app tests scripts
 uv run --locked ruff format --check app tests scripts
 uv run --locked pytest -v
@@ -132,7 +140,7 @@ uv run --locked pytest -v
 
 离线测试由临时 PDF/Excel/JSON 和图片构成，OCR 只在模型边界模拟；覆盖真实文件生成、合并单元格与印刷文字、公式/引用、WBS、资源隔离和目录限制。原 docsvc 测试依赖 Java 并且兜底 cfg 缺 PDF 锚点，已用确定性夹具替换。
 
-`tests/test_ocr_recognize.py` 覆盖 `/ocr/recognize` 的响应契约、表号缺省/未知/不匹配、模板坐标对齐和错误映射。其中真实照片用例读取 `data/ocr/imgs/CJ5.jpg`、`data/ocr/imgs/test.jpg` 与 `.cache/models/ocr/` 下的 RapidOCR 模型；照片或模型缺失时自动跳过，干净克隆和 CI 不要求这些本地素材。真实识别结果用于回归印刷体表格字段和页眉文字，手写内容不作准确性断言。
+`tests/test_ocr_recognize.py` 覆盖 `/ocr/recognize` 的响应契约、表号缺省/未知/不匹配、模板坐标对齐和错误映射。其中真实照片用例读取 `data/ocr/imgs/CJ5.jpg`、`data/ocr/imgs/test.jpg` 与 `.cache/models/ocr/` 下的 RapidOCR 模型；照片或模型缺失时自动跳过，干净克隆和 CI 不要求这些本地素材。真实识别结果用于回归印刷体表格字段和页眉文字，手写内容不作准确性断言。`tests/test_ocr_daily_logs.py` 覆盖 `/ocr/daily-logs` 的固定栏目裁剪、日期归一、base64 来源、路径/模型错误映射和后处理占位；OCR 同样只在模型边界模拟。
 
 运行中的 API、已有模板和真实简表照片齐备后执行：
 

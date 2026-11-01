@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from app.agents.chat import ChatAgent
 from app.agents.intent import IntentAgent
 from app.agents.log_summary import LogSummaryAgent
+from app.agents.profiles import ARCHIVE_INTENT_PROFILE, BUSINESS_INTENT_PROFILE
 from app.api.router import api_router
 from app.config import Settings
 from app.http_errors import register_exception_handlers
@@ -22,7 +23,15 @@ def create_app(service: ModelService | None = None, *, settings: Settings | None
             app.state.ocr_resources = OCRResources(config)
             app.state.log_summary_agent = LogSummaryAgent(app.state.model_service)
             app.state.chat_agent = ChatAgent(app.state.model_service)
-            app.state.intent_agent = IntentAgent(app.state.model_service, app.state.chat_agent)
+            app.state.intent_agent = IntentAgent(
+                app.state.model_service,
+                BUSINESS_INTENT_PROFILE,
+                app.state.chat_agent,
+            )
+            app.state.archive_intent_agent = IntentAgent(
+                app.state.model_service,
+                ARCHIVE_INTENT_PROFILE,
+            )
             yield
         finally:
             try:

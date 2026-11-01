@@ -1,12 +1,16 @@
 """请求、响应与校验模型；按 base、agents、ocr 分模块维护并在此汇总导出。"""
 
 from app.schemas.agents import (
+    ArchiveIntentClassification,
+    ArchiveIntentLabel,
+    ArchiveIntentResult,
     ChatRequest,
     ChatResponse,
     Description,
     IntentClassification,
     IntentDefinition,
     IntentLabel,
+    IntentReason,
     IntentRequest,
     IntentResult,
     LogSummary,
@@ -21,13 +25,24 @@ from app.schemas.base import (
     RequestContext,
     StrictModel,
 )
-from app.schemas.ocr import DraftReq, FillReq, JianbiaoReq, OCRRequest, RecognizeReq
+from app.schemas.ocr import (
+    DailyLogsReq,
+    DraftReq,
+    FillReq,
+    JianbiaoReq,
+    OCRRequest,
+    RecognizeReq,
+)
 
 __all__ = [
+    "ArchiveIntentClassification",
+    "ArchiveIntentLabel",
+    "ArchiveIntentResult",
     "ChatMessage",
     "ChatRequest",
     "ChatResponse",
     "ConversationRequest",
+    "DailyLogsReq",
     "Description",
     "DraftReq",
     "FillReq",
@@ -35,6 +50,7 @@ __all__ = [
     "IntentClassification",
     "IntentDefinition",
     "IntentLabel",
+    "IntentReason",
     "IntentRequest",
     "IntentResult",
     "JianbiaoReq",

@@ -23,8 +23,15 @@ CLASSIFICATION = {
     "reason": "一般交流",
     "needs_clarification": False,
 }
+ARCHIVE_CLASSIFICATION = {
+    "intent": "A",
+    "confidence": 0.95,
+    "reason": "归档业务",
+    "needs_clarification": False,
+}
 ROUTES = [
     ("/agents/intent", {"text": "你好", "history": []}),
+    ("/agents/intent/archive", {"text": "归档文件", "history": []}),
     ("/agents/chat", {"message": "你好", "history": []}),
     ("/agents/log-summary", {"content": "完成接口开发"}),
 ]
@@ -76,6 +83,8 @@ def client_for(**settings):
         schema_name = body.get("response_format", {}).get("json_schema", {}).get("name")
         if schema_name == "intent":
             return completion(json.dumps(CLASSIFICATION))
+        if schema_name == "intent_archive":
+            return completion(json.dumps(ARCHIVE_CLASSIFICATION))
         if schema_name == "log_summary":
             return completion(
                 json.dumps(
@@ -169,7 +178,7 @@ def test_oversized_latest_turn_is_dropped_without_orphan_or_older_turns():
 
 
 def test_nonconversational_requests_reject_history():
-    route, payload = ROUTES[2]
+    route, payload = next(item for item in ROUTES if item[0] == "/agents/log-summary")
     with client_for() as (client, calls):
         assert client.post(route, json=IDENTITY | payload | {"history": []}).status_code == 422
         assert calls == []

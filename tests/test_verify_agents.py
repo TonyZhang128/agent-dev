@@ -96,7 +96,10 @@ def test_live_verifier_checks_versioned_datasets(
         elif path == "/openapi.json":
             result = {
                 "info": {"version": "test"},
-                "paths": {f"/agents/{name}": {} for name in ("log-summary", "intent", "chat")},
+                "paths": {
+                    f"/agents/{name}": {}
+                    for name in ("log-summary", "intent", "intent/archive", "chat")
+                },
             }
         elif path == "/agents/log-summary":
             content = payload["content"]
@@ -207,7 +210,10 @@ def test_live_verifier_records_response_before_validation_failure(
                 200,
                 json={
                     "info": {"version": "test"},
-                    "paths": {f"/agents/{name}": {} for name in ("log-summary", "intent", "chat")},
+                    "paths": {
+                        f"/agents/{name}": {}
+                        for name in ("log-summary", "intent", "intent/archive", "chat")
+                    },
                 },
             )
         return httpx.Response(status, text=body)
