@@ -89,6 +89,7 @@ test -f .env || cp .env.example .env
 | `ASSET_ROOT` | `data/ocr/assets` | 规范 PDF/Excel 资料目录 |
 | `PROJECTS_ROOT` | `data/ocr/projects` | 与 Java 共用的业务数据池，限制文件读写边界 |
 | `OCR_MODEL_ROOT` | `.cache/models/ocr` | RapidOCR ONNX 模型目录；开发环境自动下载，离线部署预置后只读使用 |
+| `OCR_CUDA_ROOT` | `.cache/cuda` | OCR 固定使用 CUDA GPU；Windows 可将 NVIDIA redist 解压到此目录，CUDA 12 + cuDNN 9 不可用时接口返回 503 |
 
 云端回退默认关闭：只有提供非空 `LLM_FALLBACK_API_KEY` 时才启用。启用后，本地 Ollama/vLLM 的模型调用因连接失败、超时或上游 HTTP 错误抛出异常时，本次调用改用回退模型重试一次，总预算为 `LLM_TIMEOUT_SECONDS + LLM_FALLBACK_TIMEOUT_SECONDS`。回退不重试已返回但未通过 Schema 校验的输出，`/ready` 仍只检查本地模型。DeepSeek 不支持严格 `json_schema`，回退时改用 JSON 模式并继续用 Pydantic 校验，不会退回宽松文本解析。启用回退意味着业务输入会发送到云端，需按数据合规要求决定。
 
@@ -258,7 +259,7 @@ docs/log-summary-testing.md # OCR 日志描述规则及离线、真实模型验�
 .github/workflows/ci.yml # Linux 自动检查
 Dockerfile               # 生产业务 API 镜像（不含模型服务）
 Dockerfile.vllm          # 生产 vLLM 模型服务镜像，基础镜像由构建参数决定
-compose.prod.yml         # 生产编排：API + 模型服务，GPU 仅分配模型容器
+compose.prod.yml         # 生产编排：API + 模型服务；OCR 的 CUDA 运行前提见部署文档
 docker/                  # 容器入口脚本与 compose 变量模板
 pyproject.toml / uv.lock  # 直接依赖与完整锁文件
 .env.example             # 可提交的配置模板；实际 .env 不提交
@@ -356,7 +357,7 @@ bash scripts/prod/start-api.sh
 bash scripts/prod/verify.sh
 ```
 
-API 默认监听 `127.0.0.1:8309`，拒绝 `--reload`，启动时不安装或同步依赖。上线需由 systemd 等服务管理器托管，详见 [部署说明](docs/deployment-linux.md)。API 与模型可以部署在不同 Linux 主机；API 主机无需 GPU，`start-vllm.sh` 和完整 `verify.sh` 用于 GPU 主机，远端 API 可单独运行通用业务验收。
+API 默认监听 `127.0.0.1:8309`，拒绝 `--reload`，启动时不安装或同步依赖。上线需由 systemd 等服务管理器托管，详见 [部署说明](docs/deployment-linux.md)。API 与模型可以部署在不同 Linux 主机；OCR 固定使用 CUDA，调用 `/ocr/*` 的 API 主机也需要 NVIDIA GPU 及 CUDA 12 + cuDNN 9。`start-vllm.sh` 和完整 `verify.sh` 用于 GPU 主机，不调用 OCR 的通用业务验收仍可单独运行。
 
 模型服务需支持 Chat Completions 和原生 JSON Schema 输出；以真实业务验收结果判断具体模型和 vLLM 组合是否可用。验收文件写入 `verification/`，`nvidia-smi` 成功仅确认驱动和设备可见，模型 GPU 占用需另看服务日志和设备监控。本机未执行 Linux GPU 部署。
 

@@ -18,6 +18,7 @@ import cv2
 import numpy as np
 import pymupdf
 
+from app.ocr import cuda_runtime
 from app.ocr.labels import B1, JB
 from app.ocr.resources import OCRModelError, asset, forms, get_resources, resource_cache
 
@@ -39,7 +40,8 @@ MODEL_UNAVAILABLE = "OCR 模型不可用，请检查 OCR_MODEL_ROOT 是否已准
 
 def rapidocr_params(model_root: Path) -> dict:
     """识别质量优先:PP-OCRv6 Medium 做检测与识别,PP-OCRv5 Server 做方向分类。
-    模型首次使用时由 rapidocr 下载到 model_root,离线部署需提前放入该目录。"""
+    模型首次使用时由 rapidocr 下载到 model_root,离线部署需提前放入该目录。
+    固定启用 onnxruntime CUDA EP;线程数固定为 1,避免并发请求互相争抢。"""
     from rapidocr import ModelType, OCRVersion
 
     return {
@@ -52,6 +54,8 @@ def rapidocr_params(model_root: Path) -> dict:
         "Cls.ocr_version": OCRVersion.PPOCRV5,
         "EngineConfig.onnxruntime.intra_op_num_threads": 1,
         "EngineConfig.onnxruntime.inter_op_num_threads": 1,
+        "EngineConfig.onnxruntime.use_cuda": True,
+        "EngineConfig.onnxruntime.cuda_ep_cfg": {"device_id": 0},
     }
 
 
@@ -62,7 +66,10 @@ def engine():
         from rapidocr import RapidOCR
 
         try:
+            cuda_runtime.ensure_cuda_runtime(resources)
             resources.engine = RapidOCR(params=rapidocr_params(resources.models))
+        except OCRModelError:
+            raise
         except Exception as exc:  # noqa: BLE001 —— 模型缺失、下载失败或依赖不可用统一视为模型不可用
             raise OCRModelError(MODEL_UNAVAILABLE) from exc
     return resources.engine

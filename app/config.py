@@ -34,9 +34,16 @@ class Settings(BaseSettings):
     asset_root: Path = ROOT / "data/ocr/assets"
     projects_root: Path = ROOT / "data/ocr/projects"
     ocr_model_root: Path = ROOT / ".cache/models/ocr"
+    # 项目本地 CUDA 运行库（NVIDIA redist 解压目录，Git 已忽略）；Windows 免系统安装。
+    ocr_cuda_root: Path = ROOT / ".cache/cuda"
 
     @field_validator(
-        "templates_root", "admin_root", "asset_root", "projects_root", "ocr_model_root"
+        "templates_root",
+        "admin_root",
+        "asset_root",
+        "projects_root",
+        "ocr_model_root",
+        "ocr_cuda_root",
     )
     @classmethod
     def resolve_ocr_path(cls, value: Path) -> Path:

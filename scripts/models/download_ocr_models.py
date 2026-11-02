@@ -32,7 +32,7 @@ def runtime_models() -> dict[str, dict[str, str]]:
     params = rapidocr_params(Path("."))
     return {
         section: {
-            # 运行时依赖只安装 onnxruntime，与 rapidocr 默认引擎一致。
+            # 推理引擎与运行时一致：onnxruntime（GPU 版包名为 onnxruntime-gpu，模块名不变）。
             "engine_type": EngineType.ONNXRUNTIME.value,
             "task_type": section.lower(),
             "lang_type": "ch",
