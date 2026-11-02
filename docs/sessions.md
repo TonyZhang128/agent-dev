@@ -4,28 +4,29 @@
 
 | 接口 | 当前输入 | 历史字段 |
 | --- | --- | --- |
-| `/agents/intent` | `text` | 必填 `history`，首轮为 `[]` |
+| `/agents/intent/business` | `message`、`current_page`；可选 `last_navigation`、`pending_clarification` | 可选 `history`，省略即 `[]` |
 | `/agents/intent/archive` | `text` | 必填 `history`，首轮为 `[]` |
 | `/agents/chat` | `message` | 必填 `history`，首轮为 `[]` |
 | `/agents/log-summary` | `content` | 不接受 `history` |
 
-例如意图识别请求：
+例如业务意图请求：
 
 ```json
 {
   "user_id": "user-001",
   "session_id": "session-001",
-  "text": "项目代号是什么？",
+  "message": "我要填写今天的监理日志。",
+  "current_page": "workbench",
   "history": [
-    {"role": "user", "content": "项目代号是青松。"},
-    {"role": "assistant", "content": "项目代号是青松。"}
+    {"role": "user", "content": "我之前在查看工作列表。"},
+    {"role": "assistant", "content": "好的。"}
   ]
 }
 ```
 
-`history` 应是当前用户当前会话按时间顺序排列的全部已完成消息，不含本次当前输入。仅接受 `user`、`assistant`，要求完整交替回合；内容必须为非空字符串。当前 `text` / `message` 仍最多2000字符，历史不再按10条、单条2000或总计4000字符拒绝。
+`history` 应是当前用户当前会话按时间顺序排列的全部已完成消息，不含本次当前输入。仅接受 `user`、`assistant`，要求完整交替回合；内容必须为非空字符串。当前 `message` / `text` 仍最多2000字符，历史不再按10条、单条2000或总计4000字符拒绝。
 
-意图识别使用历史理解指代，当前明确目标优先；历史导航不会将当前“谢谢”变成导航。有效 `chat` 会把用户ID、会话ID、全部原始历史及本次输入传给 ChatAgent，回答仍在 `reason`。两个 Agent 依据各自提示词独立选择能容纳的历史，共享原有总超时。
+业务意图使用历史和 `last_navigation` 理解指代、否定和改口，当前明确目标优先；历史导航不会将当前“谢谢”变成导航。只确定一级模块时返回 `clarify` 并调用 Chat 澄清，回应放在 `message`；达到 10 轮仍不明确时返回 `unknown`。`current_page`、`last_navigation` 和 `pending_clarification` 由调用方保存并在每次请求传入，本服务不保存会话状态。归档端与聊天仍由调用方传完整历史；归档端没有聊天分流。
 
 ## 裁剪与配置
 
@@ -36,7 +37,7 @@
 | `LLM_CONTEXT_MARGIN_TOKENS` | 256 | 模板、协议等额外余量 |
 | `CONVERSATION_MAX_INPUT_CHARACTERS` | 1000000 | 完整历史加序列化当前输入的字符上限，超限返回422 |
 
-输入预算为上下文容量减去输出预留、余量、系统提示词和原生结构化输出 Schema 开销。系统提示词中追加的 Schema 同样计入；配置必须满足上下文容量大于输出预留加余量。
+输入预算为上下文容量减去输出预留、余量、系统提示词和原生结构化输出 Schema 开销。一般结构化业务会把 Schema 追加到系统提示词并计入预算；业务意图把 Schema 通过 `response_format` 传递，不在提示词中重复，但业务目录和当前输入仍计入预算。配置必须满足上下文容量大于输出预留加余量。
 
 当前采用保守估算：每个UTF-8字节按一个预算单位计算，每条消息另加16单位封装开销。这不是 Qwen/vLLM 的精确 tokenizer，可能在真实容量用尽前提前裁剪。该方案不下载分词器或使用其他模型的分词结果冒充精确计数；具体服务的模板差异由额外余量覆盖，部署时需校准。`LLM_CONTEXT_TOKENS` 必须与实际模型服务一致，设置该值不会自动修改 Ollama/vLLM 上下文。
 
@@ -56,4 +57,4 @@ API 可处理重叠请求，模型端是否并行生成取决于部署配置；�
 
 请求校验错误仅返回字段位置、类型和说明，不回显原始身份或消息。旧请求必须补充两个ID；意图与聊天还须补充 history。缺失、空ID、错误历史角色或顺序均返回422；日志携带 history 也返回422。成功响应字段、分类阈值和上游错误映射保持现状；业务接口路径统一为 `/agents/...`。
 
-`tests/test_sessions.py` 使用真实 LangChain Agent 与模拟模型HTTP，验证完整历史传递、裁剪边界、多字节预算、Schema预留、元数据传递、原始消息不变、不同用户同会话ID、同一用户不同会话的并发隔离，以及失败互不影响。真实意图集 `data/intent.json` 版本4.0.0包含24条分类和4条拒绝请求；执行 `uv run --locked python -m scripts.common.verify_agents` 验收并查看 `verification/agents-live-result.json`。
+`tests/test_sessions.py` 使用真实 LangChain Agent 与模拟模型HTTP，验证完整历史传递、裁剪边界、多字节预算、Schema预留、元数据传递、原始消息不变、不同用户同会话ID、同一用户不同会话的并发隔离，以及失败互不影响。真实意图集 `data/intent.json` 版本5.0.0包含42条业务意图样例和4条拒绝请求；执行 `uv run --locked python -m scripts.common.verify_agents` 验收并查看 `verification/agents-live-result.json`。

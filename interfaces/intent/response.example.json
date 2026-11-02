@@ -1,6 +1,9 @@
 {
-  "intent": "image_library",
+  "status": "resolved",
+  "page": "supervision_diary",
+  "action": "fill_supervision_log",
   "confidence": 0.95,
-  "reason": "用户明确要求进入图片库查看图片。",
-  "needs_clarification": false
+  "message": null,
+  "options": null,
+  "catalog_version": "b158b448e3cf4d0a"
 }

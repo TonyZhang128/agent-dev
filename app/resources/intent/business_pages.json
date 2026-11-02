@@ -1,0 +1,77 @@
+{
+  "pages": [
+    {
+      "id": 1,
+      "code": "supervision_diary",
+      "name": "监理日记",
+      "actions": [
+        {"id": 101, "code": "fill_supervision_log", "name": "填写监理日志"},
+        {"id": 102, "code": "fill_monthly_report", "name": "填写监理月报"},
+        {"id": 103, "code": "assign_monthly_report", "name": "监理月报分配"},
+        {"id": 104, "code": "view_supervision_log", "name": "查看监理日志"},
+        {"id": 105, "code": "fill_inspection_record", "name": "填写巡视记录"},
+        {"id": 106, "code": "fill_standby_record", "name": "填写旁站记录"},
+        {"id": 107, "code": "fill_environmental_log", "name": "填写环水保监理日志"},
+        {"id": 108, "code": "fill_safety_log", "name": "填写安全监理日志"},
+        {"id": 109, "code": "approve_log", "name": "审批日志"}
+      ]
+    },
+    {
+      "id": 2,
+      "code": "work_list",
+      "name": "工作列表",
+      "actions": [
+        {"id": 201, "code": "view_work_tasks", "name": "查看工作列表/任务"},
+        {"id": 202, "code": "create_work_task", "name": "生成工作任务"},
+        {"id": 203, "code": "add_form", "name": "新增表单"},
+        {"id": 204, "code": "delete_supervision_form", "name": "删除监理表"},
+        {"id": 205, "code": "view_approval_workflow", "name": "查看审批流程"}
+      ]
+    },
+    {
+      "id": 3,
+      "code": "image_library",
+      "name": "图片库",
+      "actions": [
+        {"id": 301, "code": "view_image_library", "name": "查看图片库"},
+        {"id": 302, "code": "delete_image", "name": "删除图片"},
+        {"id": 303, "code": "create_album", "name": "新建图集"},
+        {"id": 304, "code": "delete_album", "name": "删除图集"}
+      ]
+    },
+    {
+      "id": 4,
+      "code": "recognition_platform",
+      "name": "识别平台",
+      "actions": [
+        {"id": 401, "code": "navigate_to_recognition", "name": "去识别"},
+        {"id": 402, "code": "recognize_photo", "name": "识别照片"}
+      ]
+    },
+    {
+      "id": 5,
+      "code": "business_management",
+      "name": "业务管理",
+      "actions": [
+        {"id": 501, "code": "add_personnel_configuration", "name": "新增人员配置"},
+        {"id": 502, "code": "delete_project_member", "name": "删除项目成员"},
+        {"id": 503, "code": "view_wbs", "name": "查看分部分项划分"},
+        {"id": 504, "code": "add_subproject", "name": "新增分项"},
+        {"id": 505, "code": "add_child_subproject", "name": "新增子分项"},
+        {"id": 506, "code": "delete_subproject", "name": "删除分项"},
+        {"id": 507, "code": "delete_child_subproject", "name": "删除子分项"},
+        {"id": 508, "code": "assign_wbs_personnel", "name": "分部分项人员分配"}
+      ]
+    },
+    {
+      "id": 6,
+      "code": "workbench",
+      "name": "工作台",
+      "actions": [
+        {"id": 601, "code": "navigate_to_work", "name": "去工作"},
+        {"id": 602, "code": "view_today_tasks", "name": "查看今日任务"},
+        {"id": 603, "code": "view_pending_approvals", "name": "查看需审批的文件"}
+      ]
+    }
+  ]
+}

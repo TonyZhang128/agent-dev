@@ -10,7 +10,7 @@ from importlib.metadata import version
 import httpx
 
 from app.config import ROOT, Settings
-from app.schemas.agents import ChatResponse, IntentResult, LogSummary
+from app.schemas.agents import BusinessIntentResult, ChatResponse, LogSummary
 
 
 def log_matches_expectations(log: LogSummary, sample: dict) -> bool:
@@ -47,7 +47,7 @@ class _VerificationClient:
             "session_id": "verification-session",
             **payload,
         }
-        if path in ("/agents/intent", "/agents/chat"):
+        if path == "/agents/chat":
             payload = {"history": [], **payload}
         request_started = time.monotonic()
         response = self.client.post(path, json=payload)
@@ -142,16 +142,17 @@ def _verify_intents(verifier: _VerificationClient, report: dict) -> None:
     assert dataset["samples"], "intent dataset must not be empty"
     mismatches = []
     for sample in dataset["samples"]:
-        intent = verifier.post(sample["id"], dataset["endpoint"], sample["request"], IntentResult)
+        intent = verifier.post(
+            sample["id"], dataset["endpoint"], sample["request"], BusinessIntentResult
+        )
         check = verifier.checks[-1]
-        check["expected"] = sample["expected"]
+        expected = sample["expected"]
+        check["expected"] = expected
         check["passed"] = (
-            intent.intent == sample["expected"]["intent"]
-            and intent.needs_clarification == sample["expected"]["needs_clarification"]
-            and (
-                (intent.intent == "unknown" and intent.needs_clarification)
-                or (intent.confidence >= 0.65 and not intent.needs_clarification)
-            )
+            intent.status == expected["status"]
+            and intent.page == expected["page"]
+            and intent.action == expected["action"]
+            and (intent.status != "resolved" or intent.confidence >= 0.65)
         )
         if not check["passed"]:
             mismatches.append(sample["id"])
@@ -209,7 +210,7 @@ def main():
             report["api_version"] = document.json()["info"]["version"]
             for path in (
                 "/agents/log-summary",
-                "/agents/intent",
+                "/agents/intent/business",
                 "/agents/intent/archive",
                 "/agents/chat",
             ):

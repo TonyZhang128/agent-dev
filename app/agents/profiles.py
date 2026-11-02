@@ -1,4 +1,4 @@
-"""意图识别能力在不同业务端的固定分类、提示词与输出模型。"""
+"""扁平意图 profile；业务端层级意图由 JSON 目录和独立 Agent 维护。"""
 
 from dataclasses import dataclass
 from typing import get_args
@@ -8,9 +8,7 @@ from pydantic import BaseModel
 from app.schemas.agents import (
     ArchiveIntentClassification,
     ArchiveIntentResult,
-    IntentClassification,
     IntentDefinition,
-    IntentResult,
 )
 
 
@@ -72,36 +70,12 @@ class IntentProfile:
         return tuple(item.label for item in self.intents) + (self.fallback_label,)
 
 
-BUSINESS_INTENTS = (
-    IntentDefinition(label="work_list", description="工作列表：查看工作任务、待办事项或工作清单"),
-    IntentDefinition(
-        label="supervision_log", description="监理日志页面：查看、填写或管理监理日志、监理日记"
-    ),
-    IntentDefinition(
-        label="image_library", description="图片库：查看、查找或管理现场照片、图片、相册"
-    ),
-    IntentDefinition(
-        label="business_management", description="业务管理页面：进入业务管理、办理业务"
-    ),
-    IntentDefinition(label="chat", description="问候、闲聊或一般交流"),
-)
-
 # TODO(archive): 补齐 A/B/C/D 的真实业务含义与例句后，再启用真实模型语义验收。
 ARCHIVE_INTENTS = (
     IntentDefinition(label="A", description="待补充：文件归档系统的 A 类业务"),
     IntentDefinition(label="B", description="待补充：文件归档系统的 B 类业务"),
     IntentDefinition(label="C", description="待补充：文件归档系统的 C 类业务"),
     IntentDefinition(label="D", description="待补充：文件归档系统的 D 类业务"),
-)
-
-BUSINESS_INTENT_PROFILE = IntentProfile(
-    name="business",
-    agent_name="intent",
-    prompt_name="intent/business",
-    intents=BUSINESS_INTENTS,
-    classification_type=IntentClassification,
-    response_type=IntentResult,
-    chat_label="chat",
 )
 
 ARCHIVE_INTENT_PROFILE = IntentProfile(
@@ -113,6 +87,4 @@ ARCHIVE_INTENT_PROFILE = IntentProfile(
     response_type=ArchiveIntentResult,
 )
 
-INTENT_PROFILES = {
-    profile.name: profile for profile in (BUSINESS_INTENT_PROFILE, ARCHIVE_INTENT_PROFILE)
-}
+INTENT_PROFILES = {ARCHIVE_INTENT_PROFILE.name: ARCHIVE_INTENT_PROFILE}

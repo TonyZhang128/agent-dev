@@ -78,18 +78,18 @@
         }
       }
     },
-    "/agents/intent": {
+    "/agents/intent/business": {
       "post": {
         "tags": [
           "智能体"
         ],
-        "summary": "识别页面导航或一般交流意图",
-        "operationId": "intent_agents_intent_post",
+        "summary": "识别业务页面与最小功能意图",
+        "operationId": "business_intent_agents_intent_business_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/IntentRequest"
+                "$ref": "#/components/schemas/BusinessIntentRequest"
               }
             }
           },
@@ -101,7 +101,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/IntentResult"
+                  "$ref": "#/components/schemas/BusinessIntentResult"
                 }
               }
             }
@@ -509,6 +509,398 @@
   },
   "components": {
     "schemas": {
+      "ArchiveIntentResult": {
+        "properties": {
+          "intent": {
+            "type": "string",
+            "enum": [
+              "A",
+              "B",
+              "C",
+              "D",
+              "unknown"
+            ],
+            "title": "Intent"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Reason"
+          },
+          "needs_clarification": {
+            "type": "boolean",
+            "title": "Needs Clarification"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "intent",
+          "confidence",
+          "reason",
+          "needs_clarification"
+        ],
+        "title": "ArchiveIntentResult",
+        "description": "文件归档系统的意图识别结果；当前无聊天分流，理由始终简短。"
+      },
+      "BusinessIntentOption": {
+        "properties": {
+          "page": {
+            "type": "string",
+            "enum": [
+              "supervision_diary",
+              "work_list",
+              "image_library",
+              "recognition_platform",
+              "business_management",
+              "workbench"
+            ],
+            "title": "Page"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "fill_supervision_log",
+              "fill_monthly_report",
+              "assign_monthly_report",
+              "view_supervision_log",
+              "fill_inspection_record",
+              "fill_standby_record",
+              "fill_environmental_log",
+              "fill_safety_log",
+              "approve_log",
+              "view_work_tasks",
+              "create_work_task",
+              "add_form",
+              "delete_supervision_form",
+              "view_approval_workflow",
+              "view_image_library",
+              "delete_image",
+              "create_album",
+              "delete_album",
+              "navigate_to_recognition",
+              "recognize_photo",
+              "add_personnel_configuration",
+              "delete_project_member",
+              "view_wbs",
+              "add_subproject",
+              "add_child_subproject",
+              "delete_subproject",
+              "delete_child_subproject",
+              "assign_wbs_personnel",
+              "navigate_to_work",
+              "view_today_tasks",
+              "view_pending_approvals"
+            ],
+            "title": "Action"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "page",
+          "action",
+          "name"
+        ],
+        "title": "BusinessIntentOption",
+        "description": "澄清时可选的合法二级功能。"
+      },
+      "BusinessIntentRequest": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "User Id"
+          },
+          "session_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Session Id"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/ChatMessage"
+            },
+            "type": "array",
+            "title": "History",
+            "description": "当前用户当前会话的完整历史，首轮为[]；可省略"
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Message"
+          },
+          "current_page": {
+            "type": "string",
+            "enum": [
+              "supervision_diary",
+              "work_list",
+              "image_library",
+              "recognition_platform",
+              "business_management",
+              "workbench"
+            ],
+            "title": "Current Page",
+            "description": "调用方当前实际页面编码"
+          },
+          "last_navigation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BusinessNavigationContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pending_clarification": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PendingClarification"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id",
+            "description": "调用方幂等标识；本服务不持久化，仅供调用方关联"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "user_id",
+          "session_id",
+          "message",
+          "current_page"
+        ],
+        "title": "BusinessIntentRequest",
+        "description": "无状态业务意图请求；会话上下文由调用方传入。"
+      },
+      "BusinessIntentResult": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "resolved",
+              "clarify",
+              "chat",
+              "unknown"
+            ],
+            "title": "Status"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "supervision_diary",
+                  "work_list",
+                  "image_library",
+                  "recognition_platform",
+                  "business_management",
+                  "workbench"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page"
+          },
+          "action": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "fill_supervision_log",
+                  "fill_monthly_report",
+                  "assign_monthly_report",
+                  "view_supervision_log",
+                  "fill_inspection_record",
+                  "fill_standby_record",
+                  "fill_environmental_log",
+                  "fill_safety_log",
+                  "approve_log",
+                  "view_work_tasks",
+                  "create_work_task",
+                  "add_form",
+                  "delete_supervision_form",
+                  "view_approval_workflow",
+                  "view_image_library",
+                  "delete_image",
+                  "create_album",
+                  "delete_album",
+                  "navigate_to_recognition",
+                  "recognize_photo",
+                  "add_personnel_configuration",
+                  "delete_project_member",
+                  "view_wbs",
+                  "add_subproject",
+                  "add_child_subproject",
+                  "delete_subproject",
+                  "delete_child_subproject",
+                  "assign_wbs_personnel",
+                  "navigate_to_work",
+                  "view_today_tasks",
+                  "view_pending_approvals"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "options": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/BusinessIntentOption"
+                },
+                "type": "array",
+                "maxItems": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Options"
+          },
+          "catalog_version": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Catalog Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "page",
+          "action",
+          "confidence",
+          "message",
+          "options",
+          "catalog_version"
+        ],
+        "title": "BusinessIntentResult",
+        "description": "业务意图识别响应；status 区分跳转、澄清、聊天和未知。"
+      },
+      "BusinessNavigationContext": {
+        "properties": {
+          "page": {
+            "type": "string",
+            "enum": [
+              "supervision_diary",
+              "work_list",
+              "image_library",
+              "recognition_platform",
+              "business_management",
+              "workbench"
+            ],
+            "title": "Page"
+          },
+          "action": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "fill_supervision_log",
+                  "fill_monthly_report",
+                  "assign_monthly_report",
+                  "view_supervision_log",
+                  "fill_inspection_record",
+                  "fill_standby_record",
+                  "fill_environmental_log",
+                  "fill_safety_log",
+                  "approve_log",
+                  "view_work_tasks",
+                  "create_work_task",
+                  "add_form",
+                  "delete_supervision_form",
+                  "view_approval_workflow",
+                  "view_image_library",
+                  "delete_image",
+                  "create_album",
+                  "delete_album",
+                  "navigate_to_recognition",
+                  "recognize_photo",
+                  "add_personnel_configuration",
+                  "delete_project_member",
+                  "view_wbs",
+                  "add_subproject",
+                  "add_child_subproject",
+                  "delete_subproject",
+                  "delete_child_subproject",
+                  "assign_wbs_personnel",
+                  "navigate_to_work",
+                  "view_today_tasks",
+                  "view_pending_approvals"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "page"
+        ],
+        "title": "BusinessNavigationContext",
+        "description": "调用方最近一次返回过的导航目标；只作为纠错上下文。"
+      },
       "ChatMessage": {
         "properties": {
           "role": {
@@ -592,6 +984,97 @@
         ],
         "title": "ChatResponse"
       },
+      "DailyLogsReq": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path",
+            "description": "PROJECTS_ROOT 数据池内的监理日志照片路径",
+            "default": ""
+          },
+          "img": {
+            "type": "string",
+            "title": "Img",
+            "description": "base64 编码的图片数据；path 与 img 至少提供一个",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "DailyLogsReq"
+      },
+      "DraftReq": {
+        "properties": {
+          "prefix": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Prefix"
+          },
+          "drawings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Drawings"
+          },
+          "basis": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Basis"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "prefix",
+          "drawings"
+        ],
+        "title": "DraftReq"
+      },
+      "FillReq": {
+        "properties": {
+          "form": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Form"
+          },
+          "cfg": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Cfg"
+          },
+          "values": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Values"
+          },
+          "out": {
+            "type": "string",
+            "title": "Out",
+            "default": ""
+          },
+          "rects": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Rects"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "form",
+          "cfg",
+          "values"
+        ],
+        "title": "FillReq"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -632,7 +1115,7 @@
             "maxLength": 2000,
             "minLength": 1,
             "title": "Text",
-            "description": "待识别的页面导航或一般交流内容"
+            "description": "待识别的归档业务内容"
           },
           "intents": {
             "items": {
@@ -641,7 +1124,7 @@
             "type": "array",
             "maxItems": 0,
             "title": "Intents",
-            "description": "仅为兼容保留，必须省略或为[]；不支持自定义分类，始终使用固定五类意图"
+            "description": "仅为兼容保留，必须省略或为[]；不支持调用方自定义分类"
           }
         },
         "additionalProperties": false,
@@ -654,86 +1137,42 @@
         ],
         "title": "IntentRequest"
       },
-      "IntentResult": {
+      "JianbiaoReq": {
         "properties": {
-          "intent": {
-            "type": "string",
-            "enum": [
-              "work_list",
-              "supervision_log",
-              "image_library",
-              "business_management",
-              "chat",
-              "unknown"
-            ],
-            "title": "Intent"
-          },
-          "confidence": {
-            "type": "number",
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "Confidence"
-          },
-          "reason": {
+          "path": {
             "type": "string",
             "minLength": 1,
-            "title": "Reason"
+            "title": "Path"
           },
-          "needs_clarification": {
-            "type": "boolean",
-            "title": "Needs Clarification"
+          "form": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Form"
+          },
+          "cfg": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Cfg"
+          },
+          "bound": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Bound"
+          },
+          "out": {
+            "type": "string",
+            "title": "Out",
+            "default": ""
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "intent",
-          "confidence",
-          "reason",
-          "needs_clarification"
+          "path",
+          "form",
+          "cfg"
         ],
-        "title": "IntentResult"
-      },
-      "ArchiveIntentResult": {
-        "properties": {
-          "intent": {
-            "type": "string",
-            "enum": [
-              "A",
-              "B",
-              "C",
-              "D",
-              "unknown"
-            ],
-            "title": "Intent"
-          },
-          "confidence": {
-            "type": "number",
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "Confidence"
-          },
-          "reason": {
-            "type": "string",
-            "maxLength": 300,
-            "minLength": 1,
-            "title": "Reason"
-          },
-          "needs_clarification": {
-            "type": "boolean",
-            "title": "Needs Clarification"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "intent",
-          "confidence",
-          "reason",
-          "needs_clarification"
-        ],
-        "title": "ArchiveIntentResult",
-        "description": "文件归档系统的意图识别结果；当前无聊天分流，理由始终简短。"
+        "title": "JianbiaoReq"
       },
       "JsonValue": {},
       "LogSummary": {
@@ -851,6 +1290,60 @@
         "title": "LogSummaryRequest",
         "description": "可变结构的工程表单 OCR JSON 或兼容文字，序列化后最多 4000 字符。"
       },
+      "PendingClarification": {
+        "properties": {
+          "page": {
+            "type": "string",
+            "enum": [
+              "supervision_diary",
+              "work_list",
+              "image_library",
+              "recognition_platform",
+              "business_management",
+              "workbench"
+            ],
+            "title": "Page"
+          },
+          "attempts": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Attempts"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "page",
+          "attempts"
+        ],
+        "title": "PendingClarification",
+        "description": "调用方保存的一级意图澄清状态；attempts 是已完成的澄清轮数。"
+      },
+      "RecognizeReq": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path",
+            "description": "PROJECTS_ROOT 数据池内的照片路径",
+            "default": ""
+          },
+          "form": {
+            "type": "string",
+            "title": "Form",
+            "default": ""
+          },
+          "img": {
+            "type": "string",
+            "title": "Img",
+            "description": "base64 编码的图片数据；path 与 img 至少提供一个",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "RecognizeReq"
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -890,158 +1383,6 @@
           "type"
         ],
         "title": "ValidationError"
-      },
-      "DailyLogsReq": {
-        "properties": {
-          "path": {
-            "type": "string",
-            "title": "Path",
-            "description": "PROJECTS_ROOT 数据池内的监理日志照片路径",
-            "default": ""
-          },
-          "img": {
-            "type": "string",
-            "title": "Img",
-            "description": "base64 编码的图片数据；path 与 img 至少提供一个",
-            "default": ""
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "DailyLogsReq"
-      },
-      "DraftReq": {
-        "properties": {
-          "prefix": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Prefix"
-          },
-          "drawings": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Drawings"
-          },
-          "basis": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Basis"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "prefix",
-          "drawings"
-        ],
-        "title": "DraftReq"
-      },
-      "FillReq": {
-        "properties": {
-          "form": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Form"
-          },
-          "cfg": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Cfg"
-          },
-          "values": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Values"
-          },
-          "out": {
-            "type": "string",
-            "title": "Out",
-            "default": ""
-          },
-          "rects": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Rects"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "form",
-          "cfg",
-          "values"
-        ],
-        "title": "FillReq"
-      },
-      "JianbiaoReq": {
-        "properties": {
-          "path": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Path"
-          },
-          "form": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Form"
-          },
-          "cfg": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Cfg"
-          },
-          "bound": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Bound"
-          },
-          "out": {
-            "type": "string",
-            "title": "Out",
-            "default": ""
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "path",
-          "form",
-          "cfg"
-        ],
-        "title": "JianbiaoReq"
-      },
-      "RecognizeReq": {
-        "properties": {
-          "path": {
-            "type": "string",
-            "title": "Path",
-            "description": "PROJECTS_ROOT 数据池内的照片路径",
-            "default": ""
-          },
-          "form": {
-            "type": "string",
-            "title": "Form",
-            "default": ""
-          },
-          "img": {
-            "type": "string",
-            "title": "Img",
-            "description": "base64 编码的图片数据；path 与 img 至少提供一个",
-            "default": ""
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "RecognizeReq"
       }
     }
   }

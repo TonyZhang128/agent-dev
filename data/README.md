@@ -3,7 +3,7 @@
 | 文件 | 内容 | 用法 |
 | --- | --- | --- |
 | `log_summary.json` | 仅用户提供的一条工程表单 OCR 原始对象 | 请求体包含 `user_id`、`session_id`，并将此对象放入 `content`；固定输出见 [日志接口目录](../interfaces/log_summary/README.md) |
-| `intent.json` | 24条成功分类样例及4条非法请求样例，版本 `4.0.0` | 发送单条 `samples[i].request` 到文件中指定的 `endpoint` |
+| `intent.json` | 42条业务意图样例及4条非法请求样例，版本 `5.0.0` | 发送单条 `samples[i].request` 到文件中指定的 `endpoint` |
 
 ## 工程日志输入
 
@@ -31,8 +31,8 @@ PY
 
 ## 意图输入
 
-`intent.json` 的 `endpoint` 是目标 API，`samples` 是24条成功分类样例，`expected` 是人工参考分类；调用接口时只发送单条 `request`。样例覆盖固定 `work_list`、`supervision_log`、`image_library`、`business_management`、`chat` 五类及额外兜底 `unknown`。另有4条 `invalid_requests`，验证非空 `intents` 返回 `expected_status: 422`；它们不是合法分类请求。已取消自定义标签，`intents` 只能省略或为 `[]`。五类主示例与兜底示例见 [输出接口目录](../interfaces/intent/README.md)，分文件维护。
+`intent.json` 的 `endpoint` 是目标 API，`samples` 是42条业务意图样例，`expected` 是人工参考的 `status/page/action`；调用接口时只发送单条 `request`。样例覆盖全部一级页面和二级功能、一级意图澄清、基于 `last_navigation` 的纠错、聊天和未知场景。另有4条 `invalid_requests`，验证缺少/非法 `current_page`、非法历史角色或旧 `text` 字段返回 `expected_status: 422`。输出状态和示例见 [业务端意图接口](../interfaces/intent/README.md)。
 
-`unknown` 不计入五类。分数低于 `0.65` 或需要澄清时必须返回 `unknown`，分数不是校准概率。参考答案不要求原因逐字一致，也不会执行页面跳转或其他业务操作；详见 [意图测试说明](../docs/intent-testing.md)。
+`resolved` 要求 `action` 属于 `page` 且分数不低于 `0.65`；仅确定一级模块时返回 `clarify`；问候或概念问答返回 `chat`；目录外或无法确定返回 `unknown`。参考答案不要求 `message` 逐字一致，也不会执行页面跳转或其他业务操作；详见 [意图测试说明](../docs/intent-testing.md)。
 
 `uv run --locked python -m scripts.common.verify_agents` 验证用户给出的日志输入、测试目录中的日志回归集及意图集，并验证文字日志和对话。实际请求、响应和验收结果写入本地 `verification/agents-live-result.json`，不写入本目录或接口定义文件。

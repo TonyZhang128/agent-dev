@@ -1,32 +1,86 @@
 [
   {
-    "name": "unknown_ambiguous",
+    "name": "目标含糊",
     "request": {
-      "user_id": "test-user",
-      "session_id": "test-session",
-      "history": [],
-      "text": "帮我打开那个页面"
+      "user_id": "example-user",
+      "session_id": "example-session",
+      "message": "处理一下。",
+      "current_page": "workbench",
+      "history": []
     },
     "response": {
-      "intent": "unknown",
-      "confidence": 0.4,
-      "reason": "用户没有明确指出希望打开的页面。",
-      "needs_clarification": true
+      "status": "unknown",
+      "page": null,
+      "action": null,
+      "confidence": 0.2,
+      "message": "我还不能确定你要进入哪个业务页面，请再具体说明要办理的业务。",
+      "options": null,
+      "catalog_version": "b158b448e3cf4d0a"
     }
   },
   {
-    "name": "unknown_low_confidence",
+    "name": "仅一级功能",
     "request": {
-      "user_id": "test-user",
-      "session_id": "test-session",
-      "history": [],
-      "text": "可能想看看工作相关的内容，还没确定"
+      "user_id": "example-user",
+      "session_id": "example-session",
+      "message": "进入监理日记。",
+      "current_page": "workbench",
+      "history": []
     },
     "response": {
-      "intent": "unknown",
-      "confidence": 0.6499,
-      "reason": "目标页面尚不明确，判断分数低于阈值，需要澄清。",
-      "needs_clarification": true
+      "status": "clarify",
+      "page": "supervision_diary",
+      "action": null,
+      "confidence": 0.9,
+      "message": "你想填写监理日志、查看监理日志，还是执行其他监理日记相关操作？",
+      "options": [
+        {
+          "page": "supervision_diary",
+          "action": "fill_supervision_log",
+          "name": "填写监理日志"
+        },
+        {
+          "page": "supervision_diary",
+          "action": "fill_monthly_report",
+          "name": "填写监理月报"
+        },
+        {
+          "page": "supervision_diary",
+          "action": "assign_monthly_report",
+          "name": "监理月报分配"
+        },
+        {
+          "page": "supervision_diary",
+          "action": "view_supervision_log",
+          "name": "查看监理日志"
+        },
+        {
+          "page": "supervision_diary",
+          "action": "fill_inspection_record",
+          "name": "填写巡视记录"
+        },
+        {
+          "page": "supervision_diary",
+          "action": "fill_standby_record",
+          "name": "填写旁站记录"
+        },
+        {
+          "page": "supervision_diary",
+          "action": "fill_environmental_log",
+          "name": "填写环水保监理日志"
+        },
+        {
+          "page": "supervision_diary",
+          "action": "fill_safety_log",
+          "name": "填写安全监理日志"
+        },
+        {
+          "page": "supervision_diary",
+          "action": "approve_log",
+          "name": "审批日志"
+        }
+      ],
+      "catalog_version": "b158b448e3cf4d0a"
     }
   }
 ]

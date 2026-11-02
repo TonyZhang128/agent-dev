@@ -6,12 +6,12 @@
 
 包版本为 `0.1.0`（`pyproject.toml`）；当前 OpenAPI 标题为“公路工程业务智能体”、版本为 `0.1.0`（`app/main.py`）。两者分别维护项目包元信息与 API 文档元信息。三个智能体均通过 `langchain.agents.create_agent()` 执行，HTTP 层使用按领域组织的 `APIRouter`。
 
-开发者和编程代理的共享规范见 [AGENTS.md](AGENTS.md)；`CLAUDE.md` 引用同一份规则。完整请求/响应契约见 [API 文档](docs/agents-api.md)，脚本入口见 [脚本说明](scripts/README.md)。
+开发者和编程代理的共享规范见 [AGENTS.md](AGENTS.md)；`CLAUDE.md` 引用同一份规则。接口索引、契约状态和 OpenAPI 草案见 [接口文档](interfaces/README.md)，HTTP 细节见 [API 文档](docs/agents-api.md)，脚本入口见 [脚本说明](scripts/README.md)。
 
 | 功能 | 接口 | 输入与输出 |
 | --- | --- | --- |
 | 工程日志描述 | `POST /agents/log-summary` | 可变结构的工程表单 OCR JSON（兼容文字）→ 日志段落及结构化字段 |
-| 业务端意图识别 | `POST /agents/intent` | 文字与历史消息 → 固定四个页面或一般交流类别、判断分数、澄清标记；一般交流返回聊天回答 |
+| 业务端意图识别 | `POST /agents/intent/business` | 当前消息、当前页面与可选上下文 → 最小功能 `page/action`、一级意图澄清、聊天或未知状态、判断分数、目录版本 |
 | 归档端意图识别 | `POST /agents/intent/archive` | 文字与历史消息 → `A`–`D` 占位分类或 `unknown`、判断分数、澄清标记 |
 | 自由对话 | `POST /agents/chat` | 当前消息、必填历史（首轮 `[]`）→ 回答和模型名称 |
 | 照片/简表/监理日志 OCR | `POST /ocr/recognize`、`POST /ocr/jianbiao`、`POST /ocr/daily-logs` | 数据池照片或 base64 图片 → 草稿字段、定位与识别详情 |
@@ -160,8 +160,8 @@ curl --noproxy '*' -fsS http://127.0.0.1:8309/ready
 uv run --locked python -c 'import json; from pathlib import Path; print(json.dumps({"user_id": "example-user", "session_id": "example-session", "content": json.loads(Path("data/log_summary.json").read_text())}, ensure_ascii=False))' | \
   curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/log-summary \
     -H 'Content-Type: application/json' --data-binary @-
-curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/intent \
-  -H 'Content-Type: application/json' -d '{"user_id":"example-user","session_id":"example-session","history":[],"text":"打开监理日志页面"}'
+curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/intent/business \
+  -H 'Content-Type: application/json' -d '{"user_id":"example-user","session_id":"example-session","message":"我要填写今天的监理日志。","current_page":"workbench","history":[]}'
 curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/intent/archive \
   -H 'Content-Type: application/json' -d '{"user_id":"example-user","session_id":"example-session","history":[],"text":"把这份文件归档"}'
 curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/chat \
@@ -170,7 +170,7 @@ curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/chat \
 
 完整字段、返回示例、意图标签及历史消息限制见 [智能体 API 文档](docs/agents-api.md)。`/health` 检查 API 存活，`/ready` 检查上游列出配置模型；只有业务调用会实际推理。
 
-业务端意图识别固定五类：`work_list`（工作列表）、`supervision_log`（监理日志页面）、`image_library`（图片库）、`business_management`（业务管理页面）、`chat`（问候、闲聊或一般交流）。归档端 `/agents/intent/archive` 复用同一分类流程，当前固定为 `A`、`B`、`C`、`D` 四个占位分类，不含聊天分流，真实含义后续在 `app/agents/profiles.py` 补充。无法确定目标、目标不支持、分数低于 `0.65` 或需要澄清时返回 `unknown`；它是兜底结果，不计入五类。四个页面类别由调用方执行跳转；有效 `chat` 会继续调用 `ChatAgent`，将回答放入现有 `reason` 字段，其余字段不变。聊天回答不受分类理由300字符限制，两次推理共享总超时；低分或需澄清时先回退为 `unknown`，不触发聊天。已取消自定义分类；`intents` 仅兼容省略或 `[]`，非空返回 `422`。调用方统一使用上述五类标签，`unknown` 仅作兜底。
+业务端意图使用 `app/resources/intent/business_pages.json` 定义一级页面和二级功能，构建期生成枚举，运行时不读取 JSON。响应使用 `status`（`resolved`/`clarify`/`chat`/`unknown`）、`page`、`action`、`confidence`、`message`、`options` 和 `catalog_version`：`resolved` 返回可跳转的最小功能；只确定一级模块时返回 `clarify` 并调用 Chat 澄清，调用方保存并传回 `pending_clarification.attempts`，同一页面最多 10 轮；问候或概念问答返回 `chat`；目录外或无法确定返回 `unknown`。请求必填 `message`、`current_page`，可选 `history`、`last_navigation`、`pending_clarification`；本服务不保存会话、不做认证，也不跟踪前端跳转。归档端 `/agents/intent/archive` 继续使用独立的 `A`–`D` 占位分类，不含聊天分流。详细契约见 [业务端意图接口](interfaces/intent/README.md)。
 
 错误状态：输入校验失败 `422`，模型服务不可达 `503`，调用超时 `504`，上游错误、拒绝、截断或不合法结果 `502`。模型失败不会返回伪造的成功结果。
 
@@ -178,6 +178,7 @@ curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/chat \
 export UV_CACHE_DIR="$PWD/.cache/uv"
 uv run --locked ruff check app tests scripts
 uv run --locked ruff format --check app tests scripts
+uv run --locked python -m scripts.docs.check_openapi
 uv run --locked pytest -v
 # 单独运行一个测试文件，或按名称筛选：
 uv run --locked pytest tests/test_agents.py -v
@@ -189,7 +190,7 @@ uv run --locked python -m scripts.dev.verify_live
 ollama ps
 ```
 
-自动化测试使用 pytest / pytest-asyncio，运行真实 LangChain Agent 和模拟模型 HTTP 传输，不需要 Ollama、联网或云端凭据；首次安装依赖可能需要联网。测试文件直接位于 `tests/test_*.py`，目前没有 `tests/unit/` 或 `tests/integration/`。测试覆盖脚本分流、生产启动限制、配置保留，以及既有 API、结构化输出、并发标签隔离、消息隔离、超时、异常、工具调用循环、路由注册和共享资源生命周期。真实验收脚本覆盖用户提供的 OCR 输入、完整意图及测试目录中的日志回归集、文字日志和对话，记录写入本地 `verification/agents-live-result.json`；验收记录、日志和缓存不提交 Git。离线与真实模型验收标准见 [意图识别测试说明](docs/intent-testing.md) 和 [日志总结测试说明](docs/log-summary-testing.md)。GitHub Actions 在 Linux 上执行锁定依赖安装、Ruff 和自动化测试，不执行模型下载和真实推理。
+自动化测试使用 pytest / pytest-asyncio，运行真实 LangChain Agent 和模拟模型 HTTP 传输，不需要 Ollama、联网或云端凭据；首次安装依赖可能需要联网。测试文件直接位于 `tests/test_*.py`，目前没有 `tests/unit/` 或 `tests/integration/`。测试覆盖脚本分流、生产启动限制、配置保留，以及既有 API、结构化输出、业务意图层级与澄清、并发消息隔离、超时、异常、工具调用循环、路由注册和共享资源生命周期。真实验收脚本覆盖用户提供的 OCR 输入、完整意图及测试目录中的日志回归集、文字日志和对话，记录写入本地 `verification/agents-live-result.json`；验收记录、日志和缓存不提交 Git。离线与真实模型验收标准见 [意图识别测试说明](docs/intent-testing.md) 和 [日志总结测试说明](docs/log-summary-testing.md)。GitHub Actions 在 Linux 上执行锁定依赖安装、Ruff 和自动化测试，不执行模型下载和真实推理。
 
 业务验收报告的每条 `checks` 记录使用 `request` 保存实际 JSON 输入（含聊天历史），使用 `response` 保存 API 输出，方便逐条核对。
 
@@ -200,6 +201,20 @@ ollama ps
 `tests/test_routing.py` 将完整 OpenAPI 与 `tests/fixtures/api-openapi.json` 比较，覆盖路径、方法、字段、模型、状态码、operationId、tags、summary，以及应用标题和版本，并额外检查重复注册、Router 独立挂载和多应用资源隔离。
 
 当前快照已与主应用同步，记录 `公路工程业务智能体 / 0.1.0`。修改应用标题或版本时必须先确认这项元信息变更，再审查完整差异并同步快照；不要跳过测试、删除元信息断言或自动覆盖整个基线。历史记录中的测试通过数量属于当时版本，当前状态以实际运行结果为准。
+
+### 接口契约、Swagger 与 API-First
+
+[interfaces/](interfaces/README.md) 是对外接口文档的唯一入口，包含正式契约、待确认草案、业务指南和变更记录。当前 14 个 HTTP 操作全部有文档，其中 `/agents/*`、`/health`、`/ready` 标记为 `confirmed`；`/health/deps`、`/ocr/*`、`/wbs/draft` 的完整响应/错误契约标记为 `pending-review`，见 [待确认草案](interfaces/drafts/README.md)。
+
+- Swagger UI：启动 API 后访问 <http://127.0.0.1:8309/docs>；ReDoc 为 `/redoc`，运行时 OpenAPI 为 `/openapi.json`。这些是当前实现的投影，不是正式契约。
+- 完整 OpenAPI 草案：[interfaces/drafts/fastapi.openapi.json](interfaces/drafts/fastapi.openapi.json)，覆盖请求、成功响应、400/404/422/502/503/504 错误以及每个操作的副作用和幂等说明。
+- 第一版评审文档：[interfaces/API.md](interfaces/API.md)，由 OpenAPI 自动生成，包含接口索引、请求/响应示例、字段表、错误和 Schema 附录；不是独立契约，请勿手工编辑。
+- 导出草案：`uv run --locked python -m scripts.docs.export_openapi`；脚本只写 `interfaces/drafts/`，拒绝写入 `interfaces/openapi/`。
+- 生成评审文档：`uv run --locked python -m scripts.docs.render_api_markdown`。
+- 检测漂移：`uv run --locked python -m scripts.docs.check_openapi`；有正式契约时优先检查正式契约。
+- 契约测试：`uv run --locked pytest tests/test_interfaces_contract.py -v`。
+
+接口契约优先（API-First）规则已纳入 [AGENTS.md 第四节](AGENTS.md#四接口契约与-api-first-开发流程)：已确认契约未经用户明确批准不得修改；草案不能作为实现授权；代码与契约不一致时必须报告并由用户决定。接口文档可以由 AI 生成，但契约批准权属于用户。
 
 ## 项目结构与 Agent 开发
 
@@ -227,28 +242,40 @@ app/
     middleware.py         # 拒绝、截断、空输出及工具响应检查
     base.py               # 通用 BaseAgent 与结构化 StructuredAgent
     history.py            # 请求局部历史、预算及完整回合裁剪
-    profiles.py           # 意图能力在各业务端的标签、提示词与输出模型配置
+    profiles.py           # 归档端扁平意图的标签、提示词与输出模型配置
     log_summary.py        # 工程表单 OCR 日志描述（兼容通用日志）
-    intent.py             # 按 profile 复用的页面导航/归档意图及低分澄清
+    intent.py             # 扁平归档意图流程（复用 IntentProfile）
+    intent_business.py    # 层级业务意图、page/action 校验与一级意图澄清
+    intent_catalog.py     # 生成目录的只读运行时视图
+    clarify.py            # Chat 澄清模式，只围绕目录选项措辞
     chat.py               # 对话消息组织和文本回答
   prompts/
     __init__.py           # 按模块路径加载提示词，不依赖当前工作目录
     log_summary.md        # 各业务独立维护的系统提示词
     intent/
-      business.md         # 业务端五类页面导航与一般交流
+      business.md         # 业务端层级意图识别规则
+      business_clarify.md # 一级意图澄清措辞
       archive.md          # 归档端 A–D 占位分类
     chat.md
 tests/                    # pytest：API、错误处理、Agent 运行时与脚本测试
   fixtures/               # 日志版本化回归集及当前 OpenAPI 契约快照
 data/                     # 用户提供的 OCR 输入、意图评测样例
-interfaces/               # 供其他业务对接的固定输出 Schema、示例和说明
+interfaces/               # 对外接口唯一入口：正式契约、待确认草案、业务指南和变更记录
+  API.md                  # 由 OpenAPI 自动生成的第一版评审文档
+  openapi/                # 用户批准的正式 OpenAPI 契约（当前尚无整包）
+  drafts/                 # 待确认 OpenAPI 草案与批准清单
+  guides/                 # 智能体、OCR、同步/异步、调用方兼容性说明
+  coverage.md             # 功能-接口覆盖、文档差异和未实现能力
+  CHANGELOG.md            # 契约变更记录
   log_summary/
-  intent/                 # 业务端四字段固定枚举响应、五类主示例及独立兜底示例
+  intent/                 # 业务端七字段响应 Schema、状态示例及独立兜底示例
     archive/              # 归档端 A–D 枚举响应与示例
 scripts/
   dev/                    # macOS：Homebrew、Ollama、launchd、Metal GPU 验收
   prod/                   # Linux：运行依赖、API、独立 vLLM、NVIDIA 验收
   common/                 # 两种环境共用的业务与模型真实推理验收，按日志/意图/会话组织
+  docs/                   # OpenAPI 草案导出与契约漂移检查
+  intent/                 # 业务意图 JSON 校验与枚举生成
   ocr/                    # 原 docsvc 全部模板生成、文档检查和演示工具
   models/                 # 下载 Qwen3.5 GGUF 权重并组装 vLLM 模型目录
   README.md               # 脚本入口和迁移说明
@@ -268,7 +295,7 @@ CLAUDE.md                 # 引用 AGENTS.md，复用共享规则
 
 业务输入说明见 [data/README.md](data/README.md)。`data/log_summary.json` 只保留用户提供的一条 OCR 原始对象，调用时提供 `user_id`、`session_id` 并将该对象放入 `content`；意图样例仍提取单条 `request`。日志固定输出六个必填字段，JSON Schema、输出示例及字段说明见 [interfaces/log_summary/README.md](interfaces/log_summary/README.md)。响应中的 `summary` 为可纳入当日日志的客观中文段落；原有日志回归集独立放在 `tests/fixtures/log_summary_cases.json`。工程 OCR 对象的字段和层级可变化，保留指标、实测值及单位；计划日期不作为实际日期，缺失合格率不推断合格，表单存在不代表已完成检测。当前采用暂行描述规则，正式业务话术待补充，统一维护在 `app/prompts/log_summary.md`。请求外层新增必填用户与会话ID，响应字段保持兼容；content 序列化后仍限 4000 字符。
 
-意图识别固定输出 `intent`、`confidence`、`reason`、`needs_clarification` 四个必填字段。业务端固定五类及兜底示例见 [interfaces/intent/README.md](interfaces/intent/README.md)，归档端 `A`–`D` 占位分类的 Schema 与示例见 [interfaces/intent/archive/README.md](interfaces/intent/archive/README.md)。
+业务端意图固定输出 `status`、`page`、`action`、`confidence`、`message`、`options`、`catalog_version` 七个必填字段，状态示例见 [interfaces/intent/README.md](interfaces/intent/README.md)。归档端仍输出 `intent`、`confidence`、`reason`、`needs_clarification`，其 `A`–`D` 占位分类 Schema 与示例见 [interfaces/intent/archive/README.md](interfaces/intent/archive/README.md)。
 
 调用链：`FastAPI → APIRouter → 业务 Agent → runtime.create_agent → ChatOpenAI → Ollama/vLLM`。结构化业务显式使用 `ProviderStrategy(JSON Schema, strict=True)`，最后再通过 Pydantic 校验；自由对话使用同一 Agent 运行时返回文本。业务代码不直接调用 OpenAI SDK。
 
@@ -285,7 +312,7 @@ CLAUDE.md                 # 引用 AGENTS.md，复用共享规则
 3. 在 `app/main.py` 生命周期中创建实例，在 `app/api/` 对应领域 Router 中增加携带 `response_model` 的路由；新领域创建 Router 并在 `app/api/router.py` 注册。
 4. 最小实现使测试通过，覆盖输入校验、模型失败和资源隔离；同步 API 文档、固定输出接口和 README。纯路由整理应对比完整 OpenAPI，确认无非预期变化。
 
-同一能力面向多个业务端时，应新增 `IntentProfile` 配置并复用现有 Agent；标签、提示词文件、输出模型和阈值放在 `app/agents/profiles.py`，不要复制 `app/agents/intent.py`、`base.py` 或 `runtime.py`。
+扁平意图（如归档端）面向多个业务端时，应新增 `IntentProfile` 配置并复用现有 Agent；标签、提示词文件、输出模型和阈值放在 `app/agents/profiles.py`。业务端层级意图以 JSON 目录为准，修改目录后运行 `scripts.intent.compile_catalog`，不要复制 `intent_business.py`、`base.py` 或 `runtime.py`。
 
 新增 Router 的注册关系示例（已定义对应模块后再添加）：
 
@@ -306,7 +333,7 @@ api_router.include_router(example.router)
 
 主应用已有 `app.include_router(api_router)`，无需重复注册。代码风格、契约、测试驱动、依赖和提交规则统一见 [开发规范](AGENTS.md)。
 
-意图识别复用同一 Agent 与分类流程，各业务端的标签、提示词、输出模型和阈值由 `app/agents/profiles.py` 声明，业务端五类及归档端 `A`–`D` 都由服务端维护；请求消息保持隔离，不接受调用方自定义分类。系统提示词修改后需重启 API，以刷新缓存。
+业务端层级意图由 JSON 目录派生，归档端扁平意图继续由 `app/agents/profiles.py` 声明；请求消息保持隔离，不接受调用方自定义分类。目录或提示词修改后需重启 API，以刷新缓存；目录生成文件由 `scripts.intent.compile_catalog --check` 保护。
 
 需要调用真实业务系统时，用 LangChain `@tool` 定义工具，通过 `build_agent(..., tools=(... ,))` 注册；统一调用 `invoke_agent()` 保留超时、追踪和步数控制。现有业务未注册工具，测试中已覆盖完整工具循环。会改变业务状态的工具应先设计身份、权限、幂等和确认机制，再接入对应业务 API。
 

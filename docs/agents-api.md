@@ -1,15 +1,15 @@
 # 业务智能体 API
 
-本文说明原有 `/agents/*` 契约。合并后的文档加工接口 `/ocr/*`、`/wbs/draft`、`/health/deps` 见 [OCR API 与路径配置](ocr.md)，与本文共用 `app.main:app` 和 8309 端口。
+本文说明原有 `/agents/*` 契约。合并后的文档加工接口 `/ocr/*`、`/wbs/draft`、`/health/deps` 见 [OCR API 与路径配置](ocr.md)，与本文共用 `app.main:app` 和 8309 端口。统一接口索引、契约状态和待确认草案见 [interfaces/README.md](../interfaces/README.md)；完整 OpenAPI 草案见 [interfaces/drafts/fastapi.openapi.json](../interfaces/drafts/fastapi.openapi.json)。
 
-服务地址：`http://127.0.0.1:8309`。交互文档：`http://127.0.0.1:8309/docs`。
+服务地址：`http://127.0.0.1:8309`。交互文档：`http://127.0.0.1:8309/docs`。`/docs` 是运行时实现的投影，不是正式契约；接口变更必须按 [AGENTS.md 第四节](../AGENTS.md#四接口契约与-api-first-开发流程)审批。
 
 `user_id`、`session_id` 是必填业务标识，不是登录凭据。
 
 | 业务 | 方法与路径 | 模块 |
 | --- | --- | --- |
 | 总结并生成工作日志 | `POST /agents/log-summary` | `app/agents/log_summary.py` |
-| 业务端意图识别 | `POST /agents/intent` | `app/agents/intent.py` |
+| 业务端意图识别 | `POST /agents/intent/business` | `app/agents/intent_business.py`，目录见 `app/agents/intent_catalog.py` |
 | 归档端意图识别 | `POST /agents/intent/archive` | `app/agents/intent.py`，配置见 `app/agents/profiles.py` |
 | 自由对话 | `POST /agents/chat` | `app/agents/chat.py` |
 
@@ -17,7 +17,7 @@
 
 ## 用户与会话请求契约
 
-各智能体接口均要求非空字符串 `user_id`、`session_id`，去除首尾空白后各1–128字符。意图识别（含归档端）和 `/chat` 还必须传 `history`（首轮为 `[]`）；日志总结不接受该字段。旧请求缺少这些必填字段将返回422，成功响应结构不变；业务接口路径已统一为 `/agents/...`，不再使用 `/api/agents` 前缀。完整示例、并发隔离、裁剪规则和身份信任边界见 [用户与会话](sessions.md)。
+各智能体接口均要求非空字符串 `user_id`、`session_id`，去除首尾空白后各1–128字符。业务端意图还要求 `message`、`current_page`，`history` 可选；归档端和 `/chat` 必须传 `history`（首轮为 `[]`）；日志总结不接受该字段。业务意图的 `current_page`、`last_navigation`、`pending_clarification` 由调用方传入并持久化。完整示例、并发隔离、裁剪规则和身份信任边界见 [用户与会话](sessions.md)。
 
 ## 1. 工作日志总结
 
@@ -123,61 +123,89 @@
 
 ## 2. 意图识别
 
-根据用户输入识别想要进入的页面，或识别为问候、闲聊及一般交流。`text` 为待识别文字，最多 2000 字符。始终使用以下五个固定类别，`intents` 只能省略或为 `[]`：
+接口：`POST /agents/intent/business`。根据用户当前诉求、当前页面、上次导航和服务端业务目录，识别一级页面及能够完成任务的最小二级功能。本服务不保存会话、不做认证；调用方传入 `current_page`、可选的 `history`/`last_navigation`/`pending_clarification`，并持久化识别结果。
 
-| 标签 | 类别 | 输入示例 |
-| --- | --- | --- |
-| `work_list` | 工作列表 | 打开工作列表；我今天有哪些待办任务 |
-| `supervision_log` | 监理日志页面 | 进入监理日志；我要填写今天的监理日记 |
-| `image_library` | 图片库 | 打开图片库；看看施工现场照片 |
-| `business_management` | 业务管理页面 | 进入业务管理页面；带我去办理业务 |
-| `chat` | 问候、闲聊或一般交流 | 你好；谢谢；监理日志是什么 |
+请求示例：
 
 ```zsh
-curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/intent \
+curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/intent/business \
   -H 'Content-Type: application/json' \
-  -d '{"user_id":"example-user","session_id":"example-session","history":[],"text":"你好，帮我打开图片库"}'
+  -d '{"user_id":"example-user","session_id":"example-session","message":"我要填写今天的监理日志。","current_page":"workbench","history":[]}'
 ```
 
-返回结构示例：
+请求字段：
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| `user_id`、`session_id` | 是 | 非空字符串，各最多128字符；只作业务标识，不是认证凭据 |
+| `message` | 是 | 当前诉求，最多2000字符 |
+| `current_page` | 是 | 调用方当前实际页面，必须是业务目录中的 page code |
+| `history` | 否 | 当前会话历史，省略即 `[]`；只接受完整、交替的 user/assistant 回合 |
+| `last_navigation` | 否 | 上一次返回的导航目标 `{page, action}`；`action` 可空且必须属于 `page` |
+| `pending_clarification` | 否 | 一级意图澄清状态 `{page, attempts}`；`attempts` 为已完成的澄清轮数，0–10 |
+| `request_id` | 否 | 仅供调用方关联；本服务不持久化，不提供幂等保证 |
+
+响应字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `status` | string 枚举 | `resolved`、`clarify`、`chat`、`unknown` |
+| `page` | string 或 `null` | 一级页面 code |
+| `action` | string 或 `null` | 二级功能 code；`resolved` 必填，`clarify` 必须为空 |
+| `confidence` | number | 0–1 的模型判断分数，不是校准概率 |
+| `message` | string 或 `null` | `resolved` 为 `null`；`clarify` 为澄清文案；`chat` 为回答；`unknown` 为引导 |
+| `options` | array 或 `null` | 仅 `clarify` 返回，每项 `{page, action, name}`，全部属于 `page` |
+| `catalog_version` | string | 业务功能 JSON 的内容哈希 |
+
+状态语义：
+
+| `status` | 调用方处理 |
+| --- | --- |
+| `resolved` | 按 `page/action` 映射到前端路由并跳转 |
+| `clarify` | 展示 `message`，可用 `options` 渲染选项；不跳转 |
+| `chat` | 展示 `message`；不跳转 |
+| `unknown` | 请用户重新描述；不跳转 |
+
+示例：
 
 ```json
 {
-  "intent": "image_library",
+  "status": "resolved",
+  "page": "supervision_diary",
+  "action": "fill_supervision_log",
   "confidence": 0.95,
-  "reason": "用户明确要求进入图片库查看图片。",
-  "needs_clarification": false
+  "message": null,
+  "options": null,
+  "catalog_version": "b158b448e3cf4d0a"
 }
 ```
 
-只有明确的页面或页面功能诉求才归入对应页面。问候夹带导航时优先识别页面；否定和改口以最终明确目标为准，例如“不要图片库，打开工作列表”返回 `work_list`。解释概念或一般问答归入 `chat`，不能只因提及“监理日志”就触发导航。
-
-固定输出接口的 [字段说明、JSON Schema 和配对输入输出示例](../interfaces/intent/README.md) 位于 `interfaces/intent/`。四个响应字段全部必填且禁止额外字段；Schema 与 `IntentResult` / OpenAPI 一致，固定枚举为上述五类标签及兜底 `unknown`。`response.examples.json` 仅保存五类主示例，`response.fallback.examples.json` 单独保存兜底示例。
-
-`unknown` 是五类之外的兜底结果，不是第六个业务类别。目标含糊、多个页面无法确定唯一目标、不支持的页面，或无法匹配的业务指令均返回 `unknown`，不会强行归入 `chat` 或业务管理。例如“打开系统设置页面”“工作列表和图片库没想好先去哪一个”。模型判断分数低于 `0.65` 或需要澄清时，也返回 `intent: "unknown"`、`needs_clarification: true`。`confidence` 是模型判断分数，不是经过校准的概率；恰好 `0.65` 且不需澄清的有效标签可以保留。
-
-调用方将四个页面标签映射到自己的路由；服务不执行跳转。有效分类为 `chat` 时，服务将原始 `text` 作为 `ChatRequest.message` 调用 `ChatAgent`，将其 `reply` 写入 `reason`，保留分类分数及澄清标记，调用方直接展示 `reason`。用户ID、会话ID及完整历史都会传给 ChatAgent。此接口接收当前用户当前会话的完整历史，识别与聊天各自按上下文预算裁剪；不保存服务端历史。低分或需澄清的结果先回退为 `unknown`，不调用聊天；`unknown` 应提示用户澄清。
-
-例如输入 `{"text":"你好"}`，响应可以是：
+仅表达一级模块时，返回 `status="clarify"`、`page`、`action=null`，并调用 Chat 澄清模式生成 `message`；`options` 由后端从业务目录生成，Chat 只负责措辞，不得提出目录外操作。调用方保存 `pending_clarification.page` 和 `attempts`，每收到一次 `clarify` 将 `attempts` 加 1；同一页面达到 10 轮仍不明确时返回 `unknown`。Chat 澄清失败时返回 HTTP 200 的确定性选项文案。
 
 ```json
 {
-  "intent": "chat",
-  "confidence": 0.95,
-  "reason": "你好！有什么可以帮你？",
-  "needs_clarification": false
+  "status": "clarify",
+  "page": "supervision_diary",
+  "action": null,
+  "confidence": 0.9,
+  "message": "你想填写监理日志、查看监理日志，还是执行其他监理日记相关操作？",
+  "options": [
+    {"page": "supervision_diary", "action": "fill_supervision_log", "name": "填写监理日志"},
+    {"page": "supervision_diary", "action": "view_supervision_log", "name": "查看监理日志"}
+  ],
+  "catalog_version": "b158b448e3cf4d0a"
 }
 ```
 
-`chat` 需要分类和聊天两次模型调用，共享同一次请求的总超时预算（默认 `LLM_TIMEOUT_SECONDS`，启用回退时再加上 `LLM_FALLBACK_TIMEOUT_SECONDS`）。聊天失败沿用 `503`（不可达）、`504`（超时）、`502`（上游错误或无效回答），不会将分类理由作为成功回答返回。内部分类使用 `IntentClassification` 的严格 JSON Schema，分类理由始终限300字符；最终响应使用 `IntentResult` 校验，`chat` 的 `reason` 不受300字符限制且不做截断，其他标签仍保留该限制。
+`current_page` 和 `last_navigation` 是上下文，不是限制条件。用户明确要求其他模块时，模型直接识别新页面；用户说“不对”“不是这个”时，结合 `last_navigation` 避免重复被否定的动作。服务不返回 `navigation_id`，不跟踪前端跳转是否成功。
 
-已取消自定义分类。为兼容已有的空字段请求，保留可选 `intents`，但只能省略或为 `[]`；任何非空列表均返回 `422`，即使其中使用的是当前五类标签，也不允许覆盖或缩减分类。模型不会收到调用方自定义候选。
+业务目录唯一来源为 `app/resources/intent/business_pages.json`，构建期生成枚举；修改后运行 `uv run --locked python -m scripts.intent.compile_catalog`，并用 `--check` 校验。模型返回目录外编码、`action` 不属于 `page` 或结构不合法时返回 `502`。
 
-四个响应字段保持不变，接口路径已由 `/api/agents/intent` 调整为 `/agents/intent`；请求不再接受非空 `intents`，响应 `intent` 的 JSON Schema 和 Pydantic 类型固定为上述五类及 `unknown`。旧调用方应去掉自定义候选并更新标签映射；模型返回集合之外的标签视为非法输出，返回 `502`。测试及真实评测标准见 [意图识别测试说明](intent-testing.md)。
+错误：请求校验失败 `422`；模型不可达 `503`；分类、聊天或澄清超时 `504`；上游错误、非法输出或目录外编码 `502`。响应不泄露原始输入、身份、历史或上游错误正文。归档端见下一节。
 
 ## 2.1 归档端意图识别
 
-文件归档系统使用同一套分类流程和独立的 profile 配置，接口为 `POST /agents/intent/archive`。请求契约与业务端完全一致：`text` 最多 2000 字符，必须携带 `history`，`intents` 只能省略或为 `[]`。响应四个字段相同，但 `intent` 只能取当前占位分类 `A`、`B`、`C`、`D` 或兜底 `unknown`。
+文件归档系统使用独立的扁平 profile 和分类流程，接口为 `POST /agents/intent/archive`。请求沿用 `IntentRequest`：`text` 最多 2000 字符，必须携带 `history`，`intents` 只能省略或为 `[]`。响应为四字段，`intent` 只能取当前占位分类 `A`、`B`、`C`、`D` 或兜底 `unknown`；没有 `chat` 分流。
 
 ```zsh
 curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/intent/archive \
@@ -194,7 +222,7 @@ curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/intent/archive \
 }
 ```
 
-`A`–`D` 的业务含义尚未确定，当前只是占位标签；补充真实含义时修改 `app/agents/profiles.py` 的 `ARCHIVE_INTENTS` 与 `app/prompts/intent/archive.md`，无需复制 Agent 实现。归档端没有 `chat` 分类，问候或一般交流返回 `unknown`，不会触发聊天调用。模型返回 `A`–`D` 之外的业务端标签、旧标签或非法分数均视为非法输出并返回 `502`。低分、需澄清和显式 `unknown` 的统一回退规则与业务端相同，阈值 `0.65` 由 profile 配置。
+`A`–`D` 的业务含义尚未确定，当前只是占位标签；补充真实含义时修改 `app/agents/profiles.py` 的 `ARCHIVE_INTENTS` 与 `app/prompts/intent/archive.md`，无需复制 Agent 实现。归档端没有 `chat` 分类，问候或一般交流返回 `unknown`，不会触发聊天调用。模型返回 `A`–`D` 之外的业务端标签、旧标签或非法分数均视为非法输出并返回 `502`。低分、需澄清和显式 `unknown` 的统一回退规则由 `IntentProfile` 执行，阈值 `0.65` 由 profile 配置。
 
 归档端响应的 [Schema 和示例](../interfaces/intent/archive/README.md) 位于 `interfaces/intent/archive/`。在真实分类含义补齐前，归档端不纳入真实模型语义评测；离线测试只验证档案隔离、枚举、回退、错误映射和契约。
 
@@ -256,7 +284,7 @@ UV_CACHE_DIR="$PWD/.cache/uv" uv run --locked python -m scripts.common.verify_ag
 
 真实测试覆盖日志文字与 JSON 输入、`data/intent.json` 的完整版本化评测集、普通对话及携带历史的对话。意图逐条比对标签、澄清标记及分数规则；记录和数据集版本保存在 `verification/agents-live-result.json`。每条 `checks` 记录的 `request` 保存实际 JSON 请求体，`response` 保存 API 输出，可直接对照输入和结果。
 
-输入不合法返回 422；模型不可达返回 503；模型推理超时返回 504；上游错误、响应截断或输出校验失败返回 502。
+输入不合法返回 422，其中请求字段校验失败的 `detail` 是 `[{type,loc,msg}]` 数组，输入/上下文超限时是字符串；模型不可达返回 503；模型推理超时返回 504；上游错误、响应截断或输出校验失败返回 502。模型类错误的 `detail` 均为脱敏字符串。
 
 配置非空 `LLM_FALLBACK_API_KEY` 后启用云端回退：本地 Ollama/vLLM 的模型调用因连接失败、超时或上游 HTTP 错误抛出异常时，本次调用改用回退模型重试一次，两次尝试的总预算为 `LLM_TIMEOUT_SECONDS + LLM_FALLBACK_TIMEOUT_SECONDS`。回退只覆盖模型调用失败，不重试已返回但未通过 Schema 校验的输出；`/ready` 仍只检查本地模型。回退模型若为 DeepSeek，`ProviderStrategy` 的严格 `json_schema` 请求会降级为 `json_object`，响应仍由 LangChain 解析并由 Pydantic 严格校验。启用回退会把本次请求内容发送到云端，需按数据合规要求评估。
 

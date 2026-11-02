@@ -2,10 +2,11 @@ from fastapi import APIRouter, Request
 
 from app.schemas.agents import (
     ArchiveIntentResult,
+    BusinessIntentRequest,
+    BusinessIntentResult,
     ChatRequest,
     ChatResponse,
     IntentRequest,
-    IntentResult,
     LogSummary,
     LogSummaryRequest,
 )
@@ -18,9 +19,13 @@ async def log_summary(payload: LogSummaryRequest, request: Request):
     return await request.app.state.log_summary_agent.run(payload)
 
 
-@router.post("/intent", response_model=IntentResult, summary="识别页面导航或一般交流意图")
-async def intent(payload: IntentRequest, request: Request):
-    return await request.app.state.intent_agent.run(payload)
+@router.post(
+    "/intent/business",
+    response_model=BusinessIntentResult,
+    summary="识别业务页面与最小功能意图",
+)
+async def business_intent(payload: BusinessIntentRequest, request: Request):
+    return await request.app.state.business_intent_agent.run(payload)
 
 
 @router.post(

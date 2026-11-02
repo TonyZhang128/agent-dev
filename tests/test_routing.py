@@ -37,7 +37,7 @@ def test_aggregate_router_can_be_mounted_in_another_application():
         assert client.get("/health").json() == {"status": "ok"}
         for path in (
             "/agents/log-summary",
-            "/agents/intent",
+            "/agents/intent/business",
             "/agents/intent/archive",
             "/agents/chat",
         ):
@@ -46,7 +46,7 @@ def test_aggregate_router_can_be_mounted_in_another_application():
             "/health",
             "/ready",
             "/agents/log-summary",
-            "/agents/intent",
+            "/agents/intent/business",
             "/agents/intent/archive",
             "/agents/chat",
             "/health/deps",
@@ -143,7 +143,8 @@ def test_routers_reuse_agents_within_each_application_and_isolate_applications()
         "model_service",
         "log_summary_agent",
         "chat_agent",
-        "intent_agent",
+        "clarify_agent",
+        "business_intent_agent",
         "archive_intent_agent",
     )
     with TestClient(first_app) as first, TestClient(second_app) as second:
@@ -159,7 +160,7 @@ def test_routers_reuse_agents_within_each_application_and_isolate_applications()
                 getattr(app.state, name) is resource
                 for name, resource in zip(resource_names, resources, strict=True)
             )
-            assert app.state.intent_agent.chat_agent is app.state.chat_agent
+            assert app.state.business_intent_agent.chat_agent is app.state.chat_agent
     for service in (first_service, second_service):
         assert service.http_client.is_closed
         assert service.http_async_client.is_closed

@@ -36,9 +36,9 @@ curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/intent/archive \
 
 | HTTP 状态 | 含义 |
 | --- | --- |
-| `422` | 请求校验失败，例如空文字、长度超限或非空 `intents` |
+| `422` | 请求校验失败，例如空文字、长度超限或非空 `intents`；`detail` 是错误数组，输入/上下文超限时为字符串 |
 | `503` | 模型服务不可达或不可用 |
 | `504` | 推理超时 |
 | `502` | 上游错误、输出不合法或模型返回固定集合之外的标签 |
 
-业务端（`POST /agents/intent`）的五类契约保持不变，见 [上级接口说明](../README.md)。
+完整 HTTP 契约（含错误 Schema）见 [OpenAPI 草案](../../drafts/fastapi.openapi.json)。业务端已改为 `POST /agents/intent/business` 的层级 page/action 契约，见 [上级接口说明](../README.md)。

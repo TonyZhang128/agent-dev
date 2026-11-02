@@ -19,19 +19,31 @@ def test_live_verifier_checks_versioned_datasets(
     (data / "intent.json").write_text(
         json.dumps(
             {
-                "version": "test-v2",
-                "endpoint": "/agents/intent",
+                "version": "test-v3",
+                "endpoint": "/agents/intent/business",
                 "samples": [
                     {
-                        "id": "test_image_library",
-                        "request": {"text": "打开图片库"},
-                        "expected": {"intent": "image_library", "needs_clarification": False},
+                        "id": "test_fill_log",
+                        "request": {
+                            "message": "我要填写监理日志。",
+                            "current_page": "workbench",
+                            "history": [],
+                        },
+                        "expected": {
+                            "status": "resolved",
+                            "page": "supervision_diary",
+                            "action": "fill_supervision_log",
+                        },
                     }
                 ],
                 "invalid_requests": [
                     {
-                        "id": "test_reject_custom",
-                        "request": {"text": "打开图片库", "intents": [{"label": "other"}]},
+                        "id": "test_invalid_page",
+                        "request": {
+                            "message": "填写监理日志",
+                            "current_page": "system_settings",
+                            "history": [],
+                        },
                         "expected_status": 422,
                     }
                 ],
@@ -98,7 +110,7 @@ def test_live_verifier_checks_versioned_datasets(
                 "info": {"version": "test"},
                 "paths": {
                     f"/agents/{name}": {}
-                    for name in ("log-summary", "intent", "intent/archive", "chat")
+                    for name in ("log-summary", "intent/business", "intent/archive", "chat")
                 },
             }
         elif path == "/agents/log-summary":
@@ -118,14 +130,17 @@ def test_live_verifier_checks_versioned_datasets(
                     pending_items=[],
                     issues=[],
                 )
-        elif path == "/agents/intent":
-            if payload.get("intents") and reject_custom:
-                return httpx.Response(422, json={"detail": [{"type": "too_long"}]})
+        elif path == "/agents/intent/business":
+            if payload.get("current_page") == "system_settings" and reject_custom:
+                return httpx.Response(422, json={"detail": [{"type": "literal_error"}]})
             result = {
-                "intent": "image_library" if matched else "work_list",
+                "status": "resolved",
+                "page": "supervision_diary" if matched else "work_list",
+                "action": "fill_supervision_log" if matched else "view_work_tasks",
                 "confidence": 0.95,
-                "reason": "识别页面",
-                "needs_clarification": False,
+                "message": None,
+                "options": None,
+                "catalog_version": "test",
             }
         elif path == "/agents/chat":
             result = {"reply": "青松", "model": "test"}
@@ -150,13 +165,17 @@ def test_live_verifier_checks_versioned_datasets(
     assert ocr_check["request"] == ocr_request
     assert ocr_check["passed"] is log_matched
     if log_matched:
-        assert report["intent_dataset_version"] == "test-v2"
-        check = next(item for item in report["checks"] if item["name"] == "test_image_library")
-        assert check["expected"] == {"intent": "image_library", "needs_clarification": False}
+        assert report["intent_dataset_version"] == "test-v3"
+        check = next(item for item in report["checks"] if item["name"] == "test_fill_log")
+        assert check["expected"] == {
+            "status": "resolved",
+            "page": "supervision_diary",
+            "action": "fill_supervision_log",
+        }
         assert check["passed"] is matched
         if matched:
             rejected = next(
-                item for item in report["checks"] if item["name"] == "test_reject_custom"
+                item for item in report["checks"] if item["name"] == "test_invalid_page"
             )
             assert rejected["expected_http_status"] == 422
             assert rejected["passed"] is reject_custom
@@ -167,8 +186,8 @@ def test_live_verifier_checks_versioned_datasets(
             "text_log",
             "provided_ocr_log",
             "ocr_variant",
-            "test_image_library",
-            "test_reject_custom",
+            "test_fill_log",
+            "test_invalid_page",
             "chat",
             "chat_with_history",
         ]
@@ -212,7 +231,7 @@ def test_live_verifier_records_response_before_validation_failure(
                     "info": {"version": "test"},
                     "paths": {
                         f"/agents/{name}": {}
-                        for name in ("log-summary", "intent", "intent/archive", "chat")
+                        for name in ("log-summary", "intent/business", "intent/archive", "chat")
                     },
                 },
             )
