@@ -3,7 +3,7 @@ from typing import Any
 from langchain_core.messages import AnyMessage
 
 from app.agents.base import BaseAgent
-from app.schemas import ChatRequest, ChatResponse
+from app.schemas.agents import ChatRequest, ChatResponse
 
 
 class ChatAgent(BaseAgent[ChatRequest, ChatResponse]):

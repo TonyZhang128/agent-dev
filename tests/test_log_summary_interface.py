@@ -1,4 +1,4 @@
-"""Keep the supplied system input and published response contract consistent."""
+"""使提供的系统输入与已发布的响应契约保持一致。"""
 
 import json
 from pathlib import Path
@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from app.schemas import LogSummary, LogSummaryRequest
+from app.schemas.agents import LogSummary, LogSummaryRequest
 from tests.helpers import request_payload
 
 ROOT = Path(__file__).parents[1]

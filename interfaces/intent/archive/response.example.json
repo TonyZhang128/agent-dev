@@ -1,0 +1,6 @@
+{
+  "intent": "A",
+  "confidence": 0.95,
+  "reason": "用户要求归档当前文件。",
+  "needs_clarification": false
+}

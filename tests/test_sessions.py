@@ -1,4 +1,4 @@
-"""Session contracts, history trimming, and overlapping request isolation."""
+"""会话契约、历史裁剪和重叠请求隔离。"""
 
 import asyncio
 import json
@@ -14,7 +14,7 @@ from app.agents.history import trim_history
 from app.config import Settings
 from app.llm import ModelService
 from app.main import create_app
-from app.schemas import ChatMessage
+from app.schemas.base import ChatMessage
 
 IDENTITY = {"user_id": "user-alpha", "session_id": "session-alpha"}
 CLASSIFICATION = {
@@ -23,11 +23,17 @@ CLASSIFICATION = {
     "reason": "一般交流",
     "needs_clarification": False,
 }
+ARCHIVE_CLASSIFICATION = {
+    "intent": "A",
+    "confidence": 0.95,
+    "reason": "归档业务",
+    "needs_clarification": False,
+}
 ROUTES = [
-    ("/api/agents/intent", {"text": "你好", "history": []}),
-    ("/api/agents/chat", {"message": "你好", "history": []}),
-    ("/api/agents/log-summary", {"content": "完成接口开发"}),
-    ("/api/business/plan", {"instruction": "审核报销"}),
+    ("/agents/intent", {"text": "你好", "history": []}),
+    ("/agents/intent/archive", {"text": "归档文件", "history": []}),
+    ("/agents/chat", {"message": "你好", "history": []}),
+    ("/agents/log-summary", {"content": "完成接口开发"}),
 ]
 
 
@@ -77,6 +83,8 @@ def client_for(**settings):
         schema_name = body.get("response_format", {}).get("json_schema", {}).get("name")
         if schema_name == "intent":
             return completion(json.dumps(CLASSIFICATION))
+        if schema_name == "intent_archive":
+            return completion(json.dumps(ARCHIVE_CLASSIFICATION))
         if schema_name == "log_summary":
             return completion(
                 json.dumps(
@@ -112,7 +120,7 @@ def test_every_business_request_requires_both_identifiers(route, payload, identi
 def test_identifiers_are_nonblank_bounded_strings(field, value):
     with client_for() as (client, calls):
         response = client.post(
-            "/api/agents/chat", json=IDENTITY | {field: value, "message": "你好", "history": []}
+            "/agents/chat", json=IDENTITY | {field: value, "message": "你好", "history": []}
         )
         assert response.status_code == 422
         assert calls == []
@@ -121,9 +129,7 @@ def test_identifiers_are_nonblank_bounded_strings(field, value):
 @pytest.mark.parametrize("route,field", [("intent", "text"), ("chat", "message")])
 def test_conversational_requests_require_explicit_history(route, field):
     with client_for() as (client, calls):
-        assert (
-            client.post("/api/agents/" + route, json=IDENTITY | {field: "你好"}).status_code == 422
-        )
+        assert client.post("/agents/" + route, json=IDENTITY | {field: "你好"}).status_code == 422
         assert calls == []
 
 
@@ -134,7 +140,7 @@ def test_entire_history_is_forwarded_when_it_fits(route, field, turns):
     payload = IDENTITY | {field: "项目代号是什么", "history": messages}
     original = json.loads(json.dumps(payload))
     with client_for() as (client, calls):
-        response = client.post("/api/agents/" + route, json=payload)
+        response = client.post("/agents/" + route, json=payload)
         assert response.status_code == 200
         assert response.json()["reason" if route == "intent" else "reply"] == f"项目{turns - 1}"
         assert len(calls) == (2 if route == "intent" else 1)
@@ -150,7 +156,7 @@ def test_context_overflow_drops_oldest_whole_turns(route, field):
     messages = history("旧" * 10000) + history("海蓝")
     with client_for() as (client, calls):
         response = client.post(
-            "/api/agents/" + route, json=IDENTITY | {field: "只回答项目代号", "history": messages}
+            "/agents/" + route, json=IDENTITY | {field: "只回答项目代号", "history": messages}
         )
         assert response.status_code == 200
         assert response.json()["reason" if route == "intent" else "reply"] == "海蓝"
@@ -162,7 +168,7 @@ def test_context_overflow_drops_oldest_whole_turns(route, field):
 def test_oversized_latest_turn_is_dropped_without_orphan_or_older_turns():
     with client_for() as (client, calls):
         response = client.post(
-            "/api/agents/chat",
+            "/agents/chat",
             json=IDENTITY
             | {"message": "你好", "history": history("旧项目") + history("新" * 10000)},
         )
@@ -171,8 +177,8 @@ def test_oversized_latest_turn_is_dropped_without_orphan_or_older_turns():
         assert len(calls[0]["messages"]) == 2
 
 
-@pytest.mark.parametrize("route,payload", [ROUTES[2], ROUTES[3]])
-def test_nonconversational_requests_reject_history(route, payload):
+def test_nonconversational_requests_reject_history():
+    route, payload = next(item for item in ROUTES if item[0] == "/agents/log-summary")
     with client_for() as (client, calls):
         assert client.post(route, json=IDENTITY | payload | {"history": []}).status_code == 422
         assert calls == []
@@ -180,9 +186,7 @@ def test_nonconversational_requests_reject_history(route, payload):
 
 def test_log_identity_is_metadata_and_not_part_of_ocr_input():
     with client_for() as (client, calls):
-        response = client.post(
-            "/api/agents/log-summary", json=IDENTITY | {"content": "完成接口开发"}
-        )
+        response = client.post("/agents/log-summary", json=IDENTITY | {"content": "完成接口开发"})
         assert response.status_code == 200
         assert calls[0]["messages"][-1]["content"] == "完成接口开发"
         assert "user-alpha" not in json.dumps(calls)
@@ -201,7 +205,7 @@ def test_invalid_history_rejected_before_model(route, field, messages):
     with client_for() as (client, calls):
         assert (
             client.post(
-                "/api/agents/" + route, json=IDENTITY | {field: "你好", "history": messages}
+                "/agents/" + route, json=IDENTITY | {field: "你好", "history": messages}
             ).status_code
             == 422
         )
@@ -211,7 +215,7 @@ def test_invalid_history_rejected_before_model(route, field, messages):
 def test_current_input_is_never_cut_to_fit():
     with client_for(llm_context_tokens=1024, llm_max_tokens=256) as (client, calls):
         response = client.post(
-            "/api/agents/chat", json=IDENTITY | {"message": "隐私" * 900, "history": history()}
+            "/agents/chat", json=IDENTITY | {"message": "隐私" * 900, "history": history()}
         )
         assert response.status_code == 422
         assert calls == []
@@ -221,7 +225,7 @@ def test_current_input_is_never_cut_to_fit():
 def test_history_request_size_limit_is_separate_from_context_trimming():
     with client_for(conversation_max_input_characters=20) as (client, calls):
         response = client.post(
-            "/api/agents/chat", json=IDENTITY | {"message": "你好", "history": history("密" * 30)}
+            "/agents/chat", json=IDENTITY | {"message": "你好", "history": history("密" * 30)}
         )
         assert response.status_code == 422
         assert calls == []
@@ -231,7 +235,7 @@ def test_history_request_size_limit_is_separate_from_context_trimming():
 def test_invalid_request_errors_do_not_echo_identity_or_history():
     with client_for() as (client, calls):
         response = client.post(
-            "/api/agents/chat",
+            "/agents/chat",
             json={
                 "user_id": "private-user",
                 "session_id": "private-session",
@@ -250,7 +254,7 @@ def test_former_4000_character_limit_no_longer_rejects_valid_conversation():
     with client_for() as (client, calls):
         messages = [{"role": "user", "content": "x" * 2000}, {"role": "assistant", "content": "a"}]
         response = client.post(
-            "/api/agents/chat", json=IDENTITY | {"message": "x" * 2000, "history": messages}
+            "/agents/chat", json=IDENTITY | {"message": "x" * 2000, "history": messages}
         )
         assert response.status_code == 200
         assert calls[0]["messages"][1:-1] == messages
@@ -258,7 +262,7 @@ def test_former_4000_character_limit_no_longer_rejects_valid_conversation():
 
 @pytest.mark.parametrize("margin,expected_turns", [(693, 1), (694, 0)])
 def test_whole_turn_at_exact_budget_boundary_does_not_mutate_history(margin, expected_turns):
-    # 1024 - 256 - 693 = 75; system/current cost 22+19 and the newest turn costs 17+17.
+    # 1024 - 256 - 693 = 75；system/current 占 22+19，最新回合占 17+17。
     messages = [
         ChatMessage(role=role, content=content)
         for role, content in [
@@ -322,7 +326,7 @@ def test_identity_metadata_reaches_both_agents_without_entering_model_messages()
         for agent in (client.app.state.intent_agent, client.app.state.chat_agent):
             agent.agent = agent.agent.with_config(callbacks=[Capture()])
         response = client.post(
-            "/api/agents/intent",
+            "/agents/intent",
             json={"user_id": " A ", "session_id": " S ", "text": "你好", "history": []},
         )
         assert response.status_code == 200
@@ -369,7 +373,7 @@ async def test_overlapping_users_and_sessions_with_one_failed_request(route, fie
             responses = await asyncio.gather(
                 *(
                     client.post(
-                        "/api/agents/" + route,
+                        "/agents/" + route,
                         json={
                             "user_id": u,
                             "session_id": s,
@@ -385,7 +389,7 @@ async def test_overlapping_users_and_sessions_with_one_failed_request(route, fie
                 if marker != "失败":
                     assert response.json()["reason" if route == "intent" else "reply"] == marker
             fresh = await client.post(
-                "/api/agents/chat",
+                "/agents/chat",
                 json={"user_id": "A", "session_id": "same", "message": "你好", "history": []},
             )
             assert fresh.status_code == 200

@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
+from openai import APIStatusError
 from pydantic import BaseModel
 
 from app.agents.runtime import build_agent, invoke_agent
@@ -81,7 +82,7 @@ async def test_concurrent_fixed_intent_requests_are_isolated():
 
             async def classify(text):
                 payload = {"text": text, "intents": []}
-                response = await client.post("/api/agents/intent", json=request_payload(payload))
+                response = await client.post("/agents/intent", json=request_payload(payload))
                 assert response.status_code == 200
                 if cases[text] == "chat":
                     assert response.json()["reason"] == "回答：" + text
@@ -104,9 +105,7 @@ async def test_total_timeout_bounds_the_agent():
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:
-            response = await client.post(
-                "/api/agents/chat", json=request_payload({"message": "你好"})
-            )
+            response = await client.post("/agents/chat", json=request_payload({"message": "你好"}))
             assert response.status_code == 504
 
 
@@ -116,7 +115,7 @@ async def test_langchain_tool_loop_can_be_extended():
 
     @tool
     def add(a: int, b: int) -> int:
-        """Add two integers and return their sum."""
+        """将两个整数相加并返回和。"""
         return a + b
 
     class Total(BaseModel):
@@ -161,6 +160,81 @@ async def test_langchain_tool_loop_can_be_extended():
         await service.close()
 
 
+class FallbackResult(BaseModel):
+    value: int
+
+
+@pytest.mark.asyncio
+async def test_primary_failure_falls_back_to_cloud_model():
+    calls = []
+
+    def respond(request):
+        body = json.loads(request.content)
+        calls.append(
+            (
+                request.url.host,
+                body["model"],
+                body.get("response_format"),
+                body.get("reasoning_effort"),
+            )
+        )
+        if request.url.host == "127.0.0.1":
+            return httpx.Response(503, json={"error": {"message": "local model down"}})
+        assert request.headers["authorization"] == "Bearer test-fallback-key"
+        return completion({"content": '{"value": 5}'})
+
+    service = models_for(
+        respond,
+        llm_fallback_api_key="test-fallback-key",
+        llm_fallback_model="test-deepseek",
+        llm_timeout_seconds=10,
+        llm_fallback_timeout_seconds=4,
+    )
+    try:
+        agent = build_agent(
+            service,
+            name="calculate",
+            prompt="Return the value.",
+            schema=FallbackResult.model_json_schema(),
+        )
+        result = await invoke_agent(agent, service, [HumanMessage(content="2 + 3")])
+        assert FallbackResult.model_validate(result["structured_response"]).value == 5
+        assert [host for host, *_ in calls] == ["127.0.0.1", "api.deepseek.com"]
+        assert calls[1][1] == "test-deepseek"
+        # DeepSeek 不支持 json_schema；回退模型改用 JSON 模式。
+        assert calls[1][2] == {"type": "json_object"}
+        # 关闭思考，避免推理内容占用输出预算。
+        assert calls[1][3] == "none"
+        assert service.inference_timeout_seconds == 14
+    finally:
+        await service.close()
+
+
+@pytest.mark.asyncio
+async def test_primary_failure_without_fallback_key_keeps_upstream_error():
+    calls = []
+
+    def respond(request):
+        calls.append(request.url.host)
+        return httpx.Response(503, json={"error": {"message": "local model down"}})
+
+    service = models_for(respond)
+    try:
+        agent = build_agent(
+            service,
+            name="calculate",
+            prompt="Return the value.",
+            schema=FallbackResult.model_json_schema(),
+        )
+        with pytest.raises(APIStatusError):
+            await invoke_agent(agent, service, [HumanMessage(content="2 + 3")])
+        assert calls == ["127.0.0.1"]
+        assert not service.fallback_enabled
+        assert service.inference_timeout_seconds == service.settings.llm_timeout_seconds
+    finally:
+        await service.close()
+
+
 @pytest.mark.parametrize(
     "message,finish",
     (({"content": "{}", "refusal": "refused"}, "stop"), ({"content": "{}"}, "content_filter")),
@@ -170,7 +244,7 @@ def test_refusal_and_content_filter_return_502(message, finish):
     service = models_for(lambda request, m=message, f=finish: completion(m, f))
     with TestClient(create_app(service)) as client:
         response = client.post(
-            "/api/agents/log-summary", json=request_payload({"content": "已完成文档"})
+            "/agents/log-summary", json=request_payload({"content": "已完成文档"})
         )
         assert response.status_code == 502
 
@@ -186,9 +260,7 @@ def test_unregistered_tool_calls_return_502():
         create_app(models_for(lambda request: completion(response, "tool_calls")))
     ) as client:
         assert (
-            client.post(
-                "/api/agents/chat", json=request_payload({"message": "执行任务"})
-            ).status_code
+            client.post("/agents/chat", json=request_payload({"message": "执行任务"})).status_code
             == 502
         )
 

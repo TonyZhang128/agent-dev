@@ -1,7 +1,7 @@
 import json
 
 from app.agents.base import StructuredAgent
-from app.schemas import LogSummary, LogSummaryRequest
+from app.schemas.agents import LogSummary, LogSummaryRequest
 
 
 class LogSummaryAgent(StructuredAgent[LogSummaryRequest, LogSummary]):

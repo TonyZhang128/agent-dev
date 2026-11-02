@@ -1,4 +1,4 @@
-"""Reusable typed Agent flows; HTTP and providers stay outside business rules."""
+"""可复用的类型化 Agent 流程；HTTP 和模型提供方不进入业务规则。"""
 
 from abc import ABC, abstractmethod
 from typing import Any
@@ -11,7 +11,7 @@ from app.agents.runtime import build_agent, invoke_agent, prepared_schema, syste
 from app.errors import InvalidModelOutput
 from app.llm import ModelService
 from app.prompts import load_prompt
-from app.schemas import ConversationRequest, RequestContext
+from app.schemas.base import ConversationRequest, RequestContext
 
 
 class BaseAgent[RequestT: BaseModel, ResultT: BaseModel](ABC):
@@ -19,9 +19,10 @@ class BaseAgent[RequestT: BaseModel, ResultT: BaseModel](ABC):
     temperature = 0.0
     dynamic_schema = False
 
-    def __init__(self, models: ModelService):
+    def __init__(self, models: ModelService, *, prompt_name: str | None = None):
         self.models = models
-        self.prompt = load_prompt(self.name)
+        # 同一能力的不同业务端可共享 Agent 实现，但使用各自的提示词文件。
+        self.prompt = load_prompt(prompt_name or self.name)
         self.agent = None if self.dynamic_schema else self._build()
 
     def _build(self, schema: dict | None = None):
@@ -48,14 +49,14 @@ class BaseAgent[RequestT: BaseModel, ResultT: BaseModel](ABC):
 
     @abstractmethod
     def messages(self, request: RequestT) -> list[AnyMessage]:
-        """Build request-local messages from validated business input."""
+        """用已校验的业务输入构建请求局部消息。"""
 
     @abstractmethod
     def parse_result(self, state: dict[str, Any]) -> ResultT:
-        """Convert the guarded Agent state into the business response."""
+        """把经过检查的 Agent 状态转换为业务响应。"""
 
     async def run(self, request: RequestT) -> ResultT:
-        # Dynamic schemas are request-local; never mutate a shared compiled agent.
+        # 动态 Schema 属于请求局部状态，不得修改共享的已编译 Agent。
         agent = self.agent if self.agent is not None else self._build(self.response_schema(request))
         metadata = (
             {"user_id": request.user_id, "session_id": request.session_id}
@@ -79,7 +80,7 @@ class StructuredAgent[RequestT: BaseModel, ResultT: BaseModel](BaseAgent[Request
 
     @abstractmethod
     def user_content(self, request: RequestT) -> str:
-        """Serialize validated business input without changing its facts."""
+        """序列化已校验的业务输入，不改变其中的事实。"""
 
     def messages(self, request: RequestT) -> list[AnyMessage]:
         if isinstance(request, ConversationRequest):

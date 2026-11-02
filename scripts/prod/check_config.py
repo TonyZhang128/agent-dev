@@ -1,4 +1,4 @@
-"""Reject accidental use of Mac development defaults during Linux deployment."""
+"""拒绝在 Linux 部署中误用 Mac 开发默认值。"""
 
 from app.config import Settings
 

@@ -1,0 +1,33 @@
+# syntax=docker/dockerfile:1.7
+# 生产模型服务镜像：基于 vLLM 官方镜像封装启动参数，不安装业务依赖。
+# 权重由宿主机只读挂载，构建阶段不下载模型。
+#
+# 基础镜像为构建参数，因为不同权重格式需要不同 vLLM 环境：
+#   - Qwen3.5 GGUF（Q4_K_M）：stock vLLM 已移除内置 GGUF 加载，需 GGUF 插件/分支镜像
+#       --build-arg VLLM_BASE_IMAGE=ghcr.io/efschu/shvllm-qwen35-gguf:cu129
+#   - BF16 / 反量化权重：官方镜像即可（默认值）
+# 选择依据见 docs/docker.md。
+#
+# 镜像内不执行 apt-get：基础镜像由维护者决定，避免绑定 Debian/Ubuntu 包管理。
+# 进程初始化（回收子进程）由 compose 的 init: true 提供。
+
+ARG VLLM_BASE_IMAGE=vllm/vllm-openai:v0.32.0
+FROM ${VLLM_BASE_IMAGE}
+
+USER root
+
+COPY docker/entrypoint-vllm.sh /usr/local/bin/entrypoint-vllm.sh
+RUN chmod 0755 /usr/local/bin/entrypoint-vllm.sh
+
+ENV VLLM_SERVED_MODEL_NAME=highway-agent \
+    VLLM_HOST=0.0.0.0 \
+    VLLM_PORT=8001 \
+    HF_HUB_OFFLINE=1
+
+EXPOSE 8001
+
+# 模型加载可能持续数分钟，start-period 由编排层覆盖；用基础镜像自带的 Python 探活。
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15m --retries=3 \
+  CMD ["python3", "-c", "import os,sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:' + os.environ.get('VLLM_PORT', '8001') + '/health', timeout=4).status == 200 else 1)"]
+
+ENTRYPOINT ["/usr/local/bin/entrypoint-vllm.sh"]

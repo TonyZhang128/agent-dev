@@ -1,61 +1,22 @@
+"""日志总结、意图识别与聊天业务的请求、响应和校验。"""
+
 import json
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, StringConstraints, model_validator
+from pydantic import Field, JsonValue, StringConstraints, model_validator
 
-
-class StrictModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-
-
-Identifier = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
-
-
-class RequestContext(StrictModel):
-    """Caller-supplied identity metadata, never a substitute for authentication."""
-
-    user_id: Identifier
-    session_id: Identifier
-
-
-class PlanRequest(RequestContext):
-    instruction: str = Field(min_length=1, max_length=2000)
-
-    @model_validator(mode="after")
-    def nonblank(self) -> "PlanRequest":
-        self.instruction = self.instruction.strip()
-        if not self.instruction:
-            raise ValueError("instruction must not be blank")
-        return self
-
-
-class BusinessStep(StrictModel):
-    step: int = Field(ge=1)
-    action: str = Field(min_length=1, max_length=500)
-    responsible_role: str = Field(min_length=1, max_length=100)
-    condition: str = Field(min_length=1, max_length=300)
-    expected_output: str = Field(min_length=1, max_length=300)
-
-
-class BusinessPlan(StrictModel):
-    goal: str = Field(min_length=1, max_length=300)
-    steps: list[BusinessStep] = Field(min_length=1, max_length=12)
-    assumptions: list[str] = Field(max_length=12)
-    questions: list[str] = Field(max_length=12)
-
-    @model_validator(mode="after")
-    def ordered_steps(self) -> "BusinessPlan":
-        if [item.step for item in self.steps] != list(range(1, len(self.steps) + 1)):
-            raise ValueError("steps must have consecutive numbers starting at 1")
-        return self
-
+from app.schemas.base import ConversationRequest, RequestContext, StrictModel
 
 ShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
 IntentLabel = Literal[
     "work_list", "supervision_log", "image_library", "business_management", "chat", "unknown"
 ]
+ArchiveIntentLabel = Literal["A", "B", "C", "D", "unknown"]
 Description = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 SummaryItem = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
+IntentReason = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)
+]
 
 
 class LogSummaryRequest(RequestContext):
@@ -109,28 +70,10 @@ class LogSummary(StrictModel):
 
 
 class IntentDefinition(StrictModel):
-    """Internal description of a fixed intent; callers cannot supply candidates."""
+    """服务端维护的意图描述；允许的标签集合由具体 IntentProfile 限定。"""
 
-    label: IntentLabel
+    label: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)]
     description: Description
-
-
-class ChatMessage(StrictModel):
-    role: Literal["user", "assistant"]
-    content: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
-
-
-class ConversationRequest(RequestContext):
-    history: list[ChatMessage] = Field(description="当前用户当前会话的完整历史，首轮为[]")
-
-    @model_validator(mode="after")
-    def validate_history(self) -> "ConversationRequest":
-        if len(self.history) % 2 or any(
-            item.role != ("user" if index % 2 == 0 else "assistant")
-            for index, item in enumerate(self.history)
-        ):
-            raise ValueError("history must contain complete user/assistant turns in order")
-        return self
 
 
 class IntentRequest(ConversationRequest):
@@ -156,9 +99,22 @@ class IntentResult(StrictModel):
 
 
 class IntentClassification(IntentResult):
-    """Internal classifier output; the chat reply is generated in a separate call."""
+    """意图分类器的内部输出；聊天回答由另一次调用生成。"""
 
-    reason: SummaryItem
+    reason: IntentReason
+
+
+class ArchiveIntentResult(StrictModel):
+    """文件归档系统的意图识别结果；当前无聊天分流，理由始终简短。"""
+
+    intent: ArchiveIntentLabel
+    confidence: float = Field(ge=0, le=1)
+    reason: IntentReason
+    needs_clarification: bool
+
+
+class ArchiveIntentClassification(ArchiveIntentResult):
+    """归档意图分类器的内部输出；当前与最终响应字段一致。"""
 
 
 class ChatRequest(ConversationRequest):

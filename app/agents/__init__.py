@@ -1,1 +1,1 @@
-"""Business agents share the model client and keep their prompts and rules separate."""
+"""业务 Agent 共享模型客户端，提示词和业务规则彼此独立。"""

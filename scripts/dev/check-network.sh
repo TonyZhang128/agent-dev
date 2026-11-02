@@ -1,7 +1,7 @@
 #!/bin/zsh
 set -uo pipefail
 [[ "$(uname -s)" == Darwin ]] || { print -u2 "此网络检查用于 macOS 开发。"; exit 1; }
-# Explicit proxy URL argument, or the detected v2rayN local HTTP endpoint.
+# 显式传入的代理 URL，或自动探测到的 v2rayN 本地 HTTP 端点。
 proxy_url="${1:-http://127.0.0.1:10808}"
 print '检测模式：直连和显式代理。不会修改系统代理，也不会显示代理凭据。'
 for target in https://formulae.brew.sh/api/formula/ollama.json https://pypi.org/simple/fastapi/ https://registry.ollama.ai/v2/; do

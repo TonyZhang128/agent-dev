@@ -1,4 +1,4 @@
-"""macOS Ollama inference, Q4_K_M and Metal allocation verification."""
+"""macOS Ollama 推理、Q4_K_M 和 Metal 显存分配验证。"""
 
 import sys
 from urllib.parse import urlsplit

@@ -1,4 +1,4 @@
-"""Exercise deployment entry points without installing packages or starting services."""
+"""在不安装依赖包或启动服务的情况下验证部署入口。"""
 
 import shutil
 import subprocess
@@ -93,6 +93,7 @@ def test_api_start_works_outside_project_and_does_not_sync(deployment):
     commands = deployment.trace.read_text()
     assert str(deployment.root) in commands
     assert "--no-sync\n--no-dev\nuvicorn\napp.main:app" in commands
+    assert "--port\n8309" in commands
     assert "--workers\n2" in commands
 
 
@@ -137,7 +138,7 @@ def test_vllm_preserves_arguments_without_key_in_argv(deployment):
     assert result.returncode == 0, result.stderr
     args = deployment.trace.read_text().splitlines()
     assert args[:2] == ["serve", "/models/qwen model"]
-    assert "qwen-business" in args
+    assert "highway-agent" in args
     assert args[-2:] == ["--tensor-parallel-size", "2"]
     assert deployment.env["VLLM_API_KEY"] not in " ".join(args) + result.stdout + result.stderr
 
@@ -146,10 +147,10 @@ def test_vllm_preserves_arguments_without_key_in_argv(deployment):
     "values",
     (
         {},
-        {"llm_base_url": "http://127.0.0.1:8001/v1", "llm_model": "qwen-business"},
+        {"llm_base_url": "http://127.0.0.1:8001/v1", "llm_model": "highway-agent"},
         {
             "llm_base_url": "http://127.0.0.1:8001/v1",
-            "llm_model": "qwen-business",
+            "llm_model": "highway-agent",
             "llm_api_key": "CHANGE_ME",
         },
     ),
@@ -166,7 +167,7 @@ def test_production_config_accepts_remote_vllm(monkeypatch):
     settings = Settings(
         _env_file=None,
         llm_base_url="https://model.example.com/v1",
-        llm_model="qwen-business",
+        llm_model="highway-agent",
         llm_api_key="test-production-key",
     )
     monkeypatch.setattr("scripts.prod.check_config.Settings", lambda: settings)
@@ -188,7 +189,59 @@ def test_legacy_mac_api_entry_preserves_root_and_reload(deployment):
     commands = deployment.trace.read_text()
     assert str(deployment.root) in commands
     assert "uvicorn\napp.main:app" in commands
+    assert "--port\n8309" in commands
     assert "--reload" in commands
+
+
+@pytest.mark.skipif(not shutil.which("zsh"), reason="macOS compatibility scripts require zsh")
+@pytest.mark.parametrize("port", (None, "5679"))
+def test_legacy_mac_api_starts_under_debugpy_on_request(deployment, port):
+    deployment.stub("uname", "echo Darwin")
+    if port is not None:
+        deployment.env["DEBUGPY_PORT"] = port
+    result = subprocess.run(
+        ["zsh", str(deployment.root / "scripts" / "start-api.sh"), "--debug"],
+        cwd="/",
+        env=deployment.env,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    args = deployment.trace.read_text().splitlines()
+    assert args == [
+        str(deployment.root),
+        "run",
+        "--locked",
+        "python",
+        "-m",
+        "debugpy",
+        "--listen",
+        f"127.0.0.1:{port or '5678'}",
+        "-m",
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8309",
+    ]
+
+
+@pytest.mark.skipif(not shutil.which("zsh"), reason="macOS compatibility scripts require zsh")
+def test_legacy_mac_api_rejects_reload_with_debugpy(deployment):
+    deployment.stub("uname", "echo Darwin")
+    result = subprocess.run(
+        ["zsh", str(deployment.root / "scripts" / "start-api.sh"), "--debug", "--reload"],
+        cwd="/",
+        env=deployment.env,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 2
+    assert "不支持" in result.stderr
+    assert not deployment.trace.exists()
 
 
 def test_legacy_python_entry_points_resolve_to_expected_environments():

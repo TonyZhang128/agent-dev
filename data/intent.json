@@ -1,6 +1,6 @@
 {
   "description": "固定五类页面导航/一般交流及 unknown 兜底评测集；不支持自定义分类。samples 为成功分类，invalid_requests 为应返回422的请求。expected 是人工参考，不是模型推理结果。",
-  "endpoint": "/api/agents/intent",
+  "endpoint": "/agents/intent",
   "samples": [
     {
       "id": "intent_work_list_open",

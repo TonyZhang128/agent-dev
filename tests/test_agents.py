@@ -88,9 +88,7 @@ def agent_client(calls):
 )
 def test_log_accepts_structured_text_and_json(calls, agent_client, content):
     with agent_client(LOG) as client:
-        response = client.post(
-            "/api/agents/log-summary", json=request_payload({"content": content})
-        )
+        response = client.post("/agents/log-summary", json=request_payload({"content": content}))
         assert response.status_code == 200
         assert response.json() == LOG
         assert calls[0]["response_format"]["json_schema"]["name"] == "log_summary"
@@ -110,7 +108,7 @@ OCR_SAMPLES = [
 @pytest.mark.parametrize("sample", OCR_SAMPLES, ids=lambda sample: sample["id"])
 def test_log_preserves_variable_ocr_objects_and_response_contract(calls, agent_client, sample):
     with agent_client(sample["expected_response"]) as client:
-        response = client.post("/api/agents/log-summary", json=request_payload(sample["request"]))
+        response = client.post("/agents/log-summary", json=request_payload(sample["request"]))
         assert response.status_code == 200
         assert response.json() == sample["expected_response"]
         assert json.loads(calls[0]["messages"][-1]["content"]) == sample["request"]["content"]
@@ -131,9 +129,7 @@ def test_supplied_log_input_uses_the_published_output_interface(calls, agent_cli
     with agent_client(example) as client:
         document = client.get("/openapi.json").json()
         assert document["components"]["schemas"]["LogSummary"] == schema
-        response = client.post(
-            "/api/agents/log-summary", json=request_payload({"content": content})
-        )
+        response = client.post("/agents/log-summary", json=request_payload({"content": content}))
         assert response.status_code == 200
         assert response.json() == example
         assert json.loads(calls[0]["messages"][-1]["content"]) == content
@@ -146,9 +142,7 @@ def test_log_serialized_ocr_length_boundary(calls, agent_client, length, status)
     overhead = len(json.dumps(content, ensure_ascii=False))
     content["识别内容"] = "测" * (length - overhead)
     with agent_client(LOG) as client:
-        response = client.post(
-            "/api/agents/log-summary", json=request_payload({"content": content})
-        )
+        response = client.post("/agents/log-summary", json=request_payload({"content": content}))
         assert response.status_code == status
         assert len(calls) == (1 if status == 200 else 0)
 
@@ -158,7 +152,7 @@ def test_log_ocr_requests_do_not_share_input(calls, agent_client):
         for content in ({"项目名称": "项目甲"}, {"工程信息": {"名称": "项目乙"}}):
             assert (
                 client.post(
-                    "/api/agents/log-summary", json=request_payload({"content": content})
+                    "/agents/log-summary", json=request_payload({"content": content})
                 ).status_code
                 == 200
             )
@@ -170,7 +164,7 @@ def test_log_ocr_requests_do_not_share_input(calls, agent_client):
 def test_log_rejects_caller_rules(calls, agent_client, extra):
     with agent_client(LOG) as client:
         response = client.post(
-            "/api/agents/log-summary", json=request_payload({"content": {"项目": "演示"}, **extra})
+            "/agents/log-summary", json=request_payload({"content": {"项目": "演示"}, **extra})
         )
         assert response.status_code == 422
         assert calls == []
@@ -185,7 +179,7 @@ def test_log_rejects_invalid_inputs(calls, agent_client, content):
     with agent_client(LOG) as client:
         assert (
             client.post(
-                "/api/agents/log-summary", json=request_payload({"content": content})
+                "/agents/log-summary", json=request_payload({"content": content})
             ).status_code
             == 422
         )
@@ -201,7 +195,7 @@ def test_log_invalid_model_result(agent_client, result):
     with agent_client(result) as client:
         assert (
             client.post(
-                "/api/agents/log-summary", json=request_payload({"content": "已完成接口开发"})
+                "/agents/log-summary", json=request_payload({"content": "已完成接口开发"})
             ).status_code
             == 502
         )
@@ -221,7 +215,7 @@ def test_log_invalid_model_result(agent_client, result):
 def test_default_intents(calls, agent_client, text, label, extra):
     result = dict(INTENT, intent=label)
     with agent_client(result) as client:
-        response = client.post("/api/agents/intent", json=request_payload({"text": text, **extra}))
+        response = client.post("/agents/intent", json=request_payload({"text": text, **extra}))
         assert response.status_code == 200
         assert response.json() == (
             result | {"reason": "你好！有什么可以帮你？"} if label == "chat" else result
@@ -245,14 +239,14 @@ def test_default_intents(calls, agent_client, text, label, extra):
 @pytest.mark.parametrize("label", ["query", "create", "update", "cancel", "help"])
 def test_removed_default_intents_are_invalid(agent_client, label):
     with agent_client(dict(INTENT, intent=label)) as client:
-        response = client.post("/api/agents/intent", json=request_payload({"text": "打开工作列表"}))
+        response = client.post("/agents/intent", json=request_payload({"text": "打开工作列表"}))
         assert response.status_code == 502
 
 
 @pytest.mark.parametrize("score", [0.0, 0.6499, 0.65, 1.0])
 def test_page_intent_confidence_boundary(agent_client, score):
     with agent_client(dict(INTENT, confidence=score)) as client:
-        response = client.post("/api/agents/intent", json=request_payload({"text": "打开工作列表"}))
+        response = client.post("/agents/intent", json=request_payload({"text": "打开工作列表"}))
         assert response.status_code == 200
         assert response.json()["confidence"] == score
         assert response.json()["intent"] == ("unknown" if score < 0.65 else "work_list")
@@ -263,7 +257,7 @@ def test_page_intent_confidence_boundary(agent_client, score):
 def test_nonempty_intents_are_rejected_before_inference(calls, agent_client, label):
     with agent_client(INTENT) as client:
         response = client.post(
-            "/api/agents/intent",
+            "/agents/intent",
             json=request_payload(
                 {
                     "text": "打开工作列表",
@@ -286,7 +280,7 @@ def test_nonempty_intents_are_rejected_before_inference(calls, agent_client, lab
 )
 def test_intent_uncertainty_falls_back(agent_client, result):
     with agent_client(result) as client:
-        response = client.post("/api/agents/intent", json=request_payload({"text": "处理一下"}))
+        response = client.post("/agents/intent", json=request_payload({"text": "处理一下"}))
         assert response.status_code == 200
         assert response.json()["intent"] == "unknown"
         assert response.json()["needs_clarification"]
@@ -300,9 +294,7 @@ def test_intent_uncertainty_falls_back(agent_client, result):
 def test_invalid_intent_result(agent_client, result):
     with agent_client(result) as client:
         assert (
-            client.post(
-                "/api/agents/intent", json=request_payload({"text": "查询状态"})
-            ).status_code
+            client.post("/agents/intent", json=request_payload({"text": "查询状态"})).status_code
             == 502
         )
 
@@ -316,7 +308,7 @@ def test_duplicate_or_reserved_candidates(calls, agent_client, labels):
             "text": "查询",
             "intents": [{"label": label, "description": "说明"} for label in labels],
         }
-        assert client.post("/api/agents/intent", json=request_payload(payload)).status_code == 422
+        assert client.post("/agents/intent", json=request_payload(payload)).status_code == 422
         assert calls == []
 
 
@@ -335,7 +327,7 @@ def test_duplicate_or_reserved_candidates(calls, agent_client, labels):
 )
 def test_intent_input_limits(agent_client, payload):
     with agent_client(INTENT) as client:
-        assert client.post("/api/agents/intent", json=request_payload(payload)).status_code == 422
+        assert client.post("/agents/intent", json=request_payload(payload)).status_code == 422
 
 
 @pytest.mark.parametrize(
@@ -352,7 +344,7 @@ def test_intent_input_limits(agent_client, payload):
 def test_chat_plain_text_and_history(calls, agent_client, history):
     with agent_client("  项目代号是青松。\n") as client:
         response = client.post(
-            "/api/agents/chat", json=request_payload({"message": "代号是什么", "history": history})
+            "/agents/chat", json=request_payload({"message": "代号是什么", "history": history})
         )
         assert response.status_code == 200
         assert response.json() == {"reply": "项目代号是青松。", "model": "test-qwen"}
@@ -364,9 +356,9 @@ def test_chat_plain_text_and_history(calls, agent_client, history):
 
 def test_chat_does_not_store_other_requests(calls, agent_client):
     with agent_client("你好") as client:
-        client.post("/api/agents/chat", json=request_payload({"message": "第一位用户的消息"}))
+        client.post("/agents/chat", json=request_payload({"message": "第一位用户的消息"}))
         response = client.post(
-            "/api/agents/chat", json=request_payload({"message": "第二位用户的消息"})
+            "/agents/chat", json=request_payload({"message": "第二位用户的消息"})
         )
         assert response.status_code == 200
         assert len(calls[1]["messages"]) == 2
@@ -403,7 +395,7 @@ def test_chat_does_not_store_other_requests(calls, agent_client):
 )
 def test_chat_input_validation(calls, agent_client, payload):
     with agent_client("你好") as client:
-        assert client.post("/api/agents/chat", json=request_payload(payload)).status_code == 422
+        assert client.post("/agents/chat", json=request_payload(payload)).status_code == 422
         assert calls == []
 
 
@@ -424,8 +416,7 @@ def test_chat_input_validation(calls, agent_client, payload):
 def test_new_routes_share_error_handling(agent_client, route, payload, error, status, expected):
     with agent_client("", error=error, status=status) as client:
         assert (
-            client.post("/api/agents/" + route, json=request_payload(payload)).status_code
-            == expected
+            client.post("/agents/" + route, json=request_payload(payload)).status_code == expected
         )
 
 
@@ -435,6 +426,6 @@ def test_new_routes_share_error_handling(agent_client, route, payload, error, st
 def test_chat_rejects_truncation_and_empty_reply(agent_client, result, finish):
     with agent_client(result, finish=finish) as client:
         assert (
-            client.post("/api/agents/chat", json=request_payload({"message": "你好"})).status_code
+            client.post("/agents/chat", json=request_payload({"message": "你好"})).status_code
             == 502
         )

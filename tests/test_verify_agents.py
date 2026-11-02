@@ -2,6 +2,7 @@ import json
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
 from scripts.common import verify_agents
 
@@ -19,7 +20,7 @@ def test_live_verifier_checks_versioned_datasets(
         json.dumps(
             {
                 "version": "test-v2",
-                "endpoint": "/api/agents/intent",
+                "endpoint": "/agents/intent",
                 "samples": [
                     {
                         "id": "test_image_library",
@@ -53,7 +54,7 @@ def test_live_verifier_checks_versioned_datasets(
         json.dumps(
             {
                 "version": "ocr-test-v1",
-                "endpoint": "/api/agents/log-summary",
+                "endpoint": "/agents/log-summary",
                 "samples": [
                     {
                         "id": "ocr_variant",
@@ -95,9 +96,12 @@ def test_live_verifier_checks_versioned_datasets(
         elif path == "/openapi.json":
             result = {
                 "info": {"version": "test"},
-                "paths": {f"/api/agents/{name}": {} for name in ("log-summary", "intent", "chat")},
+                "paths": {
+                    f"/agents/{name}": {}
+                    for name in ("log-summary", "intent", "intent/archive", "chat")
+                },
             }
-        elif path == "/api/agents/log-summary":
+        elif path == "/agents/log-summary":
             content = payload["content"]
             result = {
                 "title": "测试日志",
@@ -114,7 +118,7 @@ def test_live_verifier_checks_versioned_datasets(
                     pending_items=[],
                     issues=[],
                 )
-        elif path == "/api/agents/intent":
+        elif path == "/agents/intent":
             if payload.get("intents") and reject_custom:
                 return httpx.Response(422, json={"detail": [{"type": "too_long"}]})
             result = {
@@ -123,23 +127,10 @@ def test_live_verifier_checks_versioned_datasets(
                 "reason": "识别页面",
                 "needs_clarification": False,
             }
-        elif path == "/api/agents/chat":
+        elif path == "/agents/chat":
             result = {"reply": "青松", "model": "test"}
         else:
-            result = {
-                "goal": "检查发票",
-                "steps": [
-                    {
-                        "step": 1,
-                        "action": "检查",
-                        "responsible_role": "经理",
-                        "condition": "收到发票",
-                        "expected_output": "检查结果",
-                    }
-                ],
-                "assumptions": [],
-                "questions": [],
-            }
+            raise AssertionError(f"unexpected request path: {path}")
         return httpx.Response(200, json=result)
 
     client = httpx.Client(base_url="http://test", transport=httpx.MockTransport(respond))
@@ -170,6 +161,80 @@ def test_live_verifier_checks_versioned_datasets(
             assert rejected["expected_http_status"] == 422
             assert rejected["passed"] is reject_custom
     assert report["passed"] is (matched and log_matched and reject_custom)
+    if report["passed"]:
+        assert [item["name"] for item in report["checks"]] == [
+            "structured_log",
+            "text_log",
+            "provided_ocr_log",
+            "ocr_variant",
+            "test_image_library",
+            "test_reject_custom",
+            "chat",
+            "chat_with_history",
+        ]
+
+
+def test_live_verifier_records_readiness_failure(tmp_path, monkeypatch):
+    client = httpx.Client(
+        base_url="http://test",
+        transport=httpx.MockTransport(lambda request: httpx.Response(503)),
+    )
+    monkeypatch.setattr(verify_agents.httpx, "Client", lambda **kwargs: client)
+    monkeypatch.setattr(verify_agents, "ROOT", tmp_path)
+    with pytest.raises(httpx.HTTPStatusError):
+        verify_agents.main()
+    report = json.loads((tmp_path / "verification/agents-live-result.json").read_text())
+    assert report["checks"] == []
+    assert report["passed"] is False
+    assert report["error"].startswith("HTTPStatusError:")
+    assert client.is_closed
+
+
+@pytest.mark.parametrize(
+    "status,body,error",
+    [
+        (200, "not-json", json.JSONDecodeError),
+        (200, "{}", ValidationError),
+        (503, '{"detail":"unavailable"}', httpx.HTTPStatusError),
+    ],
+    ids=["not-json", "invalid-schema", "upstream-failure"],
+)
+def test_live_verifier_records_response_before_validation_failure(
+    tmp_path, monkeypatch, status, body, error
+):
+    def respond(request):
+        if request.url.path == "/ready":
+            return httpx.Response(200)
+        if request.url.path == "/openapi.json":
+            return httpx.Response(
+                200,
+                json={
+                    "info": {"version": "test"},
+                    "paths": {
+                        f"/agents/{name}": {}
+                        for name in ("log-summary", "intent", "intent/archive", "chat")
+                    },
+                },
+            )
+        return httpx.Response(status, text=body)
+
+    client = httpx.Client(base_url="http://test", transport=httpx.MockTransport(respond))
+    monkeypatch.setattr(verify_agents.httpx, "Client", lambda **kwargs: client)
+    monkeypatch.setattr(verify_agents, "ROOT", tmp_path)
+    with pytest.raises(error):
+        verify_agents.main()
+    report = json.loads((tmp_path / "verification/agents-live-result.json").read_text())
+    assert report["passed"] is False
+    assert len(report["checks"]) == 1
+    check = report["checks"][0]
+    assert check["name"] == "structured_log"
+    assert check["http_status"] == status
+    assert check["response"] == (body if body == "not-json" else json.loads(body))
+    assert check["request"]["user_id"] == "verification-user"
+    assert check["request"]["session_id"] == "verification-session"
+    assert check["request"]["content"]["date"] == "2026-10-17"
+    assert report["error"].startswith(error.__name__ + ":")
+    assert client.is_closed
 
 
 @pytest.mark.parametrize(
@@ -196,7 +261,7 @@ def test_live_verifier_checks_versioned_datasets(
     ],
 )
 def test_log_evaluation_rejects_unsupported_facts(changes, expected):
-    from app.schemas import LogSummary
+    from app.schemas.agents import LogSummary
 
     result = LogSummary.model_validate(
         {

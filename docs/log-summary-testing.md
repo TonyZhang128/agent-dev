@@ -1,6 +1,6 @@
 # 工程 OCR 日志描述测试说明
 
-接口为 `POST /api/agents/log-summary`，契约及示例见 [API 文档](agents-api.md#1-工作日志总结)。调用方将 OCR 识别对象放入 `content`，读取返回的 `summary` 作为当日日志片段。兼容既有文字及通用日志 JSON；请求新增必填 user_id、session_id，响应及 content 的4000字符限制不变，不接收 history。业务输入文件只保存用户提供的一条 OCR 原始对象；[固定输出接口](../interfaces/log_summary/README.md) 保存六个必填字段的 Schema、示例和对接说明。
+接口为 `POST /agents/log-summary`，契约及示例见 [API 文档](agents-api.md#1-工作日志总结)。调用方将 OCR 识别对象放入 `content`，读取返回的 `summary` 作为当日日志片段。兼容既有文字及通用日志 JSON；请求新增必填 user_id、session_id，响应及 content 的4000字符限制不变，不接收 history。业务输入文件只保存用户提供的一条 OCR 原始对象；[固定输出接口](../interfaces/log_summary/README.md) 保存六个必填字段的 Schema、示例和对接说明。
 
 ## 暂行验收规则
 
@@ -57,7 +57,7 @@ zsh scripts/dev/services.sh restart-api
 UV_CACHE_DIR="$PWD/.cache/uv" uv run --locked python -m scripts.common.verify_agents
 ```
 
-脚本验证用户提供的1条日志输入、测试目录中的全部11条日志回归、24条意图分类及4条非空候选拒绝请求、两个兼容日志、两个对话及一个业务规划，共45次业务调用。报告写入 Git 忽略的 `verification/agents-live-result.json`，包含 `log_summary_dataset_version`、`intent_dataset_version`、实际 `request` / `response`；用户输入检查名为 `provided_ocr_log`，含参考 `expected` 和 `passed`；回归集日志还包含事实约束 `acceptance`。任一数据集条目不匹配使脚本失败；格式错误或非预期 HTTP 错误会直接终止并记录失败；4条非法意图请求以 HTTP `422` 为通过标准。运行耗时取决于模型。
+脚本验证用户提供的1条日志输入、测试目录中的全部11条日志回归、24条意图分类及4条非空候选拒绝请求、两个兼容日志及两个对话，共44次业务调用。报告写入 Git 忽略的 `verification/agents-live-result.json`，包含 `log_summary_dataset_version`、`intent_dataset_version`、实际 `request` / `response`；用户输入检查名为 `provided_ocr_log`，含参考 `expected` 和 `passed`；回归集日志还包含事实约束 `acceptance`。任一数据集条目不匹配使脚本失败；格式错误或非预期 HTTP 错误会直接终止并记录失败；4条非法意图请求以 HTTP `422` 为通过标准。运行耗时取决于模型。
 
 自动检查只是必要约束，不是完整语义证明：数字出现不一定代表归属正确，禁止词不能覆盖所有虚构表述，通用日志目前仅自动检查日期及列表有无。还需人工逐项核对人员角色、指标对应值、单位、原表结论、日期、OCR 歧义及是否适合业务话术。有限样例通过不能保证任意表格正确；新增正式话术或表格时应先补版本化验收样例，再调整提示词。
 

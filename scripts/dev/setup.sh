@@ -26,7 +26,7 @@ zsh scripts/dev/services.sh start
 ready=0
 for attempt in {1..30}; do
   if curl --noproxy '*' -fsS --max-time 2 http://127.0.0.1:11434/api/version >/dev/null 2>&1 && \
-     curl --noproxy '*' -fsS --max-time 2 http://127.0.0.1:8000/health >/dev/null 2>&1; then
+     curl --noproxy '*' -fsS --max-time 2 http://127.0.0.1:8309/health >/dev/null 2>&1; then
     ready=1
     break
   fi
@@ -40,6 +40,6 @@ OLLAMA_HOST=127.0.0.1:11434 ollama pull qwen3.5:9b-q4_K_M
 OLLAMA_HOST=127.0.0.1:11434 ollama show qwen3.5:9b-q4_K_M
 
 print '5/5 实际模型推理 + FastAPI 验证'
-BUSINESS_API_URL="${BUSINESS_API_URL:-http://127.0.0.1:8000}" uv run --locked python -m scripts.dev.verify_live
+BUSINESS_API_URL="${BUSINESS_API_URL:-http://127.0.0.1:8309}" uv run --locked python -m scripts.dev.verify_live
 OLLAMA_HOST=127.0.0.1:11434 ollama ps
 print '完成。服务已运行。查看状态：zsh scripts/dev/services.sh status'

@@ -1,0 +1,41 @@
+{
+  "additionalProperties": false,
+  "description": "文件归档系统的意图识别结果；当前无聊天分流，理由始终简短。",
+  "properties": {
+    "intent": {
+      "enum": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "unknown"
+      ],
+      "title": "Intent",
+      "type": "string"
+    },
+    "confidence": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Confidence",
+      "type": "number"
+    },
+    "reason": {
+      "maxLength": 300,
+      "minLength": 1,
+      "title": "Reason",
+      "type": "string"
+    },
+    "needs_clarification": {
+      "title": "Needs Clarification",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "intent",
+    "confidence",
+    "reason",
+    "needs_clarification"
+  ],
+  "title": "ArchiveIntentResult",
+  "type": "object"
+}

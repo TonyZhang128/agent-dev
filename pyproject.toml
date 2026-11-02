@@ -1,7 +1,7 @@
 [project]
-name = "qwen-business-dev"
-version = "0.3.0"
-description = "基于 LangChain 的 Qwen 业务智能体 API"
+name = "highway-engineering-agent-layer"
+version = "0.1.0"
+description = "公路工程业务智能体层"
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "fastapi==0.136.3",
@@ -14,10 +14,19 @@ dependencies = [
   "langchain-openai==1.7.2",
   "langsmith==0.14.11",
   "httpx>=0.28.1,<1",
+  "pymupdf>=1.24,<2",
+  "openpyxl>=3.1,<4",
+  "opencv-python>=4.10,<5",
+  "numpy>=1.26,<3",
+  "rapidocr>=3.10,<4",
+  "onnxruntime>=1.18,<2",
+  "pillow>=10,<13",
 ]
 
 [tool.uv]
 package = false
+# rapidocr 声明 opencv-python-headless，但本项目统一使用 opencv-python；避免同时安装两份 cv2。
+exclude-dependencies = ["opencv-python-headless"]
 
 [tool.ruff]
 target-version = "py312"
@@ -36,6 +45,7 @@ asyncio_default_test_loop_scope = "function"
 
 [dependency-groups]
 dev = [
+    "debugpy>=1.8.22",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "ruff>=0.17.1",

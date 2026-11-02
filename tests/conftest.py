@@ -1,4 +1,4 @@
-"""Keep offline tests independent of the developer's model and tracing settings."""
+"""让离线测试不受开发者的模型和追踪配置影响。"""
 
 import os
 

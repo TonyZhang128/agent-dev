@@ -1,6 +1,6 @@
 {
   "description": "人工编写的虚构日志样例，含工程表单 OCR 及旧版通用日志；expected_response 为参考话术，acceptance 为真实模型自动验收约束，不是实际推理结果。",
-  "endpoint": "/api/agents/log-summary",
+  "endpoint": "/agents/log-summary",
   "samples": [
     {
       "id": "log_software_development",

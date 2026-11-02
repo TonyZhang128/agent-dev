@@ -2,6 +2,8 @@
 
 业务 API 与模型服务使用两个独立环境。业务项目由 uv 管理 Python 3.12 和锁定依赖；vLLM 由服务器管理员按 NVIDIA GPU、驱动和 CUDA 兼容性安装到单独环境。本仓库不自动安装系统驱动或为未知硬件选择 vLLM 版本。
 
+需要容器化部署时，使用 [Docker 生产部署](docker.md)（`Dockerfile`、`Dockerfile.vllm`、`compose.prod.yml`）；本文档描述直接在宿主机运行脚本的部署方式。
+
 ## 1. 准备业务 API
 
 在目标 Linux 检查 `uv --version`，缺少时按 [uv 官方安装说明](https://docs.astral.sh/uv/getting-started/installation/)准备工具，然后在仓库根目录执行：
@@ -14,23 +16,29 @@ bash scripts/prod/setup.sh
 
 ```dotenv
 LLM_BASE_URL=http://127.0.0.1:8001/v1
-LLM_MODEL=qwen-business
+LLM_MODEL=highway-agent
 LLM_API_KEY=your-server-key
 LLM_REASONING_EFFORT=
 ```
 
 其他变量与开发共用同一 `Settings`，见 README。进程变量优先于 `.env`。生产 API 入口会拒绝 Ollama 开发地址/模型和未修改的密钥占位符；请勿直接复制 Mac 的 `.env` 上线。
 
+可选云端回退沿用 `LLM_FALLBACK_*`，默认关闭；启用后本地模型调用失败会把本次业务输入发送到云端，是否启用按数据合规要求决定。
+
 ## 2. 准备独立模型服务
 
 先通过 `nvidia-smi` 确认设备及驱动可见。参考 [vLLM GPU 安装说明](https://docs.vllm.ai/en/latest/getting_started/installation/gpu/)和 [Qwen3.5 部署配方](https://github.com/vllm-project/recipes/blob/main/Qwen/Qwen3.5.md)，在业务项目之外安装适配目标 GPU 的固定版本，并准备兼容权重。显存、量化、上下文、张量并行参数需按服务器确定。
+
+Qwen3.5-9B 的 GGUF 权重可用仓库脚本在业务环境下载，不需要 GPU：`uv run --locked python -m scripts.models.download_qwen35_gguf`。它把 `.gguf` 与 `config.json`、tokenizer 组装到同一目录；GGUF 的 `VLLM_MODEL_PATH` 必须指向 `.gguf` 文件而不是目录，详见 [Docker 生产部署 · 准备权重](docker.md#2-准备权重)。
+
+业务 API 的 RapidOCR ONNX 模型同样可以预置：`uv run --locked python -m scripts.models.download_ocr_models --root <目录>`，再把 `OCR_MODEL_ROOT` 指向该目录。离线主机可先在有网环境下载后拷贝整个目录，用 `--check` 校验；不预置时首次真实识别才会联网下载。
 
 模型入口只读取进程变量，不会将业务 `.env` 当作 Shell 脚本加载：
 
 | 变量 | 要求 |
 | --- | --- |
 | `VLLM_BIN` | 必填，独立 vLLM 可执行文件的绝对路径，例如 `/opt/vllm/bin/vllm` |
-| `VLLM_MODEL_PATH` | 必填，本地模型目录或 Hugging Face 模型 ID |
+| `VLLM_MODEL_PATH` | 必填，本地模型目录、`.gguf` 文件或 Hugging Face 模型 ID；GGUF 必须指向文件 |
 | `VLLM_API_KEY` | 必填，由运行环境注入，与业务 `LLM_API_KEY` 一致 |
 | `CUDA_VISIBLE_DEVICES` | 可选，vLLM 原生变量，选择可见 GPU |
 
@@ -38,14 +46,14 @@ LLM_REASONING_EFFORT=
 
 ```bash
 export VLLM_BIN=/opt/vllm/bin/vllm
-export VLLM_MODEL_PATH=/srv/models/your-qwen-model
+export VLLM_MODEL_PATH=/srv/models/your-model
 # VLLM_API_KEY 由运行环境注入。
 bash scripts/prod/start-vllm.sh \
   --reasoning-parser qwen3 \
   --default-chat-template-kwargs '{"enable_thinking": false}'
 ```
 
-此 Qwen3.5 示例使用 [官方关闭思考配置](https://github.com/vllm-project/recipes/blob/main/Qwen/Qwen3.5.md#configuration-tips)，需匹配所安装 vLLM 版本。默认监听 `127.0.0.1:8001`、模型名称 `qwen-business`。额外 CLI 参数原样传递；修改端口或 `--served-model-name` 后必须同步修改业务 `.env`。不要使用 `--api-key` 传入真实密钥。
+此 Qwen3.5 示例使用 [官方关闭思考配置](https://github.com/vllm-project/recipes/blob/main/Qwen/Qwen3.5.md#configuration-tips)，需匹配所安装 vLLM 版本。默认监听 `127.0.0.1:8001`、模型名称 `highway-agent`。额外 CLI 参数原样传递；修改端口或 `--served-model-name` 后必须同步修改业务 `.env`。已有部署从旧模型名切换时，需重启模型服务并同步业务 `.env` 的 `LLM_MODEL`，否则 `/ready` 和推理会因模型名不匹配失败。不要使用 `--api-key` 传入真实密钥。
 
 ## 3. 启动及托管 API
 
@@ -53,14 +61,14 @@ bash scripts/prod/start-vllm.sh \
 bash scripts/prod/start-api.sh
 ```
 
-默认 `127.0.0.1:8000`，可追加 uvicorn 参数，例如 `--workers 2`。每个 worker 有独立模型客户端，先验证模型并发容量。生产入口禁止 `--reload`，启动时使用 `uv run --locked --no-sync --no-dev`。升级代码或 `.env` 后由服务管理器重启 API。
+默认 `127.0.0.1:8309`，可追加 uvicorn 参数，例如 `--workers 2`。每个 worker 有独立模型客户端，先验证模型并发容量。生产入口禁止 `--reload`，启动时使用 `uv run --locked --no-sync --no-dev`。升级代码或 `.env` 后由服务管理器重启 API。
 
 后台托管可采用 systemd。以下示例假定代码在 `/opt/agent-dev`、运行用户为 `qwen`、uv 位于 `/home/qwen/.local/bin`，安装前替换为服务器实际路径：
 
 ```ini
-# /etc/systemd/system/qwen-business-api.service
+# /etc/systemd/system/highway-agent-api.service
 [Unit]
-Description=Qwen business API
+Description=Highway engineering agent API
 After=network-online.target
 Wants=network-online.target
 
@@ -85,10 +93,10 @@ WantedBy=multi-user.target
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now qwen-business-api
-sudo systemctl restart qwen-business-api
-sudo systemctl status qwen-business-api
-journalctl -u qwen-business-api -n 100 --no-pager
+sudo systemctl enable --now highway-agent-api
+sudo systemctl restart highway-agent-api
+sudo systemctl status highway-agent-api
+journalctl -u highway-agent-api -n 100 --no-pager
 ```
 
 模型服务可晚于 API 就绪，`/health` 仍检查进程存活，`/ready` 返回模型可用状态。默认仅绑定回环地址；如 API 和模型分机部署，配置模型监听地址、网络访问限制及业务 `LLM_BASE_URL`，外部业务入口按部署平台配置鉴权和 TLS。
@@ -101,7 +109,7 @@ API 与模型均运行后，在拥有 NVIDIA 设备的部署主机执行：
 bash scripts/prod/verify.sh
 ```
 
-输出在 `verification/`：`agents-live-result.json`（日志、完整版本化意图评测集、对话及业务规划）、`live-result.json`（Agent 直调、ASGI、TCP）、`nvidia-smi.txt`（驱动/显存信息）。意图识别固定五类及成功标准见 [测试说明](intent-testing.md)。验证不会调用 Ollama。硬件可见不等于模型已使用 GPU，结合 `nvidia-smi` 进程显存及 vLLM 日志确认实际分配。
+输出在 `verification/`：`agents-live-result.json`（日志、完整版本化意图评测集及对话）、`live-result.json`（Agent 直调、ASGI、TCP）、`nvidia-smi.txt`（驱动/显存信息）。意图识别固定五类及成功标准见 [测试说明](intent-testing.md)。验证不会调用 Ollama。硬件可见不等于模型已使用 GPU，结合 `nvidia-smi` 进程显存及 vLLM 日志确认实际分配。
 
 API 主机没有 GPU 时，在该主机执行通用业务验收：
 
