@@ -4,7 +4,7 @@ import time
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Annotated
+from  typing import Annotated
 
 import cv2
 import pymupdf
