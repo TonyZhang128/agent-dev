@@ -4,21 +4,26 @@ import time
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from  typing import Annotated
+from typing import Annotated
 
 import cv2
 import pymupdf
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 
-from app.ocr import daily_logs, deps, form_ocr, grid, jianbiao
-from app.ocr.resources import (
+from app.ocr import daily_logs
+from app.ocr.core import deps
+from app.ocr.core.resources import (
     OCRModelError,
     OCRResourceError,
     OCRResources,
     forms,
     use_resources,
 )
+from app.ocr.form import form_ocr
+from app.ocr.jianbiao.fill import compute
+from app.ocr.jianbiao.recognize import run
+from app.ocr.sheets import grid
 from app.schemas.ocr import DailyLogsReq, FillReq, JianbiaoReq, RecognizeReq
 
 router = APIRouter(tags=["ocr"])
@@ -113,7 +118,7 @@ def jianbiao_fill(req: JianbiaoReq, request: Request):
             raise HTTPException(400, "照片必须为数据池内的文件")
         output = project_path(resources, req.out, output=True) if req.out else None
         started = time.monotonic()
-        result = jianbiao.run(path, req.form.strip(), req.cfg, req.bound, output)
+        result = run(path, req.form.strip(), req.cfg, req.bound, output)
         result["ms"] = round((time.monotonic() - started) * 1000)
         return {"status": 200, "data": relative_outputs(result, resources)}
 
@@ -122,7 +127,7 @@ def jianbiao_fill(req: JianbiaoReq, request: Request):
 def fill(req: FillReq, request: Request):
     with document_resources(request) as resources:
         output = project_path(resources, req.out, output=True) if req.out else None
-        result = jianbiao.compute(req.form.strip(), req.cfg, req.values, output, req.rects)
+        result = compute(req.form.strip(), req.cfg, req.values, output, req.rects)
         return {"status": 200, "data": relative_outputs(result, resources)}
 
 

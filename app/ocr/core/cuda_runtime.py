@@ -10,7 +10,7 @@ Settings.ocr_cuda_root（默认 .cache/cuda，Git 已忽略）后，首次创建
 import os
 from pathlib import Path
 
-from app.ocr.resources import OCRModelError, OCRResources
+from app.ocr.core.resources import OCRModelError, OCRResources
 
 CUDA_UNAVAILABLE = (
     "OCR 固定使用 CUDA 推理，但 CUDA 不可用：请安装 CUDA 12 与 cuDNN 9，"

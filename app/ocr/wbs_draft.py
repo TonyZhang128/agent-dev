@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pymupdf
 
-from app.ocr.resources import OCRResourceError, get_resources
+from app.ocr.core.resources import OCRResourceError, get_resources
 
 
 def rules() -> dict:

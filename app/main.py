@@ -11,7 +11,7 @@ from app.api.router import api_router
 from app.config import Settings
 from app.http_errors import register_exception_handlers
 from app.llm import ModelService
-from app.ocr.resources import OCRResources
+from app.ocr.core.resources import OCRResources
 
 
 def create_app(service: ModelService | None = None, *, settings: Settings | None = None) -> FastAPI:

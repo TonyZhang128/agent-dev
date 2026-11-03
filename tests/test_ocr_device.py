@@ -5,12 +5,13 @@ from pathlib import Path
 import pytest
 
 from app.config import Settings
-from app.ocr import cuda_runtime, form_ocr
-from app.ocr.resources import OCRModelError, OCRResources, use_resources
+from app.ocr.core import cuda_runtime
+from app.ocr.core import engine as ocr_engine
+from app.ocr.core.resources import OCRModelError, OCRResources, use_resources
 
 
 def test_rapidocr_params_always_enable_cuda_ep():
-    params = form_ocr.rapidocr_params(Path("models"))
+    params = ocr_engine.rapidocr_params(Path("models"))
     assert params["Global.model_root_dir"] == "models"
     assert params["EngineConfig.onnxruntime.use_cuda"] is True
     assert params["EngineConfig.onnxruntime.cuda_ep_cfg"]["device_id"] == 0
@@ -57,7 +58,7 @@ def test_engine_always_requests_cuda(monkeypatch):
 
     monkeypatch.setattr(rapidocr, "RapidOCR", FakeRapidOCR)
     with use_resources(OCRResources(settings)):
-        form_ocr.engine()
+        ocr_engine.engine()
 
     assert captured["EngineConfig.onnxruntime.use_cuda"] is True
 
@@ -88,4 +89,4 @@ def test_engine_raises_when_cuda_runtime_unusable(monkeypatch):
 
     with use_resources(OCRResources(settings)):
         with pytest.raises(OCRModelError):
-            form_ocr.engine()
+            ocr_engine.engine()

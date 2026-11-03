@@ -213,7 +213,7 @@ app/
     system.py             # /health、/ready：存活与模型就绪检查
     ocr.py                # /health/deps、/ocr：识别、监理日志、简表、填表与表样
     wbs.py                # /wbs/draft：施工图划分初稿
-  ocr/                    # 文档加工业务：资源隔离、识别、公式、PDF/Excel、WBS
+  ocr/                    # 文档加工业务（core 原语与资源 / form 照片模板对齐识别 / sheets 表样格子与 Excel / jianbiao 简表识别与公式填表 / daily_logs 监理日志 / wbs_draft 划分初稿）
   http_errors.py          # 输入与模型异常的统一 HTTP 映射、校验详情脱敏
   config.py               # .env 配置与默认值
   schemas/                # 请求、响应的 Pydantic 模型和校验

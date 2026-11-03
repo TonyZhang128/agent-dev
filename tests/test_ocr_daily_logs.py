@@ -166,12 +166,12 @@ def test_daily_log_warp_anchors_table_frame_to_known_page_rectangle():
     table = np.array([[0, 0], [100, 0], [100, 111.4], [0, 111.4]], np.float32)
     height = round(daily_logs.W * daily_logs.PAGE_ASPECT)
 
-    page_destination = daily_logs._destination(page, "contour")
+    page_destination, _size = daily_logs._destination(page, "contour")
     assert page_destination[0].tolist() == [0.0, 0.0]
     assert page_destination[2].tolist() == [daily_logs.W, height]
 
     x0, y0, x1, y1 = daily_logs.TABLE
-    table_destination = daily_logs._destination(table, "contour")
+    table_destination, _ = daily_logs._destination(table, "contour")
     assert table_destination[0].tolist() == pytest.approx([x0 * daily_logs.W, y0 * height])
     assert table_destination[2].tolist() == pytest.approx([x1 * daily_logs.W, y1 * height])
 
