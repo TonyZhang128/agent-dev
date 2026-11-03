@@ -62,6 +62,7 @@ def test_enable_local_cuda_registers_bin_directories(tmp_path, monkeypatch):
     assert head[:2] == [str(tmp_path / "cudnn" / "bin"), str(tmp_path / "libcublas" / "bin")]
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="DLL 搜索路径注册是 Windows 免安装 redist 方案")
 def test_enable_local_cuda_without_libs_is_noop(tmp_path, monkeypatch):
     monkeypatch.setattr(cuda_runtime.os, "add_dll_directory", lambda p: None)
     assert cuda_runtime.enable_local_cuda(tmp_path) == []
