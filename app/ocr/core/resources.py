@@ -27,6 +27,7 @@ class OCRResources:
         self.assets = settings.asset_root
         self.projects = settings.projects_root
         self.models = settings.ocr_model_root
+        self.device = settings.ocr_device
         self.cuda_root = settings.ocr_cuda_root
         self.engine: Any = None
         self.lock = threading.Lock()

@@ -14,7 +14,7 @@ uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 8309
 
 继续使用原有 Mac/Linux 服务脚本和 VS Code `Debug API (launch)` 即可。无需启动第二套 docsvc，也不安装其旧 `requirements.txt`。运行依赖统一由 `pyproject.toml` 的 `dependencies` 和 `uv.lock` 管理：PyMuPDF、openpyxl、OpenCV、NumPy、RapidOCR、onnxruntime-gpu、Pillow。Pillow 被造样图脚本直接使用，因此显式声明。保留现有 FastAPI/Uvicorn/Pydantic/LangChain 版本。
 
-未引入原 requirements 中没有调用代码的 `python-multipart`、预留统计学习依赖 `scikit-learn`，以及仅用于另建训练环境的 `ultralytics`/PyTorch。演示上传脚本使用标准库构造 multipart，服务端接口仍接收 JSON 路径。文字识别使用 RapidOCR 3.x，按识别质量优先选用 PP-OCRv6 Medium（检测与识别）+ PP-OCRv5 Server（方向分类）；这些模型不在安装包内。开发环境首次真实识别时从 ModelScope 自动下载到 `OCR_MODEL_ROOT`（该目录必须可写）；离线或容器部署先用 `uv run --locked python -m scripts.models.download_ocr_models --root <目录>` 预置，再通过 `OCR_MODEL_DIR` 只读挂载，避免运行时联网。OCR 固定使用 CUDA GPU，运行主机需提供 CUDA 12 + cuDNN 9。本项目统一使用 `opencv-python` 和 `onnxruntime-gpu`，`uv` 通过 `exclude-dependencies` 忽略 `rapidocr` 声明的 `opencv-python-headless` 与 CPU `onnxruntime`，避免同时安装两份 `cv2` 或 CPU/GPU 两种 ONNX Runtime 发行包。Linux 极简系统若导入 OpenCV 提示缺少 `libGL.so.1`，需由部署环境提供对应系统库。
+未引入原 requirements 中没有调用代码的 `python-multipart`、预留统计学习依赖 `scikit-learn`，以及仅用于另建训练环境的 `ultralytics`/PyTorch。演示上传脚本使用标准库构造 multipart，服务端接口仍接收 JSON 路径。文字识别使用 RapidOCR 3.x，按识别质量优先选用 PP-OCRv6 Medium（检测与识别）+ PP-OCRv5 Server（方向分类）；这些模型不在安装包内。开发环境首次真实识别时从 ModelScope 自动下载到 `OCR_MODEL_ROOT`（该目录必须可写）；离线或容器部署先用 `uv run --locked python -m scripts.models.download_ocr_models --root <目录>` 预置，再通过 `OCR_MODEL_DIR` 只读挂载，避免运行时联网。推理设备由 `OCR_DEVICE` 切换：cuda（默认，主机需 CUDA 12 + cuDNN 9）或 cpu（无 NVIDIA GPU 的环境，如 Mac 开发）；两种模式共用同一套 ONNX 模型，cpu 模式不检查 CUDA。本项目统一使用 `opencv-python` 和 `onnxruntime-gpu`，`uv` 通过 `exclude-dependencies` 忽略 `rapidocr` 声明的 `opencv-python-headless` 与 CPU `onnxruntime`，避免同时安装两份 `cv2` 或 CPU/GPU 两种 ONNX Runtime 发行包。Linux 极简系统若导入 OpenCV 提示缺少 `libGL.so.1`，需由部署环境提供对应系统库。
 
 ## 路径配置
 
@@ -27,13 +27,21 @@ uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 8309
 | `ASSET_ROOT` | `data/ocr/assets` | 规范 PDF/Excel；兼容 `library/pdf_dirs.json` 目录改名 |
 | `PROJECTS_ROOT` | `data/ocr/projects` | 与 Java 共用的业务数据池，读写边界 |
 | `OCR_MODEL_ROOT` | `.cache/models/ocr` | RapidOCR 模型缓存，开发环境可写自动下载；离线部署用下载脚本预置后只读挂载 |
-| `OCR_CUDA_ROOT` | `.cache/cuda` | Windows 项目本地 CUDA 运行库目录（Git 已忽略），见下文「GPU 推理」 |
+| `OCR_DEVICE` | `cuda` | 推理设备：`cuda`（默认）或 `cpu`（无 NVIDIA GPU 的环境，如 Mac 开发），见下文「推理设备」 |
+| `OCR_CUDA_ROOT` | `.cache/cuda` | Windows 项目本地 CUDA 运行库目录（Git 已忽略），仅 cuda 模式使用，见下文「推理设备」 |
 
-### GPU 推理
+### 推理设备
 
-OCR 固定通过 onnxruntime-gpu 的 CUDA EP 推理，不提供 CPU 模式。
-onnxruntime-gpu 不附带 CUDA/cuDNN 动态库，首次创建引擎时会验证 CUDA
-真实可用：不可用直接返回 503，不会静默退回 CPU。
+`OCR_DEVICE` 切换 onnxruntime 执行设备，两种模式共用同一套 ONNX 模型：
+
+- `cuda`（默认）：通过 onnxruntime-gpu 的 CUDA EP 推理。onnxruntime-gpu 不附带
+  CUDA/cuDNN 动态库，首次创建引擎时会验证 CUDA 真实可用：不可用直接返回 503，
+  不会静默退回 CPU。
+- `cpu`：供无 NVIDIA GPU 的环境使用（如 Mac 开发）。不检查 CUDA 运行库，
+  直接 CPU 推理。
+
+`GET /health/deps` 的「推理设备」除编译进 onnxruntime 的 provider 列表外，还带
+`configured` 字段显示当前配置的设备。
 
 - Linux：由系统 CUDA 12 + cuDNN 9 环境提供动态库（`LD_LIBRARY_PATH`）。
 - Windows 免安装方案：从 NVIDIA redist 索引下载以下 `windows-x86_64-archive.zip`

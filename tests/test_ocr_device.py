@@ -1,8 +1,9 @@
-"""OCR 固定使用 CUDA：运行库不可用时应失败，不得静默回退 CPU。"""
+"""OCR 推理设备可配置：cuda(默认,校验运行库)或 cpu(Mac 等无 NVIDIA GPU 环境)。"""
 
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from app.config import Settings
 from app.ocr.core import cuda_runtime
@@ -10,11 +11,36 @@ from app.ocr.core import engine as ocr_engine
 from app.ocr.core.resources import OCRModelError, OCRResources, use_resources
 
 
-def test_rapidocr_params_always_enable_cuda_ep():
+def test_rapidocr_params_enable_cuda_ep_by_default():
     params = ocr_engine.rapidocr_params(Path("models"))
     assert params["Global.model_root_dir"] == "models"
     assert params["EngineConfig.onnxruntime.use_cuda"] is True
     assert params["EngineConfig.onnxruntime.cuda_ep_cfg"]["device_id"] == 0
+
+
+def test_rapidocr_params_cpu_mode_disables_cuda_ep():
+    params = ocr_engine.rapidocr_params(Path("models"), use_cuda=False)
+    assert params["Global.model_root_dir"] == "models"
+    assert params["EngineConfig.onnxruntime.use_cuda"] is False
+    assert "EngineConfig.onnxruntime.cuda_ep_cfg" not in params
+
+
+def test_settings_ocr_device_defaults_to_cuda():
+    assert Settings(_env_file=None).ocr_device == "cuda"
+
+
+def test_settings_ocr_device_accepts_cpu():
+    assert Settings(_env_file=None, ocr_device="cpu").ocr_device == "cpu"
+
+
+def test_settings_ocr_device_rejects_unknown_value():
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, ocr_device="metal")
+
+
+def test_resources_expose_configured_device():
+    resources = OCRResources(Settings(_env_file=None, ocr_device="cpu"))
+    assert resources.device == "cpu"
 
 
 def test_enable_local_cuda_registers_bin_directories(tmp_path, monkeypatch):
@@ -45,7 +71,7 @@ def test_resources_resolve_cuda_root():
     assert resources.cuda_root.is_absolute()
 
 
-def test_engine_always_requests_cuda(monkeypatch):
+def test_engine_requests_cuda_in_default_mode(monkeypatch):
     import rapidocr
 
     settings = Settings(_env_file=None)
@@ -61,6 +87,29 @@ def test_engine_always_requests_cuda(monkeypatch):
         ocr_engine.engine()
 
     assert captured["EngineConfig.onnxruntime.use_cuda"] is True
+
+
+def test_engine_cpu_mode_skips_cuda_runtime(monkeypatch):
+    import rapidocr
+
+    settings = Settings(_env_file=None, ocr_device="cpu")
+
+    def reject_cuda(resources):
+        raise AssertionError("cpu 模式不得校验 CUDA 运行库")
+
+    monkeypatch.setattr(cuda_runtime, "ensure_cuda_runtime", reject_cuda)
+    captured = {}
+
+    class FakeRapidOCR:
+        def __init__(self, **kwargs):
+            captured.update(kwargs["params"])
+
+    monkeypatch.setattr(rapidocr, "RapidOCR", FakeRapidOCR)
+    with use_resources(OCRResources(settings)):
+        ocr_engine.engine()
+
+    assert captured["EngineConfig.onnxruntime.use_cuda"] is False
+    assert "EngineConfig.onnxruntime.cuda_ep_cfg" not in captured
 
 
 def test_ensure_cuda_runtime_rejects_missing_cuda_ep(monkeypatch, tmp_path):

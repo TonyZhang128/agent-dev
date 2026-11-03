@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -34,7 +35,9 @@ class Settings(BaseSettings):
     asset_root: Path = ROOT / "data/ocr/assets"
     projects_root: Path = ROOT / "data/ocr/projects"
     ocr_model_root: Path = ROOT / ".cache/models/ocr"
-    # 项目本地 CUDA 运行库（NVIDIA redist 解压目录，Git 已忽略）；Windows 免系统安装。
+    # OCR 推理设备：cuda（默认，需 CUDA 12 + cuDNN 9，不可用返回 503）或 cpu（无 NVIDIA GPU 的环境，如 Mac 开发）。
+    ocr_device: Literal["cuda", "cpu"] = "cuda"
+    # 项目本地 CUDA 运行库（NVIDIA redist 解压目录，Git 已忽略）；Windows 免系统安装。仅 cuda 模式使用。
     ocr_cuda_root: Path = ROOT / ".cache/cuda"
 
     @field_validator(
