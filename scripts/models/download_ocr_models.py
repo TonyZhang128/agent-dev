@@ -1,6 +1,6 @@
 """下载 RapidOCR 的 ONNX 模型，供离线部署只读挂载。
 
-模型组合与运行时 `app.ocr.form_ocr.rapidocr_params()` 一致：
+模型组合与运行时 `app.ocr.core.engine.rapidocr_params()` 一致：
 PP-OCRv6 Medium 做检测与识别，PP-OCRv5 Server 做方向分类。
 文件默认写入仓库 `.cache/models/ocr/`（Git 忽略，不进镜像），再由 Compose
 只读挂载到容器的 `/app/data/ocr/models`；不联网的部署在构建前先在有网环境执行。
@@ -20,7 +20,7 @@ from rapidocr import download_models
 from rapidocr.inference_engine.base import FileInfo, InferSession
 from rapidocr.utils.typings import EngineType, ModelType, OCRVersion, TaskType
 
-from app.ocr.form_ocr import rapidocr_params
+from app.ocr.core.engine import rapidocr_params
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ROOT = ROOT / ".cache" / "models" / "ocr"
@@ -32,7 +32,7 @@ def runtime_models() -> dict[str, dict[str, str]]:
     params = rapidocr_params(Path("."))
     return {
         section: {
-            # 运行时依赖只安装 onnxruntime，与 rapidocr 默认引擎一致。
+            # 推理引擎与运行时一致：onnxruntime（GPU 版包名为 onnxruntime-gpu，模块名不变）。
             "engine_type": EngineType.ONNXRUNTIME.value,
             "task_type": section.lower(),
             "lang_type": "ch",

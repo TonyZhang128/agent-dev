@@ -7,8 +7,8 @@
 
 import re
 
-from app.ocr.labels import B1, JB, r3
-from app.ocr.resources import forms
+from app.ocr.core.resources import forms
+from app.ocr.form.labels import B1, JB, r3
 from scripts.ocr.common import TEMPLATES, asset, page_items, today, write_json
 
 

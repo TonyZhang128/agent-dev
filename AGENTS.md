@@ -32,7 +32,7 @@
 | `app/prompts/<name>.md` | 系统提示词，使用 `load_prompt()` 加载；可按能力分子目录，如 `intent/business.md` |
 | `app/config.py` | `Settings`、配置默认值及配置校验 |
 | `app/llm.py` | `ChatOpenAI` 工厂、HTTP 客户端及模型列表就绪检查；不放业务规则 |
-| `app/ocr/` | 从 docsvc 迁入的照片/简表识别、公式/引用、PDF/Excel 填表、WBS；不得反向导入 scripts 或 FastAPI |
+| `app/ocr/` | 从 docsvc 迁入的文档加工,按业务分子包:`core/`(资源隔离、CUDA 运行库、依赖自检、OCR 引擎、图像/PDF 原语、扫线、按配置格子的照片识别链 sheet_scan、版面元数据 layouts)、`form/`(现场照片模板对齐识别、栏目正则)、`sheets/`(表样格子提取与 Excel 写出)、`jianbiao/`(简表版面与识别编排、公式/引用填表)、`daily_logs.py`(监理日志)、`wbs_draft.py`(划分初稿);不得反向导入 scripts 或 FastAPI |
 | `app/api/ocr.py`、`app/api/wbs.py` | 文档加工入口、数据池路径限制和文档异常 HTTP 映射；原 `/health` 优先 |
 | `scripts/ocr/` | 模板生成、PDF/Excel 检查和演示工具，使用主项目 Python 3.12 环境 |
 | `app/errors.py`、`app/http_errors.py` | 前者定义非 HTTP 业务/模型异常，后者负责统一 HTTP 映射及错误脱敏 |
