@@ -1,5 +1,6 @@
 """OCR 推理设备可配置：cuda(默认,校验运行库)或 cpu(Mac 等无 NVIDIA GPU 环境)。"""
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -43,6 +44,7 @@ def test_resources_expose_configured_device():
     assert resources.device == "cpu"
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="DLL 搜索路径注册是 Windows 免安装 redist 方案")
 def test_enable_local_cuda_registers_bin_directories(tmp_path, monkeypatch):
     added = []
     monkeypatch.setattr(cuda_runtime.os, "add_dll_directory", added.append)
@@ -112,6 +114,7 @@ def test_engine_cpu_mode_skips_cuda_runtime(monkeypatch):
     assert "EngineConfig.onnxruntime.cuda_ep_cfg" not in captured
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="CUDA EP 校验依赖 Windows 本机 redist 运行库")
 def test_ensure_cuda_runtime_rejects_missing_cuda_ep(monkeypatch, tmp_path):
     import onnxruntime as ort
 
