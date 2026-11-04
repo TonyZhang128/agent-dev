@@ -42,31 +42,31 @@ def models_for(respond, **settings):
 
 
 @pytest.mark.asyncio
-async def test_concurrent_fixed_intent_requests_are_isolated():
+async def test_concurrent_business_intent_requests_are_isolated():
     cases = {
-        "打开工作列表": "work_list",
-        "填写监理日志": "supervision_log",
-        "打开图片库": "image_library",
-        "进入业务管理": "business_management",
-        "你好": "chat",
-        "谢谢": "chat",
+        "填写监理日志": ("supervision_diary", "fill_supervision_log"),
+        "查看今天任务": ("workbench", "view_today_tasks"),
+        "打开图片库": ("image_library", "view_image_library"),
+        "查看分部分项划分": ("business_management", "view_wbs"),
+        "识别照片": ("recognition_platform", "recognize_photo"),
+        "删除图片": ("image_library", "delete_image"),
     }
 
     def respond(request):
         body = json.loads(request.content)
         assert len(body["messages"]) == 2
-        if "response_format" not in body:
-            return completion({"content": "回答：" + body["messages"][-1]["content"]})
+        assert "response_format" in body
         content = json.loads(body["messages"][-1]["content"])
-        assert [item["label"] for item in content["intents"]] == list(dict.fromkeys(cases.values()))
-        label = cases[content["text"]]
+        page, action = cases[content["text"]]
         return completion(
             {
                 "content": json.dumps(
                     {
-                        "intent": label,
+                        "kind": "navigate",
+                        "page": page,
+                        "action": action,
                         "confidence": 0.95,
-                        "reason": "符合候选描述",
+                        "reason": "符合目录描述",
                         "needs_clarification": False,
                     }
                 )
@@ -81,12 +81,12 @@ async def test_concurrent_fixed_intent_requests_are_isolated():
         ) as client:
 
             async def classify(text):
-                payload = {"text": text, "intents": []}
-                response = await client.post("/agents/intent", json=request_payload(payload))
+                payload = {"message": text, "current_page": "workbench"}
+                response = await client.post(
+                    "/agents/intent/business", json=request_payload(payload)
+                )
                 assert response.status_code == 200
-                if cases[text] == "chat":
-                    assert response.json()["reason"] == "回答：" + text
-                return response.json()["intent"]
+                return response.json()["page"], response.json()["action"]
 
             assert await asyncio.gather(*(classify(text) for text in cases)) == list(cases.values())
     assert service.http_client.is_closed

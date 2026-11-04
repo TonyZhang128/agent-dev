@@ -5,17 +5,29 @@ from typing import Annotated, Literal
 
 from pydantic import Field, JsonValue, StringConstraints, model_validator
 
-from app.schemas.base import ConversationRequest, RequestContext, StrictModel
+from app.schemas.base import (
+    ChatMessage,
+    ConversationRequest,
+    Identifier,
+    RequestContext,
+    StrictModel,
+)
+from app.schemas.intent_catalog_generated import (
+    PAGE_BY_ACTION,
+    BusinessActionLabel,
+    BusinessPageLabel,
+)
 
 ShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
-IntentLabel = Literal[
-    "work_list", "supervision_log", "image_library", "business_management", "chat", "unknown"
-]
 ArchiveIntentLabel = Literal["A", "B", "C", "D", "unknown"]
 Description = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 SummaryItem = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
 IntentReason = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)
+]
+MessageText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+CatalogVersion = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)
 ]
 
 
@@ -77,31 +89,138 @@ class IntentDefinition(StrictModel):
 
 
 class IntentRequest(ConversationRequest):
-    text: ShortText = Field(description="待识别的页面导航或一般交流内容")
+    text: ShortText = Field(description="待识别的归档业务内容")
     intents: list[JsonValue] = Field(
         default_factory=list,
         max_length=0,
-        description="仅为兼容保留，必须省略或为[]；不支持自定义分类，始终使用固定五类意图",
+        description="仅为兼容保留，必须省略或为[]；不支持调用方自定义分类",
     )
 
 
-class IntentResult(StrictModel):
-    intent: IntentLabel
-    confidence: float = Field(ge=0, le=1)
-    reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
-    needs_clarification: bool
+class BusinessNavigationContext(StrictModel):
+    """调用方最近一次返回过的导航目标；只作为纠错上下文。"""
+
+    page: BusinessPageLabel
+    action: BusinessActionLabel | None = None
 
     @model_validator(mode="after")
-    def validate_reason_length(self) -> "IntentResult":
-        if self.intent != "chat" and len(self.reason) > 300:
-            raise ValueError("non-chat reason must not exceed 300 characters")
+    def validate_action_belongs_to_page(self) -> "BusinessNavigationContext":
+        if self.action is not None and PAGE_BY_ACTION.get(self.action) != self.page:
+            raise ValueError("action does not belong to page")
         return self
 
 
-class IntentClassification(IntentResult):
-    """意图分类器的内部输出；聊天回答由另一次调用生成。"""
+class PendingClarification(StrictModel):
+    """调用方保存的一级意图澄清状态；attempts 是已完成的澄清轮数。"""
 
+    page: BusinessPageLabel
+    attempts: int = Field(ge=0, le=10)
+
+
+class BusinessIntentRequest(ConversationRequest):
+    """无状态业务意图请求；会话上下文由调用方传入。"""
+
+    history: list[ChatMessage] = Field(
+        default_factory=list,
+        description="当前用户当前会话的完整历史，首轮为[]；可省略",
+    )
+    message: ShortText
+    current_page: BusinessPageLabel = Field(description="调用方当前实际页面编码")
+    last_navigation: BusinessNavigationContext | None = None
+    pending_clarification: PendingClarification | None = None
+    request_id: Identifier | None = Field(
+        default=None,
+        description="调用方幂等标识；本服务不持久化，仅供调用方关联",
+    )
+
+
+class BusinessIntentOption(StrictModel):
+    """澄清时可选的合法二级功能。"""
+
+    page: BusinessPageLabel
+    action: BusinessActionLabel
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+
+    @model_validator(mode="after")
+    def validate_action_belongs_to_page(self) -> "BusinessIntentOption":
+        if PAGE_BY_ACTION.get(self.action) != self.page:
+            raise ValueError("action does not belong to page")
+        return self
+
+
+class BusinessIntentClassification(StrictModel):
+    """业务意图分类器的内部输出；最终状态由服务端归一。"""
+
+    kind: Literal["navigate", "chat", "unknown"]
+    page: BusinessPageLabel | None = None
+    action: BusinessActionLabel | None = None
+    confidence: float = Field(ge=0, le=1)
     reason: IntentReason
+    needs_clarification: bool = False
+
+    @model_validator(mode="after")
+    def validate_hierarchy(self) -> "BusinessIntentClassification":
+        if self.kind != "navigate":
+            if self.page is not None or self.action is not None:
+                raise ValueError("only navigate may carry page or action")
+            return self
+        if self.page is None:
+            raise ValueError("navigate requires page")
+        if self.action is not None and PAGE_BY_ACTION.get(self.action) != self.page:
+            raise ValueError("action does not belong to page")
+        return self
+
+
+class BusinessIntentResult(StrictModel):
+    """业务意图识别响应；status 区分跳转、澄清、聊天和未知。"""
+
+    status: Literal["resolved", "clarify", "chat", "unknown"]
+    page: BusinessPageLabel | None
+    action: BusinessActionLabel | None
+    confidence: float = Field(ge=0, le=1)
+    message: MessageText | None
+    options: list[BusinessIntentOption] | None = Field(max_length=20)
+    catalog_version: CatalogVersion
+
+    @model_validator(mode="after")
+    def validate_status_shape(self) -> "BusinessIntentResult":
+        if self.status == "resolved":
+            if self.page is None or self.action is None:
+                raise ValueError("resolved requires page and action")
+            if PAGE_BY_ACTION.get(self.action) != self.page:
+                raise ValueError("action does not belong to page")
+            if self.message is not None or self.options is not None:
+                raise ValueError("resolved must not carry message or options")
+            return self
+        if self.status == "clarify":
+            if self.page is None or self.action is not None:
+                raise ValueError("clarify requires page without action")
+            if self.message is None:
+                raise ValueError("clarify requires a message")
+            if not self.options or any(option.page != self.page for option in self.options):
+                raise ValueError("clarify options must belong to page")
+            return self
+        if self.page is not None or self.action is not None:
+            raise ValueError(f"{self.status} must not carry page or action")
+        if self.message is None:
+            raise ValueError(f"{self.status} requires a message")
+        if self.options is not None:
+            raise ValueError(f"{self.status} must not carry options")
+        return self
+
+
+class ClarifyRequest(ConversationRequest):
+    """Chat 澄清模式的内部请求；候选由服务端目录生成。"""
+
+    message: ShortText
+    page: BusinessPageLabel
+    options: list[BusinessIntentOption] = Field(min_length=1, max_length=20)
+
+    @model_validator(mode="after")
+    def validate_options_belong_to_page(self) -> "ClarifyRequest":
+        if any(option.page != self.page for option in self.options):
+            raise ValueError("clarify options must belong to page")
+        return self
 
 
 class ArchiveIntentResult(StrictModel):

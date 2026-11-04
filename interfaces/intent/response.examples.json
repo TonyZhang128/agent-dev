@@ -1,77 +1,124 @@
 [
   {
-    "name": "work_list",
+    "name": "填写监理日志",
     "request": {
-      "user_id": "test-user",
-      "session_id": "test-session",
-      "history": [],
-      "text": "我今天有哪些待办任务"
+      "user_id": "example-user",
+      "session_id": "example-session",
+      "message": "我要填写今天的监理日志。",
+      "current_page": "workbench",
+      "history": []
     },
     "response": {
-      "intent": "work_list",
+      "status": "resolved",
+      "page": "supervision_diary",
+      "action": "fill_supervision_log",
       "confidence": 0.95,
-      "reason": "用户希望查看工作列表中的待办任务。",
-      "needs_clarification": false
+      "message": null,
+      "options": null,
+      "catalog_version": "b158b448e3cf4d0a"
     }
   },
   {
-    "name": "supervision_log",
+    "name": "进入监理日记",
     "request": {
-      "user_id": "test-user",
-      "session_id": "test-session",
-      "history": [],
-      "text": "我要填写今天的监理日志"
+      "user_id": "example-user",
+      "session_id": "example-session",
+      "message": "我要进入监理日记。",
+      "current_page": "workbench",
+      "history": []
     },
     "response": {
-      "intent": "supervision_log",
-      "confidence": 0.96,
-      "reason": "用户明确要求进入监理日志页面填写日志。",
-      "needs_clarification": false
+      "status": "clarify",
+      "page": "supervision_diary",
+      "action": null,
+      "confidence": 0.9,
+      "message": "你想填写监理日志、查看监理日志，还是执行其他监理日记相关操作？",
+      "options": [
+        {
+          "page": "supervision_diary",
+          "action": "fill_supervision_log",
+          "name": "填写监理日志"
+        },
+        {
+          "page": "supervision_diary",
+          "action": "fill_monthly_report",
+          "name": "填写监理月报"
+        },
+        {
+          "page": "supervision_diary",
+          "action": "assign_monthly_report",
+          "name": "监理月报分配"
+        },
+        {
+          "page": "supervision_diary",
+          "action": "view_supervision_log",
+          "name": "查看监理日志"
+        },
+        {
+          "page": "supervision_diary",
+          "action": "fill_inspection_record",
+          "name": "填写巡视记录"
+        },
+        {
+          "page": "supervision_diary",
+          "action": "fill_standby_record",
+          "name": "填写旁站记录"
+        },
+        {
+          "page": "supervision_diary",
+          "action": "fill_environmental_log",
+          "name": "填写环水保监理日志"
+        },
+        {
+          "page": "supervision_diary",
+          "action": "fill_safety_log",
+          "name": "填写安全监理日志"
+        },
+        {
+          "page": "supervision_diary",
+          "action": "approve_log",
+          "name": "审批日志"
+        }
+      ],
+      "catalog_version": "b158b448e3cf4d0a"
     }
   },
   {
-    "name": "image_library",
+    "name": "一般交流",
     "request": {
-      "user_id": "test-user",
-      "session_id": "test-session",
-      "history": [],
-      "text": "你好，帮我打开图片库"
+      "user_id": "example-user",
+      "session_id": "example-session",
+      "message": "你好，今天过得怎么样？",
+      "current_page": "workbench",
+      "history": []
     },
     "response": {
-      "intent": "image_library",
+      "status": "chat",
+      "page": null,
+      "action": null,
       "confidence": 0.95,
-      "reason": "用户明确要求进入图片库查看图片。",
-      "needs_clarification": false
+      "message": "你好！有什么可以帮你？",
+      "options": null,
+      "catalog_version": "b158b448e3cf4d0a"
     }
   },
   {
-    "name": "business_management",
+    "name": "目录外任务",
     "request": {
-      "user_id": "test-user",
-      "session_id": "test-session",
-      "history": [],
-      "text": "进入业务管理页面"
+      "user_id": "example-user",
+      "session_id": "example-session",
+      "message": "帮我打开系统设置。",
+      "current_page": "workbench",
+      "history": []
     },
     "response": {
-      "intent": "business_management",
-      "confidence": 0.96,
-      "reason": "用户明确要求进入业务管理页面。",
-      "needs_clarification": false
-    }
-  },
-  {
-    "name": "chat",
-    "request": {
-      "user_id": "test-user",
-      "session_id": "test-session",
-      "history": [],
-      "text": "你好，今天过得怎么样"
-    },
-    "response": {
-      "intent": "chat",
-      "confidence": 0.99,
-      "reason": "你好！有什么可以帮你？",
-      "needs_clarification": false
+      "status": "unknown",
+      "page": null,
+      "action": null,
+      "confidence": 0.2,
+      "message": "我还不能确定你要进入哪个业务页面，请再具体说明要办理的业务。",
+      "options": null,
+      "catalog_version": "b158b448e3cf4d0a"
     }
   }
 ]

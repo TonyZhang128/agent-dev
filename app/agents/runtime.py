@@ -45,6 +45,7 @@ def build_agent(
     schema: dict | None = None,
     temperature: float = 0,
     tools: tuple[BaseTool, ...] = (),
+    include_schema_in_prompt: bool = True,
 ):
     strategy = None
     schema = prepared_schema(schema, name)
@@ -57,10 +58,11 @@ def build_agent(
         middleware.append(
             ModelFallbackMiddleware(models.fallback_chat_model(temperature=temperature))
         )
+    prompt_text = system_prompt(prompt, schema) if include_schema_in_prompt else prompt
     return create_agent(
         model=models.chat_model(temperature=temperature),
         tools=list(tools),
-        system_prompt=system_prompt(prompt, schema),
+        system_prompt=prompt_text,
         response_format=strategy,
         middleware=middleware,
         checkpointer=None,

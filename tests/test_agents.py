@@ -18,12 +18,6 @@ LOG = {
     "pending_items": ["测试"],
     "issues": [],
 }
-INTENT = {
-    "intent": "work_list",
-    "confidence": 0.95,
-    "reason": "用户明确要求查看工作列表",
-    "needs_clarification": False,
-}
 
 
 @pytest.fixture
@@ -201,135 +195,6 @@ def test_log_invalid_model_result(agent_client, result):
         )
 
 
-@pytest.mark.parametrize("extra", [{}, {"intents": []}], ids=["omitted", "empty"])
-@pytest.mark.parametrize(
-    ("text", "label"),
-    [
-        ("打开工作列表", "work_list"),
-        ("我要填写今天的监理日志", "supervision_log"),
-        ("看看现场照片", "image_library"),
-        ("进入业务管理页面", "business_management"),
-        ("你好，今天过得怎么样", "chat"),
-    ],
-)
-def test_default_intents(calls, agent_client, text, label, extra):
-    result = dict(INTENT, intent=label)
-    with agent_client(result) as client:
-        response = client.post("/agents/intent", json=request_payload({"text": text, **extra}))
-        assert response.status_code == 200
-        assert response.json() == (
-            result | {"reason": "你好！有什么可以帮你？"} if label == "chat" else result
-        )
-        assert len(calls) == (2 if label == "chat" else 1)
-        enum = calls[0]["response_format"]["json_schema"]["schema"]["properties"]["intent"]["enum"]
-        assert enum == [
-            "work_list",
-            "supervision_log",
-            "image_library",
-            "business_management",
-            "chat",
-            "unknown",
-        ]
-        assert calls[0]["response_format"]["json_schema"]["strict"] is True
-        content = json.loads(calls[0]["messages"][-1]["content"])
-        assert content["text"] == text
-        assert [item["label"] for item in content["intents"]] == enum[:-1]
-
-
-@pytest.mark.parametrize("label", ["query", "create", "update", "cancel", "help"])
-def test_removed_default_intents_are_invalid(agent_client, label):
-    with agent_client(dict(INTENT, intent=label)) as client:
-        response = client.post("/agents/intent", json=request_payload({"text": "打开工作列表"}))
-        assert response.status_code == 502
-
-
-@pytest.mark.parametrize("score", [0.0, 0.6499, 0.65, 1.0])
-def test_page_intent_confidence_boundary(agent_client, score):
-    with agent_client(dict(INTENT, confidence=score)) as client:
-        response = client.post("/agents/intent", json=request_payload({"text": "打开工作列表"}))
-        assert response.status_code == 200
-        assert response.json()["confidence"] == score
-        assert response.json()["intent"] == ("unknown" if score < 0.65 else "work_list")
-        assert response.json()["needs_clarification"] is (score < 0.65)
-
-
-@pytest.mark.parametrize("label", ["query", "订单查询", "work_list", "image_library"])
-def test_nonempty_intents_are_rejected_before_inference(calls, agent_client, label):
-    with agent_client(INTENT) as client:
-        response = client.post(
-            "/agents/intent",
-            json=request_payload(
-                {
-                    "text": "打开工作列表",
-                    "intents": [{"label": label, "description": "调用方指定的分类"}],
-                }
-            ),
-        )
-        assert response.status_code == 422
-        assert calls == []
-
-
-@pytest.mark.parametrize(
-    "result",
-    (
-        dict(INTENT, confidence=0.4),
-        dict(INTENT, needs_clarification=True),
-        dict(INTENT, intent="unknown"),
-    ),
-    ids=["low-confidence", "needs-clarification", "unknown"],
-)
-def test_intent_uncertainty_falls_back(agent_client, result):
-    with agent_client(result) as client:
-        response = client.post("/agents/intent", json=request_payload({"text": "处理一下"}))
-        assert response.status_code == 200
-        assert response.json()["intent"] == "unknown"
-        assert response.json()["needs_clarification"]
-
-
-@pytest.mark.parametrize(
-    "result",
-    (dict(INTENT, intent="unlisted"), dict(INTENT, confidence=1.5), dict(INTENT, confidence="0.9")),
-    ids=["unlisted-label", "out-of-range-score", "non-numeric-score"],
-)
-def test_invalid_intent_result(agent_client, result):
-    with agent_client(result) as client:
-        assert (
-            client.post("/agents/intent", json=request_payload({"text": "查询状态"})).status_code
-            == 502
-        )
-
-
-@pytest.mark.parametrize(
-    "labels", (("x", "X"), ("unknown",), ("",)), ids=["case-duplicate", "reserved", "blank"]
-)
-def test_duplicate_or_reserved_candidates(calls, agent_client, labels):
-    with agent_client(INTENT) as client:
-        payload = {
-            "text": "查询",
-            "intents": [{"label": label, "description": "说明"} for label in labels],
-        }
-        assert client.post("/agents/intent", json=request_payload(payload)).status_code == 422
-        assert calls == []
-
-
-@pytest.mark.parametrize(
-    "payload",
-    [
-        {"text": " "},
-        {"text": "x" * 2001},
-        {"text": "查询", "intents": [{"label": str(i), "description": "说明"} for i in range(11)]},
-        {
-            "text": "查询",
-            "intents": [{"label": str(i), "description": "说" * 200} for i in range(10)],
-        },
-    ],
-    ids=["blank-text", "too-long-text", "too-many-labels", "too-long-descriptions"],
-)
-def test_intent_input_limits(agent_client, payload):
-    with agent_client(INTENT) as client:
-        assert client.post("/agents/intent", json=request_payload(payload)).status_code == 422
-
-
 @pytest.mark.parametrize(
     "history",
     [
@@ -403,10 +268,10 @@ def test_chat_input_validation(calls, agent_client, payload):
     "route,payload",
     [
         ("log-summary", {"content": "日报"}),
-        ("intent", {"text": "查询"}),
+        ("intent/business", {"message": "查询", "current_page": "workbench"}),
         ("chat", {"message": "你好"}),
     ],
-    ids=["log-summary", "intent", "chat"],
+    ids=["log-summary", "intent-business", "chat"],
 )
 @pytest.mark.parametrize(
     "error,status,expected",

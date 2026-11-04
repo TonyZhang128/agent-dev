@@ -17,8 +17,8 @@ from app.main import create_app
 from app.prompts import load_prompt
 from app.schemas.agents import (
     ArchiveIntentResult,
+    BusinessIntentResult,
     IntentDefinition,
-    IntentResult,
 )
 from tests.helpers import request_payload
 
@@ -165,9 +165,10 @@ def test_archive_profile_has_no_chat_agent_and_shares_the_application_lifecycle(
         )
     )
     with TestClient(app):
-        assert app.state.archive_intent_agent is not app.state.intent_agent
+        assert app.state.archive_intent_agent is not app.state.business_intent_agent
         assert app.state.archive_intent_agent.chat_agent is None
-        assert app.state.intent_agent.chat_agent is app.state.chat_agent
+        assert app.state.business_intent_agent.chat_agent is app.state.chat_agent
+        assert app.state.business_intent_agent.clarify_agent is app.state.clarify_agent
 
 
 def test_published_archive_schema_matches_pydantic_and_openapi():
@@ -179,20 +180,23 @@ def test_published_archive_schema_matches_pydantic_and_openapi():
     assert schema["properties"]["reason"]["maxLength"] == 300
 
 
-def test_published_archive_example_and_business_contract_are_unchanged():
+def test_published_archive_example_and_business_schema_are_separate():
     example = read_json("response.example.json")
     assert ArchiveIntentResult.model_validate(example).model_dump() == example
     assert example["intent"] == "A"
-    assert IntentResult.model_validate(
+    assert BusinessIntentResult.model_validate(
         {
-            "intent": "work_list",
+            "status": "resolved",
+            "page": "supervision_diary",
+            "action": "fill_supervision_log",
             "confidence": 0.9,
-            "reason": "打开工作列表",
-            "needs_clarification": False,
+            "message": None,
+            "options": None,
+            "catalog_version": "test",
         }
     )
     with pytest.raises(ValidationError):
-        IntentResult.model_validate(example)
+        BusinessIntentResult.model_validate(example)
 
 
 def test_profile_rejects_configuration_that_drifts_from_its_response_model():

@@ -18,6 +18,8 @@ class BaseAgent[RequestT: BaseModel, ResultT: BaseModel](ABC):
     name: str
     temperature = 0.0
     dynamic_schema = False
+    # 结构化输出已通过 provider 的 response_format 传递时，可不重复写入提示词。
+    include_schema_in_prompt = True
 
     def __init__(self, models: ModelService, *, prompt_name: str | None = None):
         self.models = models
@@ -32,6 +34,7 @@ class BaseAgent[RequestT: BaseModel, ResultT: BaseModel](ABC):
             prompt=self.prompt,
             schema=schema,
             temperature=self.temperature,
+            include_schema_in_prompt=self.include_schema_in_prompt,
         )
 
     def response_schema(self, request: RequestT) -> dict | None:
@@ -39,11 +42,12 @@ class BaseAgent[RequestT: BaseModel, ResultT: BaseModel](ABC):
 
     def conversation_messages(self, request: ConversationRequest, current: str) -> list[AnyMessage]:
         schema = prepared_schema(self.response_schema(request), self.name)
+        prompt_schema = schema if self.include_schema_in_prompt else None
         return trim_history(
             request.history,
             current,
-            system_prompt=system_prompt(self.prompt, schema),
-            schema=schema,
+            system_prompt=system_prompt(self.prompt, prompt_schema),
+            schema=prompt_schema,
             settings=self.models.settings,
         )
 

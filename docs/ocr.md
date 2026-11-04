@@ -2,6 +2,8 @@
 
 原 `docsvc` 已合并进当前智能体项目。唯一应用入口为 `app.main:app`，Python 固定 3.12，默认端口 8309；原 `/agents/*`、`/health`、`/ready` 保持原契约。识别、填表和 WBS 返回草稿，不执行确认、审批或数据库操作。
 
+对外接口索引、契约状态和待确认事项见 [interfaces/README.md](../interfaces/README.md)，业务流与路径/输出约束见 [interfaces/guides/ocr.md](../interfaces/guides/ocr.md)，完整 OpenAPI 草案见 [interfaces/drafts/fastapi.openapi.json](../interfaces/drafts/fastapi.openapi.json)。本文保存实现细节、模板目录和验收方法；`/docs` 是运行时实现的投影，不是正式契约。
+
 ## 安装与启动
 
 在仓库根目录执行：

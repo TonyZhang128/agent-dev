@@ -5,12 +5,9 @@ from pydantic import BaseModel
 
 from app.agents.base import StructuredAgent
 from app.agents.chat import ChatAgent
-from app.agents.profiles import BUSINESS_INTENT_PROFILE, IntentProfile
+from app.agents.profiles import IntentProfile
 from app.llm import ModelService
 from app.schemas.agents import ChatRequest, IntentRequest
-
-# 保留旧导入路径，供接口测试和已有调用方读取业务端固定候选。
-DEFAULT_INTENTS = BUSINESS_INTENT_PROFILE.intents
 
 
 class IntentAgent[ResultT: BaseModel](StructuredAgent[IntentRequest, ResultT]):

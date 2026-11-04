@@ -17,10 +17,12 @@ from app.main import create_app
 from app.schemas.base import ChatMessage
 
 IDENTITY = {"user_id": "user-alpha", "session_id": "session-alpha"}
-CLASSIFICATION = {
-    "intent": "chat",
+BUSINESS_CLASSIFICATION = {
+    "kind": "navigate",
+    "page": "supervision_diary",
+    "action": "fill_supervision_log",
     "confidence": 0.95,
-    "reason": "一般交流",
+    "reason": "明确要求填写监理日志。",
     "needs_clarification": False,
 }
 ARCHIVE_CLASSIFICATION = {
@@ -30,7 +32,10 @@ ARCHIVE_CLASSIFICATION = {
     "needs_clarification": False,
 }
 ROUTES = [
-    ("/agents/intent", {"text": "你好", "history": []}),
+    (
+        "/agents/intent/business",
+        {"message": "我要填写监理日志", "history": [], "current_page": "workbench"},
+    ),
     ("/agents/intent/archive", {"text": "归档文件", "history": []}),
     ("/agents/chat", {"message": "你好", "history": []}),
     ("/agents/log-summary", {"content": "完成接口开发"}),
@@ -81,8 +86,8 @@ def client_for(**settings):
         body = json.loads(request.content)
         calls.append(body)
         schema_name = body.get("response_format", {}).get("json_schema", {}).get("name")
-        if schema_name == "intent":
-            return completion(json.dumps(CLASSIFICATION))
+        if schema_name == "intent_business":
+            return completion(json.dumps(BUSINESS_CLASSIFICATION))
         if schema_name == "intent_archive":
             return completion(json.dumps(ARCHIVE_CLASSIFICATION))
         if schema_name == "log_summary":
@@ -126,40 +131,68 @@ def test_identifiers_are_nonblank_bounded_strings(field, value):
         assert calls == []
 
 
-@pytest.mark.parametrize("route,field", [("intent", "text"), ("chat", "message")])
-def test_conversational_requests_require_explicit_history(route, field):
+@pytest.mark.parametrize(
+    "path,payload",
+    [
+        ("/agents/intent/archive", {"text": "你好"}),
+        ("/agents/chat", {"message": "你好"}),
+    ],
+)
+def test_conversational_requests_require_explicit_history(path, payload):
     with client_for() as (client, calls):
-        assert client.post("/agents/" + route, json=IDENTITY | {field: "你好"}).status_code == 422
+        assert client.post(path, json=IDENTITY | payload).status_code == 422
         assert calls == []
 
 
-@pytest.mark.parametrize("route,field", [("intent", "text"), ("chat", "message")])
-@pytest.mark.parametrize("turns", [1, 8])
-def test_entire_history_is_forwarded_when_it_fits(route, field, turns):
+@pytest.mark.parametrize(
+    "path,payload,response_field,turns",
+    [
+        (
+            "/agents/intent/business",
+            {"message": "项目代号是什么", "current_page": "workbench"},
+            None,
+            1,
+        ),
+        ("/agents/chat", {"message": "项目代号是什么"}, "reply", 1),
+        ("/agents/chat", {"message": "项目代号是什么"}, "reply", 8),
+    ],
+    ids=["business-one-turn", "chat-one-turn", "chat-eight-turns"],
+)
+def test_entire_history_is_forwarded_when_it_fits(path, payload, response_field, turns):
     messages = sum((history(f"项目{i}") for i in range(turns)), [])
-    payload = IDENTITY | {field: "项目代号是什么", "history": messages}
-    original = json.loads(json.dumps(payload))
+    request = IDENTITY | payload | {"history": messages}
+    original = json.loads(json.dumps(request))
     with client_for() as (client, calls):
-        response = client.post("/agents/" + route, json=payload)
+        response = client.post(path, json=request)
         assert response.status_code == 200
-        assert response.json()["reason" if route == "intent" else "reply"] == f"项目{turns - 1}"
-        assert len(calls) == (2 if route == "intent" else 1)
+        if response_field is None:
+            assert response.json()["status"] == "resolved"
+        else:
+            assert response.json()[response_field] == f"项目{turns - 1}"
+        assert len(calls) == 1
         for call in calls:
             assert call["messages"][1:-1] == messages
             assert "user-alpha" not in json.dumps(call)
             assert "session-alpha" not in json.dumps(call)
-        assert payload == original
+        assert request == original
 
 
-@pytest.mark.parametrize("route,field", [("intent", "text"), ("chat", "message")])
-def test_context_overflow_drops_oldest_whole_turns(route, field):
+@pytest.mark.parametrize(
+    "path,payload",
+    [
+        (
+            "/agents/intent/business",
+            {"message": "只回答项目代号", "current_page": "workbench"},
+        ),
+        ("/agents/chat", {"message": "只回答项目代号"}),
+    ],
+    ids=["business", "chat"],
+)
+def test_context_overflow_drops_oldest_whole_turns(path, payload):
     messages = history("旧" * 10000) + history("海蓝")
     with client_for() as (client, calls):
-        response = client.post(
-            "/agents/" + route, json=IDENTITY | {field: "只回答项目代号", "history": messages}
-        )
+        response = client.post(path, json=IDENTITY | payload | {"history": messages})
         assert response.status_code == 200
-        assert response.json()["reason" if route == "intent" else "reply"] == "海蓝"
         for call in calls:
             assert call["messages"][1:-1] == history("海蓝")
             assert "只回答项目代号" in call["messages"][-1]["content"]
@@ -192,7 +225,18 @@ def test_log_identity_is_metadata_and_not_part_of_ocr_input():
         assert "user-alpha" not in json.dumps(calls)
 
 
-@pytest.mark.parametrize("route,field", [("intent", "text"), ("chat", "message")])
+@pytest.mark.parametrize(
+    "path,payload",
+    [
+        (
+            "/agents/intent/business",
+            {"message": "你好", "current_page": "workbench"},
+        ),
+        ("/agents/intent/archive", {"text": "你好"}),
+        ("/agents/chat", {"message": "你好"}),
+    ],
+    ids=["business", "archive", "chat"],
+)
 @pytest.mark.parametrize(
     "messages",
     [
@@ -201,14 +245,9 @@ def test_log_identity_is_metadata_and_not_part_of_ocr_input():
         [{"role": "assistant", "content": "反序"}, {"role": "user", "content": "反序"}],
     ],
 )
-def test_invalid_history_rejected_before_model(route, field, messages):
+def test_invalid_history_rejected_before_model(path, payload, messages):
     with client_for() as (client, calls):
-        assert (
-            client.post(
-                "/agents/" + route, json=IDENTITY | {field: "你好", "history": messages}
-            ).status_code
-            == 422
-        )
+        assert client.post(path, json=IDENTITY | payload | {"history": messages}).status_code == 422
         assert calls == []
 
 
@@ -323,21 +362,46 @@ def test_identity_metadata_reaches_both_agents_without_entering_model_messages()
                 contexts.append(metadata)
 
     with client_for() as (client, calls):
-        for agent in (client.app.state.intent_agent, client.app.state.chat_agent):
+        for agent in (client.app.state.business_intent_agent, client.app.state.chat_agent):
             agent.agent = agent.agent.with_config(callbacks=[Capture()])
         response = client.post(
-            "/agents/intent",
-            json={"user_id": " A ", "session_id": " S ", "text": "你好", "history": []},
+            "/agents/intent/business",
+            json={
+                "user_id": " A ",
+                "session_id": " S ",
+                "message": "我要填写监理日志",
+                "current_page": "workbench",
+                "history": [],
+            },
         )
-        assert response.status_code == 200
+        chat_response = client.post(
+            "/agents/chat",
+            json={
+                "user_id": " A ",
+                "session_id": " S ",
+                "message": "你好",
+                "history": [],
+            },
+        )
+        assert response.status_code == chat_response.status_code == 200
         assert len(contexts) == 2
         assert all(item["user_id"] == "A" and item["session_id"] == "S" for item in contexts)
         assert len(calls) == 2
+        assert "user-alpha" not in json.dumps(calls)
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("route,field", [("intent", "text"), ("chat", "message")])
-async def test_overlapping_users_and_sessions_with_one_failed_request(route, field):
+@pytest.mark.parametrize(
+    "path,payload_extra,is_business",
+    [
+        ("/agents/intent/business", {"current_page": "workbench"}, True),
+        ("/agents/chat", {}, False),
+    ],
+    ids=["business", "chat"],
+)
+async def test_overlapping_users_and_sessions_with_one_failed_request(
+    path, payload_extra, is_business
+):
     arrived = 0
     barrier = asyncio.Event()
     calls = []
@@ -346,15 +410,20 @@ async def test_overlapping_users_and_sessions_with_one_failed_request(route, fie
         nonlocal arrived
         body = json.loads(request.content)
         calls.append(body)
-        if "response_format" in body:
-            return completion(json.dumps(CLASSIFICATION))
         arrived += 1
         if arrived == 4:
             barrier.set()
         await asyncio.wait_for(barrier.wait(), timeout=2)
-        marker = body["messages"][-2 if len(body["messages"]) > 2 else -1]["content"]
+        marker = body["messages"][-1]["content"]
+        for message in body["messages"]:
+            content = message.get("content", "")
+            if isinstance(content, str) and content.startswith("项目代号是"):
+                marker = content.removeprefix("项目代号是")
+                break
         if marker == "失败":
             raise httpx.ReadTimeout("private upstream error", request=request)
+        if "response_format" in body:
+            return completion(json.dumps(BUSINESS_CLASSIFICATION))
         return completion(marker)
 
     service = service_for(respond)
@@ -373,12 +442,13 @@ async def test_overlapping_users_and_sessions_with_one_failed_request(route, fie
             responses = await asyncio.gather(
                 *(
                     client.post(
-                        "/agents/" + route,
+                        path,
                         json={
                             "user_id": u,
                             "session_id": s,
-                            field: "项目代号是什么",
+                            "message": "项目代号是什么",
                             "history": history(marker),
+                            **payload_extra,
                         },
                     )
                     for u, s, marker in cases
@@ -386,13 +456,17 @@ async def test_overlapping_users_and_sessions_with_one_failed_request(route, fie
             )
             for response, (_, _, marker) in zip(responses, cases, strict=True):
                 assert response.status_code == (504 if marker == "失败" else 200)
-                if marker != "失败":
-                    assert response.json()["reason" if route == "intent" else "reply"] == marker
+                if marker == "失败":
+                    continue
+                if is_business:
+                    assert response.json()["status"] == "resolved"
+                else:
+                    assert response.json()["reply"] == marker
             fresh = await client.post(
                 "/agents/chat",
                 json={"user_id": "A", "session_id": "same", "message": "你好", "history": []},
             )
             assert fresh.status_code == 200
-            assert fresh.json()["reply"] == "你好"  # final request has no previous turn
+            assert fresh.json()["reply"] == "你好"
         assert app.state.chat_agent is shared
     assert service.http_async_client.is_closed

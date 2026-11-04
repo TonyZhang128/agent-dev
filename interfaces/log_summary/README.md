@@ -1,6 +1,8 @@
 # 工程日志固定输出接口
 
-接口：`POST /agents/log-summary`，JSON 编码为 UTF-8。成功返回 HTTP `200`，响应直接是包含以下六个必填字段的 JSON 对象，不增加额外包装层。
+接口：`POST /agents/log-summary`，JSON 编码为 UTF-8。成功返回 HTTP `200`，响应直接是包含以下六个必填字段的 JSON 对象，不增加额外包装层。统一接口索引和完整 OpenAPI 草案见 [上级文档](../README.md)。
+
+本目录的 JSON Schema 是已确认的成功响应子契约；请求体、错误响应和其余操作以 [OpenAPI 草案](../drafts/fastapi.openapi.json) 为准。
 
 - [response.schema.json](response.schema.json)：供调用方校验、生成类型的 JSON Schema，与 `LogSummary.model_json_schema()` 一致。
 - [response.example.json](response.example.json)：对应 [用户提供的 OCR 输入](../../data/log_summary.json) 的人工参考输出。
@@ -43,7 +45,13 @@ with httpx.Client(timeout=190, trust_env=False) as client:
 PY
 ```
 
-请求序列化后最多4000字符；输入内部字段及层级可变化，继续兼容通用日志文字。这个目录的 JSON Schema 只定义成功响应。失败返回 `{"detail":"错误描述"}`：输入非法 `422`、模型不可达 `503`、超时 `504`、上游错误或输出不合法 `502`，不能按成功响应解析。
+请求序列化后最多4000字符；输入内部字段及层级可变化，继续兼容通用日志文字。这个目录的 JSON Schema 只定义成功响应，完整 HTTP 契约见 [OpenAPI 草案](../drafts/fastapi.openapi.json)。失败响应统一使用 `detail`，但形态不同：
+
+- 请求字段校验失败 `422`：`{"detail":[{"type","loc","msg"}, ...]}`，只保留公开字段。
+- 输入或上下文超出预算 `422`：`{"detail":"错误描述"}`。
+- 模型不可达 `503`、超时 `504`、上游错误或输出不合法 `502`：`{"detail":"错误描述"}`。
+
+失败响应不能按成功 Schema 解析。
 
 服务不自动把每次业务输出写入该目录，也不保存服务端日志会话；调用方获取响应后按自己的存储生命周期处理。真实验收报告在 `verification/agents-live-result.json`。
 

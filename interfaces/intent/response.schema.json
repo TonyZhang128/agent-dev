@@ -1,17 +1,149 @@
 {
+  "$defs": {
+    "BusinessIntentOption": {
+      "additionalProperties": false,
+      "description": "澄清时可选的合法二级功能。",
+      "properties": {
+        "page": {
+          "enum": [
+            "supervision_diary",
+            "work_list",
+            "image_library",
+            "recognition_platform",
+            "business_management",
+            "workbench"
+          ],
+          "title": "Page",
+          "type": "string"
+        },
+        "action": {
+          "enum": [
+            "fill_supervision_log",
+            "fill_monthly_report",
+            "assign_monthly_report",
+            "view_supervision_log",
+            "fill_inspection_record",
+            "fill_standby_record",
+            "fill_environmental_log",
+            "fill_safety_log",
+            "approve_log",
+            "view_work_tasks",
+            "create_work_task",
+            "add_form",
+            "delete_supervision_form",
+            "view_approval_workflow",
+            "view_image_library",
+            "delete_image",
+            "create_album",
+            "delete_album",
+            "navigate_to_recognition",
+            "recognize_photo",
+            "add_personnel_configuration",
+            "delete_project_member",
+            "view_wbs",
+            "add_subproject",
+            "add_child_subproject",
+            "delete_subproject",
+            "delete_child_subproject",
+            "assign_wbs_personnel",
+            "navigate_to_work",
+            "view_today_tasks",
+            "view_pending_approvals"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "page",
+        "action",
+        "name"
+      ],
+      "title": "BusinessIntentOption",
+      "type": "object"
+    }
+  },
   "additionalProperties": false,
+  "description": "业务意图识别响应；status 区分跳转、澄清、聊天和未知。",
   "properties": {
-    "intent": {
+    "status": {
       "enum": [
-        "work_list",
-        "supervision_log",
-        "image_library",
-        "business_management",
+        "resolved",
+        "clarify",
         "chat",
         "unknown"
       ],
-      "title": "Intent",
+      "title": "Status",
       "type": "string"
+    },
+    "page": {
+      "anyOf": [
+        {
+          "enum": [
+            "supervision_diary",
+            "work_list",
+            "image_library",
+            "recognition_platform",
+            "business_management",
+            "workbench"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Page"
+    },
+    "action": {
+      "anyOf": [
+        {
+          "enum": [
+            "fill_supervision_log",
+            "fill_monthly_report",
+            "assign_monthly_report",
+            "view_supervision_log",
+            "fill_inspection_record",
+            "fill_standby_record",
+            "fill_environmental_log",
+            "fill_safety_log",
+            "approve_log",
+            "view_work_tasks",
+            "create_work_task",
+            "add_form",
+            "delete_supervision_form",
+            "view_approval_workflow",
+            "view_image_library",
+            "delete_image",
+            "create_album",
+            "delete_album",
+            "navigate_to_recognition",
+            "recognize_photo",
+            "add_personnel_configuration",
+            "delete_project_member",
+            "view_wbs",
+            "add_subproject",
+            "add_child_subproject",
+            "delete_subproject",
+            "delete_child_subproject",
+            "assign_wbs_personnel",
+            "navigate_to_work",
+            "view_today_tasks",
+            "view_pending_approvals"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Action"
     },
     "confidence": {
       "maximum": 1,
@@ -19,22 +151,49 @@
       "title": "Confidence",
       "type": "number"
     },
-    "reason": {
-      "minLength": 1,
-      "title": "Reason",
-      "type": "string"
+    "message": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Message"
     },
-    "needs_clarification": {
-      "title": "Needs Clarification",
-      "type": "boolean"
+    "options": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/BusinessIntentOption"
+          },
+          "maxItems": 20,
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Options"
+    },
+    "catalog_version": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Catalog Version",
+      "type": "string"
     }
   },
   "required": [
-    "intent",
+    "status",
+    "page",
+    "action",
     "confidence",
-    "reason",
-    "needs_clarification"
+    "message",
+    "options",
+    "catalog_version"
   ],
-  "title": "IntentResult",
+  "title": "BusinessIntentResult",
   "type": "object"
 }

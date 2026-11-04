@@ -21,6 +21,10 @@
 | 通用业务验收 | `uv run --locked python -m scripts.common.verify_agents` | Mac/Linux；调用运行中的 API，验收完整意图及日志评测集 |
 | 通用推理验收 | `uv run --locked python -m scripts.common.verify_live` | Mac/Linux；直调 Agent、ASGI、TCP；不检查硬件 |
 | OCR 真实验收 | `uv run --locked python -m scripts.common.verify_ocr --photo <数据池相对路径> --form JB12-4.2.2` | 调运行中 API，检查真实识别、简表、填表与 WBS；报告在 verification/ocr |
+| OpenAPI 草案导出 | `uv run --locked python -m scripts.docs.export_openapi` | 从当前应用导出到 `interfaces/drafts/`，拒绝写入正式契约目录 |
+| 接口评审文档渲染 | `uv run --locked python -m scripts.docs.render_api_markdown` | 把契约渲染为 `interfaces/API.md`；只读视图，不手工维护 |
+| OpenAPI 契约校验 | `uv run --locked python -m scripts.docs.check_openapi` | 比较契约与实现；有正式契约时优先检查正式契约，不写文件 |
+| 业务意图目录生成 | `uv run --locked python -m scripts.intent.compile_catalog [--check]` | 从 `app/resources/intent/business_pages.json` 生成枚举；`--check` 用于 CI 漂移检查 |
 
 Linux 完整步骤、配置和后台托管见 [部署说明](../docs/deployment-linux.md)。Mac 步骤见 [项目 README](../README.md#环境与安装)。
 
@@ -34,10 +38,12 @@ Linux 完整步骤、配置和后台托管见 [部署说明](../docs/deployment-
 
 `scripts/models/download_ocr_models.py` 复用运行时的 `rapidocr_params()`，保证预下载的模型与实际识别一致；默认写入 `.cache/models/ocr/`，`--root` 可指向部署目录，`--check` 只做离线文件和 sha256 校验。容器部署通过 `OCR_MODEL_DIR` 只读挂载该目录，容器内不再联网下载；完全离线时在有网机器下载后整目录拷贝过去。下载源与运行时相同，均为 ModelScope 上的 RapidOCR 3.x 模型。
 
+`scripts/docs/` 只服务于接口契约：`export_openapi` 从 `app.main:app` 生成待确认草案，默认写入 `interfaces/drafts/fastapi.openapi.json`；`render_api_markdown` 把同一契约渲染为 `interfaces/API.md` 评审文档；`check_openapi` 只比较契约与实现并返回非零状态，不覆盖任何契约。正式契约必须由用户批准后人工提升到 `interfaces/openapi/`，详见 [接口文档](../interfaces/README.md) 和 [AGENTS.md 第四节](../AGENTS.md#四接口契约与-api-first-开发流程)。
+
 `scripts/ocr/` 完整迁入 docsvc 的 16 个脚本，统一从仓库根目录以 `uv run --locked python -m scripts.ocr.<名称>` 调用。模板生成会写入配置的模板目录，应先备份；`demo_jianbiao` 会上传到 Java 服务，仅在显式需要演示数据时运行。各脚本用途、参数与资源要求见 [OCR 文档](../docs/ocr.md#辅助脚本)。
 
 真实验收会调用模型，报告写入忽略提交的 `verification/`。业务验收报告 `agents-live-result.json` 的每条 `checks` 记录包含实际请求体 `request` 和 API 输出 `response`。设置 `BUSINESS_API_URL` 可验证其他地址的 API，模型直调仍读取当前进程及根目录 `.env` 的 `LLM_*` 配置，二者需对应同一部署。Linux 验收使用 `--no-sync --no-dev`，避免安装开发工具或在验收时修改环境。
 
-通用业务验收读取 `data/intent.json` 的版本化评测集，逐条比对固定五类页面导航/一般交流和 `unknown` 兜底结果，并验证非空 `intents` 被拒绝为 `422`；任何不匹配都会使验收失败。用例和成功标准见 [意图识别测试说明](../docs/intent-testing.md)。
+通用业务验收读取 `data/intent.json` 的版本化评测集，逐条比对 `status`、`page`、`action`，并验证缺少/非法 `current_page`、非法历史和旧 `text` 字段被拒绝为 `422`；任何不匹配都会使验收失败。用例和成功标准见 [意图识别测试说明](../docs/intent-testing.md)。
 
-通用业务验收读取 `data/log_summary.json` 中用户提供的唯一原始 OCR 对象，并使用 `interfaces/log_summary/response.example.json` 校验固定响应的日期及列表有无；该条记录名为 `provided_ocr_log`。另读取 `tests/fixtures/log_summary_cases.json`（版本 `4.0.0`，11条，含5条工程 OCR）做完整回归。检查实际日期、列表事实有无、必要指标/数值/单位及禁止断言；忽略空白和全半角差异，不逐字比较参考段落。任一日志不匹配也会使验收失败。报告包含 `log_summary_dataset_version`，用户输入记录包含 `expected` 和 `passed`，回归日志还包含 `acceptance`。完整验收共44次 HTTP 业务调用：40次成功响应、4次非空候选的预期 `422`；意图数据集版本为 `4.0.0`，包含24条分类及4条非法请求。业务话术与人工复核边界见 [日志总结测试说明](../docs/log-summary-testing.md)。
+通用业务验收读取 `data/log_summary.json` 中用户提供的唯一原始 OCR 对象，并使用 `interfaces/log_summary/response.example.json` 校验固定响应的日期及列表有无；该条记录名为 `provided_ocr_log`。另读取 `tests/fixtures/log_summary_cases.json`（版本 `4.0.0`，11条，含5条工程 OCR）做完整回归。检查实际日期、列表事实有无、必要指标/数值/单位及禁止断言；忽略空白和全半角差异，不逐字比较参考段落。任一日志不匹配也会使验收失败。报告包含 `log_summary_dataset_version`，用户输入记录包含 `expected` 和 `passed`，回归日志还包含 `acceptance`。完整验收共62次 HTTP 业务调用：58次成功响应、4次非法请求的预期 `422`；意图数据集版本为 `5.0.0`，包含42条业务意图样例及4条非法请求。业务话术与人工复核边界见 [日志总结测试说明](../docs/log-summary-testing.md)。
