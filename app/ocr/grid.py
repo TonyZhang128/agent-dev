@@ -16,12 +16,15 @@ import openpyxl
 import pymupdf
 from openpyxl.utils import get_column_letter
 
-from app.ocr.core.cv import line_mask
-from app.ocr.core.layouts import layout_of
-from app.ocr.core.media import open_form_pdf, visible_chars
-from app.ocr.core.resources import asset, forms, resource_cache
+from app.ocr.form_ocr import layout_of
+from app.ocr.resources import asset, forms, resource_cache
 
 PX = 1400  # 渲染宽度(像素)
+
+
+def _pdf(code: str) -> Path | None:
+    f = forms().get(code) or {}
+    return asset(f["pdf"][0]) if f.get("pdf") and asset(f["pdf"][0]).exists() else None
 
 
 def _text(s: str) -> str:
@@ -41,70 +44,77 @@ def _overlap(a: dict, b: dict) -> float:
 @resource_cache(maxsize=512)
 def cells(code: str) -> tuple:
     """表样第 1 页的格子:({key, rect:{x,y,w,h}, text}, …),按从上到下、从左到右"""
-    with open_form_pdf(code) as doc:
-        out = _page_cells(doc[0]) if doc is not None else []
+    pdf = _pdf(code)
+    if not pdf:
+        return ()
+    with pymupdf.open(pdf) as doc:
+        pg = doc[0]
+        W, H = pg.rect.width, pg.rect.height
+        z = PX / W
+        pix = pg.get_pixmap(matrix=pymupdf.Matrix(z, z), alpha=False)
+        img = np.frombuffer(pix.samples, np.uint8).reshape(pix.h, pix.w, pix.n)
+        bw = (cv2.cvtColor(img, cv2.COLOR_RGB2GRAY) < 160).astype(np.uint8) * 255
+        h, w = bw.shape
+        lines = cv2.morphologyEx(
+            bw, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (40, 1))
+        )
+        lines |= cv2.morphologyEx(
+            bw, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (1, 25))
+        )
+        lines = cv2.dilate(lines, np.ones((3, 3), np.uint8))
+        n, _, st, _ = cv2.connectedComponentsWithStats(255 - lines, connectivity=4)
+        # 只取看得见的字(texttrace type 0 填充 / 1 描边);type 3 是扫描件叠的隐藏文字层,有错字、重复,
+        # 拼进栏目名就成了「实测值或实测偏差值实值或实测」(与 form_ocr.template_runs 同一规则)
+        chars = [
+            (chr(ch[0]), (ch[3][0] + ch[3][2]) / 2, (ch[3][1] + ch[3][3]) / 2, ch[3][0])
+            for sp in pg.get_texttrace()
+            if sp["type"] != 3
+            for ch in sp["chars"]
+            if chr(ch[0]).strip()
+        ]
+        out = []
+        for i in range(1, n):
+            x, y, cw, ch, area = st[i]
+            # 贴着页边的是表外空白;太小的是线交叉处的碎块;面积远小于外接框的是不规则的表外区域
+            if (
+                x == 0
+                or y == 0
+                or x + cw >= w
+                or y + ch >= h
+                or cw < 15
+                or ch < 12
+                or area < 0.6 * cw * ch
+            ):
+                continue
+            r = pymupdf.Rect(x / z, y / z, (x + cw) / z, (y + ch) / z)
+            rect = {
+                "x": round(r.x0 / W, 4),
+                "y": round(r.y0 / H, 4),
+                "w": round(r.width / W, 4),
+                "h": round(r.height / H, 4),
+            }
+            # 按 PDF 内容流里画字的先后取(就是表上的阅读顺序;按坐标重排会把同一格里左右两栏的字交错拼在一起),
+            # 同一位置重画的字(粗体描边)只留一次
+            seen, inside = set(), []
+            for c, x, y, x0 in chars:
+                if r.x0 <= x <= r.x1 and r.y0 <= y <= r.y1 and (c, round(x0), round(y)) not in seen:
+                    seen.add((c, round(x0), round(y)))
+                    inside.append(c)
+            out.append(
+                {
+                    "key": f"g{round(rect['y'] * 1000):03d}_{round(rect['x'] * 1000):03d}",
+                    "rect": rect,
+                    "text": _text("".join(inside)),
+                    # 字的位置(页面比例):合并的表头格里有几段栏目名时,按空格子的横向位置取它正上方那一段
+                    "chars": tuple(
+                        (c, round(x / W, 4), round(y / H, 4))
+                        for c, x, y, _ in chars
+                        if r.x0 <= x <= r.x1 and r.y0 <= y <= r.y1
+                    ),
+                }
+            )
     out.sort(key=lambda c: (c["rect"]["y"], c["rect"]["x"]))
     return tuple(out)
-
-
-def _page_cells(pg) -> list:
-    """表样一页的格子(未排序):横竖框线 → 封闭格,格内文字取 PDF 内容流顺序"""
-    W, H = pg.rect.width, pg.rect.height
-    z = PX / W
-    pix = pg.get_pixmap(matrix=pymupdf.Matrix(z, z), alpha=False)
-    img = np.frombuffer(pix.samples, np.uint8).reshape(pix.h, pix.w, pix.n)
-    bw = (cv2.cvtColor(img, cv2.COLOR_RGB2GRAY) < 160).astype(np.uint8) * 255
-    h, w = bw.shape
-    lines = line_mask(bw, 40, 25)
-    n, _, st, _ = cv2.connectedComponentsWithStats(255 - lines, connectivity=4)
-    # 只取看得见的字(visible_chars);拼进栏目名就成了「实测值或实测偏差值实值或实测」
-    chars = [
-        (chr(ch[0]), (ch[3][0] + ch[3][2]) / 2, (ch[3][1] + ch[3][3]) / 2, ch[3][0])
-        for ch in visible_chars(pg)
-        if chr(ch[0]).strip()
-    ]
-    out = []
-    for i in range(1, n):
-        x, y, cw, ch, area = st[i]
-        # 贴着页边的是表外空白;太小的是线交叉处的碎块;面积远小于外接框的是不规则的表外区域
-        if (
-            x == 0
-            or y == 0
-            or x + cw >= w
-            or y + ch >= h
-            or cw < 15
-            or ch < 12
-            or area < 0.6 * cw * ch
-        ):
-            continue
-        r = pymupdf.Rect(x / z, y / z, (x + cw) / z, (y + ch) / z)
-        rect = {
-            "x": round(r.x0 / W, 4),
-            "y": round(r.y0 / H, 4),
-            "w": round(r.width / W, 4),
-            "h": round(r.height / H, 4),
-        }
-        # 按 PDF 内容流里画字的先后取(就是表上的阅读顺序;按坐标重排会把同一格里左右两栏的字交错拼在一起),
-        # 同一位置重画的字(粗体描边)只留一次
-        seen, inside = set(), []
-        for c, x, y, x0 in chars:
-            if r.x0 <= x <= r.x1 and r.y0 <= y <= r.y1 and (c, round(x0), round(y)) not in seen:
-                seen.add((c, round(x0), round(y)))
-                inside.append(c)
-        out.append(
-            {
-                "key": f"g{round(rect['y'] * 1000):03d}_{round(rect['x'] * 1000):03d}",
-                "rect": rect,
-                "text": _text("".join(inside)),
-                # 字的位置(页面比例):合并的表头格里有几段栏目名时,按空格子的横向位置取它正上方那一段
-                "chars": tuple(
-                    (c, round(x / W, 4), round(y / H, 4))
-                    for c, x, y, _ in chars
-                    if r.x0 <= x <= r.x1 and r.y0 <= y <= r.y1
-                ),
-            }
-        )
-    return out
 
 
 def _short(t: str) -> str:
@@ -450,7 +460,7 @@ def excel_anchors(cfg: dict, code: str) -> dict:
     }
 
 
-if __name__ == "__main__":  # 自检:python -m app.ocr.sheets.grid JB12-8.3.1-1
+if __name__ == "__main__":  # 自检:python -m app.ocr.grid JB12-8.3.1-1
     import sys
 
     for c in sys.argv[1:]:

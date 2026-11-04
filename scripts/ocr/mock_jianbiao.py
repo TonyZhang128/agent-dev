@@ -13,7 +13,7 @@ import numpy as np
 import pymupdf
 from PIL import Image, ImageDraw, ImageFont
 
-from app.ocr.jianbiao.recognize import jianbiao_of
+from app.ocr.jianbiao import jianbiao_of
 
 PRINT = "C:/Windows/Fonts/simhei.ttf"  # 印的栏目名
 HAND = "C:/Windows/Fonts/simkai.ttf"  # 手写

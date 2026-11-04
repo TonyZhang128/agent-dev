@@ -12,15 +12,8 @@ from fastapi.testclient import TestClient
 
 from app.config import Settings
 from app.main import create_app
-from app.ocr import wbs_draft
-from app.ocr.core import engine as ocr_engine
-from app.ocr.core import sheet_scan
-from app.ocr.core.media import date_value
-from app.ocr.core.resources import OCRResources, forms, use_resources
-from app.ocr.form import form_ocr
-from app.ocr.jianbiao import fill
-from app.ocr.jianbiao.recognize import layouts
-from app.ocr.sheets import grid
+from app.ocr import form_ocr, grid, jianbiao, wbs_draft
+from app.ocr.resources import OCRResources, forms, use_resources
 from tests.ocr_helpers import CODE, fill_config, make_ocr_settings, ocr_result
 
 
@@ -44,7 +37,7 @@ def test_fill_writes_pdf_and_excel_using_same_calculated_values(resources, tmp_p
         "fld_2": "93.2",
         "fld_rate": "999",
     }
-    result = fill.compute(CODE, fill_config(), values, tmp_path / "filled.pdf")
+    result = jianbiao.compute(CODE, fill_config(), values, tmp_path / "filled.pdf")
     assert result["values"]["fld_rate"] == "50"
     assert values["fld_rate"] == "999"
     with pymupdf.open(result["pdf"]) as pdf:
@@ -61,7 +54,7 @@ def test_fill_writes_pdf_and_excel_using_same_calculated_values(resources, tmp_p
 
 
 def test_calculation_without_output_does_not_write_files(resources):
-    result = fill.compute(CODE, fill_config(), {"fld_1": "95", "fld_2": "96"}, None)
+    result = jianbiao.compute(CODE, fill_config(), {"fld_1": "95", "fld_2": "96"}, None)
     assert result["values"]["fld_rate"] == "100"
     assert result["pdf"] == result["xlsx"] == ""
     assert list(resources.projects.iterdir()) == []
@@ -79,7 +72,7 @@ def test_calculation_without_output_does_not_write_files(resources):
     ],
 )
 def test_formula_js_compatible_semantics(expression, expected):
-    result, errors = fill.evaluate(
+    result, errors = jianbiao.evaluate(
         {"formulas": [{"target": "result", "expr": expression}]}, {"a": "2", "b": "3"}
     )
     assert errors == {}
@@ -87,7 +80,7 @@ def test_formula_js_compatible_semantics(expression, expected):
 
 
 def test_formula_dependencies_and_partial_failure():
-    result, errors = fill.evaluate(
+    result, errors = jianbiao.evaluate(
         {
             "formulas": [
                 {"target": "later", "expr": "@{first} * 2"},
@@ -103,7 +96,7 @@ def test_formula_dependencies_and_partial_failure():
 
 def test_formula_cycle_is_reported():
     with pytest.raises(ValueError, match="循环引用"):
-        fill.evaluate(
+        jianbiao.evaluate(
             {"formulas": [{"target": "a", "expr": "@{b}"}, {"target": "b", "expr": "@{a}"}]}, {}
         )
 
@@ -120,7 +113,7 @@ def test_reference_template_takes_precedence_over_copy(resources):
         },
     ]
     values = {"fld_1": "95", "fld_2": "96"}
-    cells = fill.anchor_values(config, CODE, values)
+    cells = jianbiao.anchor_values(config, CODE, values)
     assert next(cell for cell in cells if cell["field"] == "fld_location")["value"] == "实测 96 / —"
 
 
@@ -137,7 +130,7 @@ def test_sheet_grid_keys_are_stable_and_printed_cells_are_not_fillable(resources
     "value,want", [("2026年10月3日", "2026-10-03"), ("2026/10/03", "2026-10-03")]
 )
 def test_ocr_date_normalization(value, want):
-    assert date_value(value) == want
+    assert form_ocr.date_value(value) == want
 
 
 def test_ocr_cell_value_removes_printed_label_and_retains_negative_measurement():
@@ -145,7 +138,7 @@ def test_ocr_cell_value_removes_printed_label_and_retains_negative_measurement()
         {"s": "数值", "box": [0, 0, 40, 10], "conf": 0.99},
         {"s": "一2.5", "box": [0, 20, 60, 40], "conf": 0.9},
     ]
-    assert sheet_scan._cell_value(boxes, "数值", "number") == ("-2.5", 0.9)
+    assert jianbiao._cell_value(boxes, "数值", "number") == ("-2.5", 0.9)
 
 
 def test_ocr_converts_rapidocr_output_to_boxes(resources):
@@ -153,7 +146,7 @@ def test_ocr_converts_rapidocr_output_to_boxes(resources):
         ([[10, 10], [300, 10], [300, 40], [10, 40]], "监理单位：测试公司", 0.99),
         ([[20, 50], [80, 50], [80, 70], [20, 70]], "2026-10-31", 0.5),
     )
-    boxes = ocr_engine.ocr(np.zeros((100, 100, 3), np.uint8))
+    boxes = form_ocr.ocr(np.zeros((100, 100, 3), np.uint8))
     assert [b["s"] for b in boxes] == ["监理单位：测试公司", "2026-10-31"]
     assert [b["box"] for b in boxes] == [[10.0, 10.0, 300.0, 40.0], [20.0, 50.0, 80.0, 70.0]]
     assert boxes[0]["conf"] == pytest.approx(0.99)
@@ -162,7 +155,7 @@ def test_ocr_converts_rapidocr_output_to_boxes(resources):
 
 def test_ocr_empty_detection_returns_no_boxes(resources):
     resources.engine = lambda image: ocr_result()
-    assert ocr_engine.ocr(np.zeros((10, 10, 3), np.uint8)) == []
+    assert form_ocr.ocr(np.zeros((10, 10, 3), np.uint8)) == []
 
 
 def test_engine_uses_ppocrv6_medium_and_ppocrv5_server_direction_model(settings, monkeypatch):
@@ -176,7 +169,7 @@ def test_engine_uses_ppocrv6_medium_and_ppocrv5_server_direction_model(settings,
 
     monkeypatch.setattr(rapidocr, "RapidOCR", FakeRapidOCR)
     with use_resources(OCRResources(settings)):
-        ocr_engine.engine()
+        form_ocr.engine()
 
     assert captured["Global.model_root_dir"] == str(settings.ocr_model_root)
     assert captured["Det.model_type"] is rapidocr.ModelType.MEDIUM
@@ -453,7 +446,7 @@ def test_excel_skipped_fields_are_returned_per_call(resources, tmp_path):
 
 
 def test_zero_length_road_partition_is_reported_as_resource_error(resources):
-    from app.ocr.core.resources import OCRResourceError
+    from app.ocr.resources import OCRResourceError
 
     rules = resources.load("refs/wbs_rules.json")
     rules["units"]["LJ"]["splitKm"] = 0
@@ -464,7 +457,7 @@ def test_zero_length_road_partition_is_reported_as_resource_error(resources):
 def test_mock_sheet_works_without_windows_fonts(resources):
     from scripts.ocr.mock_jianbiao import draw_sheet
 
-    layout = layouts()["SIMPLE"]
+    layout = jianbiao.layouts()["SIMPLE"]
     image = draw_sheet(layout)
     assert image.width == 1120
     assert np.asarray(image).min() < 100
