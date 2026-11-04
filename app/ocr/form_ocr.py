@@ -1,25 +1,25 @@
-"""现场照片识别:照片(纸质表拍照)→ 本机 RapidOCR(core/engine)→ 按模板库表样坐标(templates/layouts)对到字段。
+"""现场照片识别:照片(纸质表拍照)→ 本机 RapidOCR(离线)→ 按模板库表样坐标(templates/layouts)对到字段。
   1. OCR:文字框 [{s, box:[x0,y0,x1,y1](像素), conf}]
-  2. 对齐:表样 PDF 文字层(PyMuPDF,经 core/media.visible_chars)里印好的栏目文字(施工单位、工程部位……)
-     与照片里认出的同一段文字配对,拟合 照片 = a·表样 + b(x、y 各一组,剔除离群点);
-     配对不足 4 处或横竖比例与表样不符 = 照片不是这张表,不按坐标取(返回 warning)
+  2. 对齐:表样 PDF 文字层(PyMuPDF)里印好的栏目文字(施工单位、工程部位……)与照片里认出的同一段文字配对,
+     拟合 照片 = a·表样 + b(x、y 各一组,剔除离群点);配对不足 4 处或横竖比例与表样不符 = 照片不是这张表,
+     不按坐标取(返回 warning)
   3. 取值(每个字段按顺序试,取到即止):
      inline   照片里栏目和填写内容连在一个框里(「监理单位：四川…」)→ 栏目后面的文字
      rect     表样坐标换算到照片上的填写区域里的文字(去掉表样本身印的字)
      right    栏目右侧同一行最近的一个框
   没有表样坐标的表(如 ZJ 施工用表)只按栏目文字取 inline / right。
-引擎、读图、文字层原语在 core/engine 与 core/media;结果只是初稿,由业务端 / App 人工核对后再提交。"""
+结果只是初稿,由业务端 / App 人工核对后再提交。"""
 
+import base64
 import re
 from pathlib import Path
 
+import cv2
 import numpy as np
+import pymupdf
 
-from app.ocr.core.engine import ocr
-from app.ocr.core.layouts import layout_of
-from app.ocr.core.media import date_value, load_image, open_form_pdf, visible_chars
-from app.ocr.core.resources import forms, resource_cache
-from app.ocr.form.labels import B1, JB
+from app.ocr.labels import B1, JB
+from app.ocr.resources import OCRModelError, asset, forms, get_resources, resource_cache
 
 # 字段 → (栏目正则, 第几个同名栏目):第二册 / 第一册 版面生成时用的同一套栏目正则(两册同一字段的栏目名不同,如标段 / 合同段)
 LABELS = {
@@ -34,6 +34,38 @@ ANY_LABEL = re.compile(
     "|".join(f"(?:{rx})" for rx, _ in [*LABELS["jb12"].values(), *LABELS["book1"].values()])
 )
 DATE = re.compile(r"date$")
+MODEL_UNAVAILABLE = "OCR 模型不可用，请检查 OCR_MODEL_ROOT 是否已准备模型文件；开发环境该目录需可写"
+
+
+def rapidocr_params(model_root: Path) -> dict:
+    """识别质量优先:PP-OCRv6 Medium 做检测与识别,PP-OCRv5 Server 做方向分类。
+    模型首次使用时由 rapidocr 下载到 model_root,离线部署需提前放入该目录。"""
+    from rapidocr import ModelType, OCRVersion
+
+    return {
+        "Global.model_root_dir": str(model_root),
+        "Det.model_type": ModelType.MEDIUM,
+        "Det.ocr_version": OCRVersion.PPOCRV6,
+        "Rec.model_type": ModelType.MEDIUM,
+        "Rec.ocr_version": OCRVersion.PPOCRV6,
+        "Cls.model_type": ModelType.SERVER,
+        "Cls.ocr_version": OCRVersion.PPOCRV5,
+        "EngineConfig.onnxruntime.intra_op_num_threads": 1,
+        "EngineConfig.onnxruntime.inter_op_num_threads": 1,
+    }
+
+
+def engine():
+    """每个应用首次使用时载入 RapidOCR；调用方持有资源锁。"""
+    resources = get_resources()
+    if resources.engine is None:
+        from rapidocr import RapidOCR
+
+        try:
+            resources.engine = RapidOCR(params=rapidocr_params(resources.models))
+        except Exception as exc:  # noqa: BLE001 —— 模型缺失、下载失败或依赖不可用统一视为模型不可用
+            raise OCRModelError(MODEL_UNAVAILABLE) from exc
+    return resources.engine
 
 
 def norm(s: str) -> str:
@@ -41,37 +73,76 @@ def norm(s: str) -> str:
     return re.sub(r"[\s:：_＿　]", "", s or "")
 
 
+def read_image(path: Path):
+    img = cv2.imdecode(
+        np.fromfile(str(path), np.uint8), cv2.IMREAD_COLOR
+    )  # 中文路径不能用 cv2.imread
+    if img is None:
+        raise ValueError(f"不是可识别的图片:{path.name}")
+    return img
+
+
+def decode_base64_image(data: str):
+    """base64 图片 -> BGR 图像；兼容 data:image/jpeg;base64,... 前缀。"""
+    if data.startswith("data:") and "," in data:
+        data = data.split(",", 1)[1]
+    buffer = np.frombuffer(base64.b64decode(data), dtype=np.uint8)
+    img = cv2.imdecode(buffer, cv2.IMREAD_COLOR)
+    if img is None:
+        raise ValueError("不是可识别的图片:base64 内容无效")
+    return img
+
+
+def ocr(img) -> list[dict]:
+    with get_resources().lock:
+        try:
+            res = engine()(img)
+        except OCRModelError:
+            raise
+        except Exception as exc:  # noqa: BLE001 —— 模型文件缺失或下载失败发生在首次推理时
+            raise OCRModelError(MODEL_UNAVAILABLE) from exc
+    if res.boxes is None:
+        return []
+    out = []
+    for pts, s, conf in zip(res.boxes, res.txts or (), res.scores or (), strict=True):
+        xs, ys = [float(p[0]) for p in pts], [float(p[1]) for p in pts]
+        out.append({"s": s, "box": [min(xs), min(ys), max(xs), max(ys)], "conf": float(conf)})
+    return out
+
+
 @resource_cache(maxsize=256)
 def page_aspect(code: str) -> float:
     """表样页面 高 / 宽"""
-    with open_form_pdf(code) as doc:
-        if doc is None:
-            raise ValueError(f"模板库没有 {code} 的表样 PDF")
+    with pymupdf.open(asset(forms()[code]["pdf"][0])) as doc:
         return doc[0].rect.height / doc[0].rect.width
 
 
 @resource_cache(maxsize=256)
 def template_runs(code: str) -> tuple:
     """表样 PDF 上印好的文字,按行合并成段:((文字, x0, 基线 y, x1), …),页面百分比。
-    只取看得见的字(visible_chars);文字层是一个字一项(粗体还会填充 + 描边画两遍),
-    同一行相邻的字间距 < 0.02 页宽算一段。"""
-    with open_form_pdf(code) as doc:
-        if doc is None:
-            return ()
+    只取看得见的字(texttrace type 0 填充 / 1 描边);type 3 是扫描件叠的隐藏文字层,有错字(危工单位),不用。
+    文字层是一个字一项(粗体还会填充 + 描边画两遍),同一行相邻的字间距 < 0.02 页宽算一段。"""
+    f = forms().get(code) or {}
+    if not f.get("pdf") or not asset(f["pdf"][0]).exists():
+        return ()
+    with pymupdf.open(asset(f["pdf"][0])) as doc:
         pg = doc[0]
         W, H = pg.rect.width, pg.rect.height
         items = set()
-        for c in visible_chars(pg):
-            ch = chr(c[0])
-            if ch.strip():
-                items.add(
-                    (
-                        ch,
-                        round(c[2][0] / W, 4),
-                        round(c[2][1] / H, 4),
-                        round((c[3][2] - c[3][0]) / W, 4),
+        for sp in pg.get_texttrace():
+            if sp["type"] == 3:
+                continue
+            for c in sp["chars"]:
+                ch = chr(c[0])
+                if ch.strip():
+                    items.add(
+                        (
+                            ch,
+                            round(c[2][0] / W, 4),
+                            round(c[2][1] / H, 4),
+                            round((c[3][2] - c[3][0]) / W, 4),
+                        )
                     )
-                )
     items = sorted(items, key=lambda t: (round(t[2] / 0.004), t[1]))
     runs, cur = [], None
     for s, x, y, w in items:
@@ -149,6 +220,21 @@ def fit(code: str, boxes: list[dict], size) -> dict:
     return {"anchors": len(pairs), "how": "mismatch"}
 
 
+def layout_of(code: str) -> tuple[str, list[dict], list[dict]]:
+    """表号 → (册 jb12 / book1 / any, 字段 [{field, rect, behavior}], 关键项目 [{name, rect}])"""
+    if not code:
+        return "any", [], []
+    layouts = {
+        kind: get_resources().load(f"layouts/{kind}.json")["forms"] for kind in ("jb12", "book1")
+    }
+    if code in layouts["jb12"]:
+        v = layouts["jb12"][code]
+        return "jb12", v.get("header", []), v.get("key", [])
+    if code in layouts["book1"]:
+        return "book1", layouts["book1"][code], []
+    return "any", [], []
+
+
 def _join(bs):
     return " ".join(
         b["s"] for b in sorted(bs, key=lambda b: (round(b["box"][1] / 20), b["box"][0]))
@@ -161,6 +247,16 @@ def _conf(bs):
 
 def _clean(s: str) -> str:
     return re.sub(r"^[\s:：_＿]+|[\s_＿]+$", "", s or "")
+
+
+def date_value(s: str) -> str:
+    """日期栏:「2024 年 3 月 21 日」「2024.3.21」「2024 3 21」「20240321」→ 2024-03-21;认不全的原样返回"""
+    m = re.search(r"(\d{4})\s*[年.\-/\s]\s*(\d{1,2})\s*[月.\-/\s]\s*(\d{1,2})", s) or re.fullmatch(
+        r"\s*(20\d{2})(\d{2})(\d{2})\s*", s
+    )
+    if m and 1 <= int(m.group(2)) <= 12 and 1 <= int(m.group(3)) <= 31:
+        return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+    return s
 
 
 def label_hits(labels: dict, field: str, boxes: list[dict]):
@@ -212,7 +308,12 @@ def right_value(lab, boxes, printed):
 
 def recognize(path: Path | None, code: str, img: str = "") -> dict:
     """照片路径与 base64 图片至少提供一个；同时提供时优先用 base64。"""
-    image = load_image(path, img)
+    if img:
+        image = decode_base64_image(img)
+    else:
+        if path is None:
+            raise ValueError("path 与 img 至少提供一个")
+        image = read_image(path)
     boxes = ocr(image)
     book, fields, keys = layout_of(code)
     labels = LABELS[book]

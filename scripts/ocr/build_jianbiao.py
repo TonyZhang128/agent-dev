@@ -2,15 +2,15 @@
 用法:uv run --locked python -m scripts.ocr.build_jianbiao JB12-8.5.2 JB12-8.3.1-4 …(不带参数 = 第二册全部)
 简表 = 一张纸一个外框,只留现场要手写的格子:
   表头  工程部位 | 抽检日期;抽检人 | 合同段
-  实测  每个检查项目一行:项目名 + 最多 5 个实测值(格子字段 = 目标表上该项目第一行实测格的格子键 g*,见 app/ocr/sheets/grid.py)
+  实测  每个检查项目一行:项目名 + 最多 5 个实测值(格子字段 = 目标表上该项目第一行实测格的格子键 g*,见 app/core/grid.py)
 识别出的值按同名字段写回目标表同一格,与人工在业务端表上填的是同一套字段。"""
 
 import json
 import re
 import sys
 
-from app.ocr.core.resources import forms
-from app.ocr.sheets import grid
+from app.ocr import grid
+from app.ocr.resources import forms
 from scripts.ocr.common import TEMPLATES, today, write_json
 
 HEAD = [

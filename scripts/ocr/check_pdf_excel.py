@@ -14,9 +14,8 @@ from pathlib import Path
 import openpyxl
 import pymupdf
 
-from app.ocr.core.resources import forms
-from app.ocr.jianbiao.fill import compute
-from app.ocr.sheets import grid
+from app.ocr import grid, jianbiao
+from app.ocr.resources import forms
 from scripts.ocr.common import ROOT
 
 
@@ -25,7 +24,7 @@ def check(code: str, tmp: Path) -> dict:
     if not cells:
         return {"code": code, "skip": "表样没有可填空格子"}
     values = {c["field"]: f"T{i:03d}" for i, c in enumerate(cells)}
-    out = compute(code, {}, values, tmp / f"{code}.pdf")
+    out = jianbiao.compute(code, {}, values, tmp / f"{code}.pdf")
     if not out.get("xlsx"):
         return {"code": code, "skip": "没有 Excel 表样"}
     res = {

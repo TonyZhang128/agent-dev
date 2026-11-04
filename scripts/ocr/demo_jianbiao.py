@@ -15,7 +15,7 @@ import urllib.request
 import uuid
 from pathlib import Path
 
-from app.ocr.jianbiao.recognize import jianbiao_of
+from app.ocr.jianbiao import jianbiao_of
 
 API = "http://localhost:8408"
 

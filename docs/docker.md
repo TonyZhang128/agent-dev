@@ -1,6 +1,6 @@
 # Docker 生产部署（业务 API + vLLM）
 
-本说明描述用容器部署生产环境：业务 API 与 vLLM 模型服务是**两个镜像、两个环境**，通过 Compose 编排在同一台 GPU 主机上。业务镜像不含模型权重；RapidOCR 统一使用 onnxruntime-gpu 发行包，`OCR_DEVICE=cuda`（默认）时 OCR 容器运行环境需提供 NVIDIA GPU、CUDA 12 与 cuDNN 9，改 `cpu` 可无 GPU 运行（速度较慢）。模型镜像不含业务依赖。宿主机预置权重，容器只读挂载，构建阶段不下载模型。
+本说明描述用容器部署生产环境：业务 API 与 vLLM 模型服务是**两个镜像、两个环境**，通过 Compose 编排在同一台 GPU 主机上。业务镜像不含模型和 GPU 依赖；模型镜像不含业务依赖。宿主机预置权重，容器只读挂载，构建阶段不下载模型。
 
 非容器部署方式见 [Linux + NVIDIA 部署](deployment-linux.md)。
 
