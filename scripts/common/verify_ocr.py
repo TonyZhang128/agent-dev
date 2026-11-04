@@ -26,7 +26,7 @@ def verify(client: httpx.Client, photo: str, form: str, cfg: dict, out: str = ""
     response.raise_for_status()
     if response.json() != {"status": "ok"}:
         raise ValueError("主应用存活检查失败")
-    if not data("/health/deps")["ok"]:
+    if not data("/diagnostics")["ok"]:
         raise ValueError("OCR 运行依赖检查失败")
     fields = data(f"/ocr/sheet/{form}")
     if not fields:

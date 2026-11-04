@@ -49,7 +49,7 @@ def test_aggregate_router_can_be_mounted_in_another_application():
             "/agents/intent/business",
             "/agents/intent/archive",
             "/agents/chat",
-            "/health/deps",
+            "/diagnostics",
             "/ocr/recognize",
             "/ocr/daily-logs",
             "/ocr/jianbiao",

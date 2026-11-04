@@ -5,8 +5,8 @@
     "version": "0.1.0",
     "description": "公路工程业务智能体与文档加工服务的对外 HTTP 契约。当前文件是从实现归纳的待确认草案：已实现接口的请求和成功响应来自 FastAPI/Pydantic，OCR、WBS 的响应体及统一错误响应由 scripts/docs/openapi_contract.py 补充。经用户批准前不得视为正式契约，也不得据此绕过接口变更审批。",
     "x-contract-status": "draft-pending-review",
-    "x-contract-version": "0.1.0-review.1",
-    "x-review-status": "first-version-submitted",
+    "x-contract-version": "0.1.0-review.2",
+    "x-review-status": "revised-pending-review",
     "x-contract-authority": "interfaces/openapi/ 中的正式契约（批准后）优先于本草案和运行时自动生成结果。"
   },
   "paths": {
@@ -69,6 +69,56 @@
         "x-contract-status": "confirmed",
         "x-contract-source": "AGENTS.md 第四节；docs/agents-api.md；tests/test_routing.py",
         "x-side-effects": "无；只发起模型列表请求。",
+        "x-idempotency": "只读，可安全重试。"
+      }
+    },
+    "/diagnostics": {
+      "get": {
+        "summary": "检查本地依赖与资源",
+        "description": "检查本地运行库、ONNX Runtime 与 OCR_DEVICE 是否一致，以及 OCR 模板、版面、WBS 规则、模型目录和数据池是否可用。不初始化引擎、不访问网络、不写文件；data.ok 为 false 时仍返回 HTTP 200。",
+        "operationId": "diagnostics_diagnostics_get",
+        "responses": {
+          "200": {
+            "description": "诊断结果；data.ok 汇总必需检查，warnings 不影响 HTTP 状态。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiagnosticsResponse"
+                },
+                "example": {
+                  "status": 200,
+                  "data": {
+                    "ok": true,
+                    "warnings": [],
+                    "caps": {
+                      "推理设备": {
+                        "ok": true,
+                        "configured": "cpu",
+                        "device": "CPU",
+                        "providers": [
+                          "CPUExecutionProvider"
+                        ]
+                      },
+                      "OCR 资源": {
+                        "ok": true,
+                        "templates": {
+                          "ok": true,
+                          "forms": 42
+                        },
+                        "projects": {
+                          "ok": true
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-contract-status": "pending-review",
+        "x-contract-source": "AGENTS.md 第四节；docs/ocr.md；app/ocr/core/deps.py；tests/test_diagnostics.py",
+        "x-side-effects": "无持久副作用；只做进程内导入、读取模板 JSON 和目录状态。",
         "x-idempotency": "只读，可安全重试。"
       }
     },
@@ -438,56 +488,6 @@
         "x-contract-source": "AGENTS.md 第四节；docs/agents-api.md；docs/sessions.md；tests/test_agents.py",
         "x-side-effects": "无外部业务写入。",
         "x-idempotency": "同一输入可能生成不同回答；重试前应确认业务是否接受。"
-      }
-    },
-    "/health/deps": {
-      "get": {
-        "tags": [
-          "ocr"
-        ],
-        "summary": "检查文档处理依赖",
-        "operationId": "health_deps_health_deps_get",
-        "responses": {
-          "200": {
-            "description": "依赖检查结果。",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HealthDepsResponse"
-                },
-                "example": {
-                  "status": 200,
-                  "data": {
-                    "ok": true,
-                    "caps": {
-                      "PDF(渲染 / 文字层 / 写字 / 拆页)": {
-                        "ok": true,
-                        "deps": [
-                          {
-                            "name": "PyMuPDF",
-                            "ok": true,
-                            "version": "1.26.0"
-                          }
-                        ]
-                      },
-                      "推理设备": {
-                        "ok": true,
-                        "providers": [
-                          "CPUExecutionProvider"
-                        ]
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "description": "检查 OCR、PDF、Excel、图像库能否导入，并报告 OpenCV 特征与 ONNX 推理设备。只证明依赖可导入，不代表模板齐全或识别准确。",
-        "x-contract-status": "pending-review",
-        "x-contract-source": "AGENTS.md 第四节；docs/ocr.md；app/ocr/deps.py；tests/test_ocr.py",
-        "x-side-effects": "无；只做进程内导入检查。",
-        "x-idempotency": "只读，可安全重试。"
       }
     },
     "/ocr/recognize": {
@@ -1808,7 +1808,15 @@
             },
             "type": "array",
             "title": "Drawings",
-            "description": "施工图 PDF 或 _N.pdf 单页拆分目录的数据池相对路径。"
+            "description": "PROJECTS_ROOT 数据池内的 PDF 路径或目录列表"
+          },
+          "imgs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Imgs",
+            "description": "base64 编码的 PDF 数据列表；drawings 与 imgs 至少提供一个"
           },
           "basis": {
             "anyOf": [
@@ -1827,8 +1835,7 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "prefix",
-          "drawings"
+          "prefix"
         ],
         "title": "DraftReq"
       },
@@ -1940,9 +1947,15 @@
         "properties": {
           "path": {
             "type": "string",
-            "minLength": 1,
             "title": "Path",
-            "description": "PROJECTS_ROOT 数据池内的简表照片路径。"
+            "description": "PROJECTS_ROOT 数据池内的照片路径",
+            "default": ""
+          },
+          "img": {
+            "type": "string",
+            "title": "Img",
+            "description": "base64 编码的图片数据；path 与 img 至少提供一个",
+            "default": ""
           },
           "form": {
             "type": "string",
@@ -1972,7 +1985,6 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "path",
           "form",
           "cfg"
         ],
@@ -2340,34 +2352,91 @@
               "type": "string"
             }
           },
+          "configured": {
+            "type": "string",
+            "enum": [
+              "cpu",
+              "cuda",
+              "unknown"
+            ],
+            "description": "当前 OCR_DEVICE；应用资源未初始化时为 unknown。"
+          },
+          "device": {
+            "type": "string",
+            "description": "onnxruntime 报告的实际设备。"
+          },
+          "runtime": {
+            "type": "string",
+            "description": "已安装的 ONNX Runtime 发行包及版本。"
+          },
+          "note": {
+            "type": "string",
+            "description": "该能力检查的边界说明。"
+          },
+          "templates": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "layouts": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "wbs_rules": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "models": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "projects": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "admin": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "assets": {
+            "type": "object",
+            "additionalProperties": true
+          },
           "error": {
             "type": "string"
           }
         },
-        "description": "按能力分组的依赖检查结果；不同能力的字段不完全相同。"
+        "description": "按能力分组的检查结果；不同能力的字段不完全相同。"
       },
-      "HealthDepsData": {
+      "DiagnosticsData": {
         "type": "object",
         "additionalProperties": false,
         "required": [
           "ok",
+          "warnings",
           "caps"
         ],
         "properties": {
           "ok": {
             "type": "boolean",
-            "description": "全部依赖是否可用。"
+            "description": "全部检查是否通过；warnings 不影响 ok。"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "非致命问题，例如模型目录为空但可写、表样目录缺失。"
           },
           "caps": {
             "type": "object",
             "additionalProperties": {
               "$ref": "#/components/schemas/CapabilityStatus"
             },
-            "description": "能力名 → 检查结果。能力名包括 PDF、Excel、图像、文字识别、模型推理、OpenCV 特征和推理设备。"
+            "description": "能力名 → 检查结果。能力名包括 PDF、Excel、图像、文字识别、模型推理、OpenCV 特征、推理设备和 OCR 资源。"
           }
         }
       },
-      "HealthDepsResponse": {
+      "DiagnosticsResponse": {
         "type": "object",
         "additionalProperties": false,
         "required": [
@@ -2381,10 +2450,10 @@
             "description": "业务成功状态，与 HTTP 200 一致；不是 HTTP 状态码的替代品。"
           },
           "data": {
-            "$ref": "#/components/schemas/HealthDepsData"
+            "$ref": "#/components/schemas/DiagnosticsData"
           }
         },
-        "description": "依赖自检成功响应。"
+        "description": "本地依赖与资源诊断成功响应。"
       },
       "ImageSize": {
         "type": "object",

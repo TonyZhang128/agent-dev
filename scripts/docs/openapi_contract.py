@@ -156,25 +156,48 @@ SCHEMAS: dict[str, dict[str, Any]] = {
             "SIFT": {"type": "boolean"},
             "ORB": {"type": "boolean"},
             "providers": {"type": "array", "items": {"type": "string"}},
+            "configured": {
+                "type": "string",
+                "enum": ["cpu", "cuda", "unknown"],
+                "description": "当前 OCR_DEVICE；应用资源未初始化时为 unknown。",
+            },
+            "device": {"type": "string", "description": "onnxruntime 报告的实际设备。"},
+            "runtime": {"type": "string", "description": "已安装的 ONNX Runtime 发行包及版本。"},
+            "note": {"type": "string", "description": "该能力检查的边界说明。"},
+            "templates": {"type": "object", "additionalProperties": True},
+            "layouts": {"type": "object", "additionalProperties": True},
+            "wbs_rules": {"type": "object", "additionalProperties": True},
+            "models": {"type": "object", "additionalProperties": True},
+            "projects": {"type": "object", "additionalProperties": True},
+            "admin": {"type": "object", "additionalProperties": True},
+            "assets": {"type": "object", "additionalProperties": True},
             "error": {"type": "string"},
         },
-        "description": "按能力分组的依赖检查结果；不同能力的字段不完全相同。",
+        "description": "按能力分组的检查结果；不同能力的字段不完全相同。",
     },
-    "HealthDepsData": {
+    "DiagnosticsData": {
         "type": "object",
         "additionalProperties": False,
-        "required": ["ok", "caps"],
+        "required": ["ok", "warnings", "caps"],
         "properties": {
-            "ok": {"type": "boolean", "description": "全部依赖是否可用。"},
+            "ok": {
+                "type": "boolean",
+                "description": "全部检查是否通过；warnings 不影响 ok。",
+            },
+            "warnings": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "非致命问题，例如模型目录为空但可写、表样目录缺失。",
+            },
             "caps": {
                 "type": "object",
                 "additionalProperties": ref("CapabilityStatus"),
                 "description": "能力名 → 检查结果。能力名包括 PDF、Excel、图像、文字识别、"
-                "模型推理、OpenCV 特征和推理设备。",
+                "模型推理、OpenCV 特征、推理设备和 OCR 资源。",
             },
         },
     },
-    "HealthDepsResponse": _envelope_schema("HealthDepsData", "依赖自检成功响应。"),
+    "DiagnosticsResponse": _envelope_schema("DiagnosticsData", "本地依赖与资源诊断成功响应。"),
     "ImageSize": {
         "type": "object",
         "additionalProperties": False,
@@ -815,29 +838,37 @@ OPERATIONS: dict[str, dict[str, dict[str, Any]]] = {
             },
         )
     },
-    "/health/deps": {
+    "/diagnostics": {
         "get": _operation(
-            description="检查 OCR、PDF、Excel、图像库能否导入，并报告 OpenCV 特征与 ONNX 推理设备。"
-            "只证明依赖可导入，不代表模板齐全或识别准确。",
-            summary="检查文档处理依赖",
+            description="检查本地运行库、ONNX Runtime 与 OCR_DEVICE 是否一致，以及 OCR 模板、"
+            "版面、WBS 规则、模型目录和数据池是否可用。不初始化引擎、不访问网络、不写文件；"
+            "data.ok 为 false 时仍返回 HTTP 200。",
+            summary="检查本地依赖与资源",
             status="pending-review",
-            source="AGENTS.md 第四节；docs/ocr.md；app/ocr/deps.py；tests/test_ocr.py",
-            side_effects="无；只做进程内导入检查。",
+            source="AGENTS.md 第四节；docs/ocr.md；app/ocr/core/deps.py；tests/test_diagnostics.py",
+            side_effects="无持久副作用；只做进程内导入、读取模板 JSON 和目录状态。",
             idempotency="只读，可安全重试。",
             responses={
                 "200": _json_response(
-                    "依赖检查结果。",
-                    ref("HealthDepsResponse"),
+                    "诊断结果；data.ok 汇总必需检查，warnings 不影响 HTTP 状态。",
+                    ref("DiagnosticsResponse"),
                     example={
                         "status": 200,
                         "data": {
                             "ok": True,
+                            "warnings": [],
                             "caps": {
-                                "PDF(渲染 / 文字层 / 写字 / 拆页)": {
+                                "推理设备": {
                                     "ok": True,
-                                    "deps": [{"name": "PyMuPDF", "ok": True, "version": "1.26.0"}],
+                                    "configured": "cpu",
+                                    "device": "CPU",
+                                    "providers": ["CPUExecutionProvider"],
                                 },
-                                "推理设备": {"ok": True, "providers": ["CPUExecutionProvider"]},
+                                "OCR 资源": {
+                                    "ok": True,
+                                    "templates": {"ok": True, "forms": 42},
+                                    "projects": {"ok": True},
+                                },
                             },
                         },
                     },
@@ -1216,8 +1247,8 @@ def build_contract() -> dict[str, Any]:
         "经用户批准前不得视为正式契约，也不得据此绕过接口变更审批。"
     )
     spec["info"]["x-contract-status"] = "draft-pending-review"
-    spec["info"]["x-contract-version"] = "0.1.0-review.1"
-    spec["info"]["x-review-status"] = "first-version-submitted"
+    spec["info"]["x-contract-version"] = "0.1.0-review.2"
+    spec["info"]["x-review-status"] = "revised-pending-review"
     spec["info"]["x-contract-authority"] = (
         "interfaces/openapi/ 中的正式契约（批准后）优先于本草案和运行时自动生成结果。"
     )

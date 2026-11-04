@@ -86,7 +86,7 @@ def test_draft_and_review_states_are_explicit():
             for path, operations in contract["paths"].items()
             if any(op["x-contract-status"] == "pending-review" for op in operations.values())
         } == {
-            "/health/deps",
+            "/diagnostics",
             "/ocr/recognize",
             "/ocr/daily-logs",
             "/ocr/jianbiao",
@@ -129,9 +129,9 @@ def test_document_endpoints_declare_envelope_and_errors():
         "/ocr/fill",
         "/ocr/sheet/{form}",
         "/wbs/draft",
-        "/health/deps",
+        "/diagnostics",
     ):
-        method = "get" if path in {"/ocr/sheet/{form}", "/health/deps"} else "post"
+        method = "get" if path in {"/ocr/sheet/{form}", "/diagnostics"} else "post"
         schema = paths[path][method]["responses"]["200"]["content"]["application/json"]["schema"]
         assert schema["$ref"].startswith("#/components/schemas/")
         assert schema["$ref"].endswith("Response")

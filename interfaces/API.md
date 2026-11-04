@@ -11,7 +11,7 @@
 | 标题 | 公路工程业务智能体 |
 | OpenAPI 版本 | 3.1.0 |
 | 接口版本 | `0.1.0` |
-| 契约版本 | `0.1.0-review.1` |
+| 契约版本 | `0.1.0-review.2` |
 | 契约状态 | `draft-pending-review` |
 | 服务地址 | http://127.0.0.1:8309 |
 
@@ -39,11 +39,11 @@
 | --- | --- | --- | --- |
 | 1 | `GET /health` | 检查进程存活 | `confirmed` |
 | 2 | `GET /ready` | 检查模型就绪 | `confirmed` |
-| 3 | `POST /agents/log-summary` | 总结并生成工作日志 | `confirmed` |
-| 4 | `POST /agents/intent/business` | 识别业务页面与最小功能意图 | `confirmed` |
-| 5 | `POST /agents/intent/archive` | 识别文件归档系统意图 | `confirmed` |
-| 6 | `POST /agents/chat` | 自由对话 | `confirmed` |
-| 7 | `GET /health/deps` | 检查文档处理依赖 | `pending-review` |
+| 3 | `GET /diagnostics` | 检查本地依赖与资源 | `pending-review` |
+| 4 | `POST /agents/log-summary` | 总结并生成工作日志 | `confirmed` |
+| 5 | `POST /agents/intent/business` | 识别业务页面与最小功能意图 | `confirmed` |
+| 6 | `POST /agents/intent/archive` | 识别文件归档系统意图 | `confirmed` |
+| 7 | `POST /agents/chat` | 自由对话 | `confirmed` |
 | 8 | `POST /ocr/recognize` | 识别普通照片或简表照片 | `pending-review` |
 | 9 | `POST /ocr/daily-logs` | 识别 JLB13 监理日志 | `pending-review` |
 | 10 | `POST /ocr/jianbiao` | 识别简表并回填目标表 | `pending-review` |
@@ -119,7 +119,72 @@ Schema：`HealthResponse`
 
 Schema：`ReadyResponse`
 
-### 3. `POST /agents/log-summary`
+### 3. `GET /diagnostics`
+
+| 项目 | 内容 |
+| --- | --- |
+| 摘要 | 检查本地依赖与资源 |
+| 契约状态 | `pending-review` |
+| 来源 | AGENTS.md 第四节；docs/ocr.md；app/ocr/core/deps.py；tests/test_diagnostics.py |
+| 副作用 | 无持久副作用；只做进程内导入、读取模板 JSON 和目录状态。 |
+| 幂等/重试 | 只读，可安全重试。 |
+
+检查本地运行库、ONNX Runtime 与 OCR_DEVICE 是否一致，以及 OCR 模板、版面、WBS 规则、模型目录和数据池是否可用。不初始化引擎、不访问网络、不写文件；data.ok 为 false 时仍返回 HTTP 200。
+
+**响应**
+
+- `200`：诊断结果；data.ok 汇总必需检查，warnings 不影响 HTTP 状态。
+
+**200 响应体**
+
+```json
+{
+  "status": 200,
+  "data": {
+    "ok": true,
+    "warnings": [],
+    "caps": {
+      "推理设备": {
+        "ok": true,
+        "configured": "cpu",
+        "device": "CPU",
+        "providers": [
+          "CPUExecutionProvider"
+        ]
+      },
+      "OCR 资源": {
+        "ok": true,
+        "templates": {
+          "ok": true,
+          "forms": 42
+        },
+        "projects": {
+          "ok": true
+        }
+      }
+    }
+  }
+}
+```
+
+**响应字段**
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `status` | const `200` | 是 |  |  | 业务成功状态，与 HTTP 200 一致；不是 HTTP 状态码的替代品。 |
+| `data` | `DiagnosticsData` | 是 |  |  |  |
+
+**`data` 字段**
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `ok` | boolean | 是 |  |  | 全部检查是否通过；warnings 不影响 ok。 |
+| `warnings` | array<string> | 是 |  |  | 非致命问题，例如模型目录为空但可写、表样目录缺失。 |
+| `caps` | object | 是 |  |  | 能力名 → 检查结果。能力名包括 PDF、Excel、图像、文字识别、模型推理、OpenCV 特征、推理设备和 OCR 资源。 |
+
+Schema：`DiagnosticsResponse`
+
+### 4. `POST /agents/log-summary`
 
 | 项目 | 内容 |
 | --- | --- |
@@ -198,7 +263,7 @@ Schema：`LogSummaryRequest`
 
 Schema：`LogSummary`
 
-### 4. `POST /agents/intent/business`
+### 5. `POST /agents/intent/business`
 
 | 项目 | 内容 |
 | --- | --- |
@@ -273,7 +338,7 @@ Schema：`BusinessIntentRequest`
 
 Schema：`BusinessIntentResult`
 
-### 5. `POST /agents/intent/archive`
+### 6. `POST /agents/intent/archive`
 
 | 项目 | 内容 |
 | --- | --- |
@@ -338,7 +403,7 @@ Schema：`IntentRequest`
 
 Schema：`ArchiveIntentResult`
 
-### 6. `POST /agents/chat`
+### 7. `POST /agents/chat`
 
 | 项目 | 内容 |
 | --- | --- |
@@ -397,67 +462,6 @@ Schema：`ChatRequest`
 | `model` | string | 是 |  |  | 本次调用实际使用的模型名称。 |
 
 Schema：`ChatResponse`
-
-### 7. `GET /health/deps`
-
-| 项目 | 内容 |
-| --- | --- |
-| 摘要 | 检查文档处理依赖 |
-| 契约状态 | `pending-review` |
-| 来源 | AGENTS.md 第四节；docs/ocr.md；app/ocr/deps.py；tests/test_ocr.py |
-| 副作用 | 无；只做进程内导入检查。 |
-| 幂等/重试 | 只读，可安全重试。 |
-
-检查 OCR、PDF、Excel、图像库能否导入，并报告 OpenCV 特征与 ONNX 推理设备。只证明依赖可导入，不代表模板齐全或识别准确。
-
-**响应**
-
-- `200`：依赖检查结果。
-
-**200 响应体**
-
-```json
-{
-  "status": 200,
-  "data": {
-    "ok": true,
-    "caps": {
-      "PDF(渲染 / 文字层 / 写字 / 拆页)": {
-        "ok": true,
-        "deps": [
-          {
-            "name": "PyMuPDF",
-            "ok": true,
-            "version": "1.26.0"
-          }
-        ]
-      },
-      "推理设备": {
-        "ok": true,
-        "providers": [
-          "CPUExecutionProvider"
-        ]
-      }
-    }
-  }
-}
-```
-
-**响应字段**
-
-| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
-| --- | --- | --- | --- | --- | --- |
-| `status` | const `200` | 是 |  |  | 业务成功状态，与 HTTP 200 一致；不是 HTTP 状态码的替代品。 |
-| `data` | `HealthDepsData` | 是 |  |  |  |
-
-**`data` 字段**
-
-| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
-| --- | --- | --- | --- | --- | --- |
-| `ok` | boolean | 是 |  |  | 全部依赖是否可用。 |
-| `caps` | object | 是 |  |  | 能力名 → 检查结果。能力名包括 PDF、Excel、图像、文字识别、模型推理、OpenCV 特征和推理设备。 |
-
-Schema：`HealthDepsResponse`
 
 ### 8. `POST /ocr/recognize`
 
@@ -715,7 +719,8 @@ Schema：`DailyLogsResponse`
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
-| `path` | string | 是 |  | minLength=1 | PROJECTS_ROOT 数据池内的简表照片路径。 |
+| `path` | string | 否 | `""` |  | PROJECTS_ROOT 数据池内的照片路径 |
+| `img` | string | 否 | `""` |  | base64 编码的图片数据；path 与 img 至少提供一个 |
 | `form` | string | 是 |  | minLength=1 | 目标表号，同时用于查找简表版面。 |
 | `cfg` | object | 是 |  |  | 配置平台的字段、锚点、引用和公式元数据。 |
 | `bound` | object | 否 |  |  | 项目资料带入值；照片识别值优先。 |
@@ -1022,7 +1027,8 @@ Schema：`SheetResponse`
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
 | `prefix` | string | 是 |  | minLength=1 | 合同段编码前缀，例如 S210。 |
-| `drawings` | array<string> | 是 |  |  | 施工图 PDF 或 _N.pdf 单页拆分目录的数据池相对路径。 |
+| `drawings` | array<string> | 否 |  |  | PROJECTS_ROOT 数据池内的 PDF 路径或目录列表 |
+| `imgs` | array<string> | 否 |  |  | base64 编码的 PDF 数据列表；drawings 与 imgs 至少提供一个 |
 | `basis` | object 或 null | 否 |  |  | 工可依据，可包含 facts 键值对数组或对象。 |
 
 Schema：`DraftReq`
@@ -1173,7 +1179,8 @@ Schema：`WbsDraftResponse`
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
 | `prefix` | string | 是 |  | minLength=1 | 合同段编码前缀，例如 S210。 |
-| `drawings` | array<string> | 是 |  |  | 施工图 PDF 或 _N.pdf 单页拆分目录的数据池相对路径。 |
+| `drawings` | array<string> | 否 |  |  | PROJECTS_ROOT 数据池内的 PDF 路径或目录列表 |
+| `imgs` | array<string> | 否 |  |  | base64 编码的 PDF 数据列表；drawings 与 imgs 至少提供一个 |
 | `basis` | object 或 null | 否 |  |  | 工可依据，可包含 facts 键值对数组或对象。 |
 
 ### `FillReq`
@@ -1206,7 +1213,8 @@ Schema：`WbsDraftResponse`
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
-| `path` | string | 是 |  | minLength=1 | PROJECTS_ROOT 数据池内的简表照片路径。 |
+| `path` | string | 否 | `""` |  | PROJECTS_ROOT 数据池内的照片路径 |
+| `img` | string | 否 | `""` |  | base64 编码的图片数据；path 与 img 至少提供一个 |
 | `form` | string | 是 |  | minLength=1 | 目标表号，同时用于查找简表版面。 |
 | `cfg` | object | 是 |  |  | 配置平台的字段、锚点、引用和公式元数据。 |
 | `bound` | object | 否 |  |  | 项目资料带入值；照片识别值优先。 |
@@ -1315,7 +1323,7 @@ Schema：`WbsDraftResponse`
 
 ### `CapabilityStatus`
 
-按能力分组的依赖检查结果；不同能力的字段不完全相同。
+按能力分组的检查结果；不同能力的字段不完全相同。
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
@@ -1324,23 +1332,35 @@ Schema：`WbsDraftResponse`
 | `SIFT` | boolean | 否 |  |  |  |
 | `ORB` | boolean | 否 |  |  |  |
 | `providers` | array<string> | 否 |  |  |  |
+| `configured` | enum（`cpu`、`cuda`、`unknown`） | 否 |  |  | 当前 OCR_DEVICE；应用资源未初始化时为 unknown。 |
+| `device` | string | 否 |  |  | onnxruntime 报告的实际设备。 |
+| `runtime` | string | 否 |  |  | 已安装的 ONNX Runtime 发行包及版本。 |
+| `note` | string | 否 |  |  | 该能力检查的边界说明。 |
+| `templates` | object | 否 |  |  |  |
+| `layouts` | object | 否 |  |  |  |
+| `wbs_rules` | object | 否 |  |  |  |
+| `models` | object | 否 |  |  |  |
+| `projects` | object | 否 |  |  |  |
+| `admin` | object | 否 |  |  |  |
+| `assets` | object | 否 |  |  |  |
 | `error` | string | 否 |  |  |  |
 
-### `HealthDepsData`
+### `DiagnosticsData`
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
-| `ok` | boolean | 是 |  |  | 全部依赖是否可用。 |
-| `caps` | object | 是 |  |  | 能力名 → 检查结果。能力名包括 PDF、Excel、图像、文字识别、模型推理、OpenCV 特征和推理设备。 |
+| `ok` | boolean | 是 |  |  | 全部检查是否通过；warnings 不影响 ok。 |
+| `warnings` | array<string> | 是 |  |  | 非致命问题，例如模型目录为空但可写、表样目录缺失。 |
+| `caps` | object | 是 |  |  | 能力名 → 检查结果。能力名包括 PDF、Excel、图像、文字识别、模型推理、OpenCV 特征、推理设备和 OCR 资源。 |
 
-### `HealthDepsResponse`
+### `DiagnosticsResponse`
 
-依赖自检成功响应。
+本地依赖与资源诊断成功响应。
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
 | `status` | const `200` | 是 |  |  | 业务成功状态，与 HTTP 200 一致；不是 HTTP 状态码的替代品。 |
-| `data` | `HealthDepsData` | 是 |  |  |  |
+| `data` | `DiagnosticsData` | 是 |  |  |  |
 
 ### `ImageSize`
 

@@ -12,7 +12,6 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 
 from app.ocr import daily_logs
-from app.ocr.core import deps
 from app.ocr.core.resources import (
     OCRModelError,
     OCRResourceError,
@@ -69,16 +68,6 @@ def relative_outputs(result: dict, resources: OCRResources) -> dict:
         if result.get(key):
             result[key] = Path(result[key]).resolve().relative_to(resources.projects).as_posix()
     return result
-
-
-@router.get("/health/deps")
-def health_deps(request: Request):
-    capabilities = deps.check()
-    capabilities["推理设备"]["configured"] = request.app.state.ocr_resources.device
-    return {
-        "status": 200,
-        "data": {"ok": all(item["ok"] for item in capabilities.values()), "caps": capabilities},
-    }
 
 
 @router.post("/ocr/recognize")

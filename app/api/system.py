@@ -1,6 +1,10 @@
+"""系统级存活、就绪与本地依赖诊断接口。"""
+
 import httpx
 from fastapi import APIRouter, HTTPException, Request
 from openai import APIConnectionError, APIStatusError
+
+from app.ocr.core import deps
 
 router = APIRouter()
 
@@ -19,3 +23,10 @@ async def ready(request: Request):
     if not available:
         raise HTTPException(503, "模型未安装或 LLM_MODEL 与服务端模型名称不匹配")
     return {"status": "ready"}
+
+
+@router.get("/diagnostics")
+def diagnostics(request: Request):
+    """检查本地依赖与 OCR 资源；始终返回 200，由 data.ok/warnings 表达结果。"""
+    resources = getattr(request.app.state, "ocr_resources", None)
+    return {"status": 200, "data": deps.check(resources)}

@@ -37,6 +37,23 @@
         }
       }
     },
+    "/diagnostics": {
+      "get": {
+        "summary": "Diagnostics",
+        "description": "检查本地依赖与 OCR 资源；始终返回 200，由 data.ok/warnings 表达结果。",
+        "operationId": "diagnostics_diagnostics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/agents/log-summary": {
       "post": {
         "tags": [
@@ -195,25 +212,6 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/health/deps": {
-      "get": {
-        "tags": [
-          "ocr"
-        ],
-        "summary": "Health Deps",
-        "operationId": "health_deps_health_deps_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
               }
             }
           }
@@ -550,47 +548,6 @@
         "title": "ArchiveIntentResult",
         "description": "文件归档系统的意图识别结果；当前无聊天分流，理由始终简短。"
       },
-      "ChatMessage": {
-        "properties": {
-          "intent": {
-            "type": "string",
-            "enum": [
-              "A",
-              "B",
-              "C",
-              "D",
-              "unknown"
-            ],
-            "title": "Intent"
-          },
-          "confidence": {
-            "type": "number",
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "Confidence"
-          },
-          "reason": {
-            "type": "string",
-            "maxLength": 300,
-            "minLength": 1,
-            "title": "Reason"
-          },
-          "needs_clarification": {
-            "type": "boolean",
-            "title": "Needs Clarification"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "intent",
-          "confidence",
-          "reason",
-          "needs_clarification"
-        ],
-        "title": "ArchiveIntentResult",
-        "description": "文件归档系统的意图识别结果；当前无聊天分流，理由始终简短。"
-      },
       "BusinessIntentOption": {
         "properties": {
           "page": {
@@ -875,106 +832,6 @@
         "title": "BusinessIntentResult",
         "description": "业务意图识别响应；status 区分跳转、澄清、聊天和未知。"
       },
-      "DailyLogsReq": {
-        "properties": {
-          "path": {
-            "type": "string",
-            "title": "Path",
-            "description": "PROJECTS_ROOT 数据池内的监理日志照片路径",
-            "default": ""
-          },
-          "img": {
-            "type": "string",
-            "title": "Img",
-            "description": "base64 编码的图片数据；path 与 img 至少提供一个",
-            "default": ""
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "DailyLogsReq"
-      },
-      "DraftReq": {
-        "properties": {
-          "prefix": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Prefix"
-          },
-          "drawings": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Drawings",
-            "description": "PROJECTS_ROOT 数据池内的 PDF 路径或目录列表"
-          },
-          "imgs": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Imgs",
-            "description": "base64 编码的 PDF 数据列表；drawings 与 imgs 至少提供一个"
-          },
-          "basis": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Basis"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "prefix"
-        ],
-        "title": "DraftReq"
-      },
-      "FillReq": {
-        "properties": {
-          "form": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Form"
-          },
-          "cfg": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Cfg"
-          },
-          "values": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Values"
-          },
-          "out": {
-            "type": "string",
-            "title": "Out",
-            "default": ""
-          },
-          "rects": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Rects"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "form",
-          "cfg",
-          "values"
-        ],
-        "title": "FillReq"
-      },
-      "HTTPValidationError": {
       "BusinessNavigationContext": {
         "properties": {
           "page": {
@@ -1125,40 +982,11 @@
         ],
         "title": "ChatResponse"
       },
-      "JianbiaoReq": {
       "DailyLogsReq": {
         "properties": {
           "path": {
             "type": "string",
             "title": "Path",
-            "description": "PROJECTS_ROOT 数据池内的照片路径",
-            "default": ""
-          },
-          "img": {
-            "type": "string",
-            "title": "Img",
-            "description": "base64 编码的图片数据；path 与 img 至少提供一个",
-            "default": ""
-          },
-          "form": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Form"
-          },
-          "cfg": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Cfg"
-          },
-          "bound": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Bound"
-          },
-          "out": {
-            "type": "string",
-            "title": "Out",
-            "default": ""
             "description": "PROJECTS_ROOT 数据池内的监理日志照片路径",
             "default": ""
           },
@@ -1185,7 +1013,16 @@
               "type": "string"
             },
             "type": "array",
-            "title": "Drawings"
+            "title": "Drawings",
+            "description": "PROJECTS_ROOT 数据池内的 PDF 路径或目录列表"
+          },
+          "imgs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Imgs",
+            "description": "base64 编码的 PDF 数据列表；drawings 与 imgs 至少提供一个"
           },
           "basis": {
             "anyOf": [
@@ -1203,8 +1040,7 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "prefix",
-          "drawings"
+          "prefix"
         ],
         "title": "DraftReq"
       },
@@ -1300,9 +1136,6 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "form",
-          "cfg"
-        ],
           "user_id",
           "session_id",
           "history",
@@ -1314,8 +1147,15 @@
         "properties": {
           "path": {
             "type": "string",
-            "minLength": 1,
-            "title": "Path"
+            "title": "Path",
+            "description": "PROJECTS_ROOT 数据池内的照片路径",
+            "default": ""
+          },
+          "img": {
+            "type": "string",
+            "title": "Img",
+            "description": "base64 编码的图片数据；path 与 img 至少提供一个",
+            "default": ""
           },
           "form": {
             "type": "string",
@@ -1341,7 +1181,6 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "path",
           "form",
           "cfg"
         ],
@@ -1463,31 +1302,6 @@
         "title": "LogSummaryRequest",
         "description": "可变结构的工程表单 OCR JSON 或兼容文字，序列化后最多 4000 字符。"
       },
-      "RecognizeReq": {
-        "properties": {
-          "path": {
-            "type": "string",
-            "title": "Path",
-            "description": "PROJECTS_ROOT 数据池内的照片路径",
-            "default": ""
-          },
-          "form": {
-            "type": "string",
-            "title": "Form",
-            "default": ""
-          },
-          "img": {
-            "type": "string",
-            "title": "Img",
-            "description": "base64 编码的图片数据；path 与 img 至少提供一个",
-            "default": ""
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "RecognizeReq"
-      },
-      "ValidationError": {
       "PendingClarification": {
         "properties": {
           "page": {
