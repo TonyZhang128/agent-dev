@@ -11,7 +11,7 @@
 | 已实现且有文档 | 14 | 请求、成功响应、错误和业务流程均有说明 |
 | 已有正式机器可读契约 | 3 | 三个已确认的响应子 Schema；完整 OpenAPI 尚无正式批准 |
 | 待用户确认的完整 OpenAPI 基线 | 1 | [drafts/fastapi.openapi.json](drafts/fastapi.openapi.json) |
-| 待确认操作 | 8 | `/health/deps`、`/ocr/*`、`/wbs/draft` |
+| 待确认操作 | 8 | `/diagnostics`、`/ocr/*`、`/wbs/draft` |
 | 已实现但缺少文档 | 0 | 本次补齐 |
 | 文档存在但契约未机器化 | 8 | 本次以草案补齐 |
 | 已废弃或重复注册 | 0 | 未发现 |
@@ -27,7 +27,7 @@
 | 业务端意图识别 | `POST /agents/intent/business` | `app/api/agents.py`、`app/agents/intent_business.py`、`app/agents/intent_catalog.py` | confirmed | JSON 目录派生 page/action；一级意图调用 Chat 澄清；不跟踪跳转 |
 | 归档端意图识别 | `POST /agents/intent/archive` | `app/api/agents.py`、`app/agents/profiles.py` | confirmed | `A`–`D` 占位分类加 `unknown` |
 | 自由对话 | `POST /agents/chat` | `app/api/agents.py`、`app/agents/chat.py` | confirmed | 调用方传完整历史，服务不保存 |
-| 文档依赖自检 | `GET /health/deps` | `app/api/ocr.py`、`app/ocr/deps.py` | pending-review | Java `DocsvcClient` 调用 |
+| 本地依赖诊断 | `GET /diagnostics` | `app/api/system.py`、`app/ocr/core/deps.py` | pending-review | Java `DocsvcClient` 原调用 `/health/deps`，需同步改为 `/diagnostics` |
 | 普通照片/简表识别 | `POST /ocr/recognize` | `app/api/ocr.py`、`app/ocr/form_ocr.py` | pending-review | Java 调用；2 分钟超时 |
 | 监理日志识别 | `POST /ocr/daily-logs` | `app/api/ocr.py`、`app/ocr/daily_logs.py` | pending-review | 未观察到 Java 调用 |
 | 简表识别与填表 | `POST /ocr/jianbiao` | `app/api/ocr.py`、`app/ocr/jianbiao.py` | pending-review | Java 调用；2 分钟超时 |
@@ -41,9 +41,9 @@
 本次整理前：
 
 - `interfaces/` 只覆盖 `log-summary`、`intent`、`intent/archive` 三个成功响应。
-- `/agents/chat`、`/health`、`/ready`、`/health/deps`、`/ocr/*`、`/wbs/draft` 没有统一的
+- `/agents/chat`、`/health`、`/ready`、`/diagnostics`、`/ocr/*`、`/wbs/draft` 没有统一的
   `interfaces/` 入口。
-- FastAPI 自动 OpenAPI 对 `/health`、`/ready`、`/health/deps`、`/ocr/*`、`/wbs/draft` 的
+- FastAPI 自动 OpenAPI 对 `/health`、`/ready`、`/diagnostics`、`/ocr/*`、`/wbs/draft` 的
   200 响应 schema 为空对象，调用方无法据此生成类型。
 - 自动 OpenAPI 只声明 200/422，没有 400/404/502/503/504。
 - 没有契约变更记录、待确认草案目录或自动漂移检查。
@@ -91,8 +91,9 @@
 
 本仓库不含 Java 和前端源码。基于相邻 `daolu_v6_code` 的静态检索：
 
-- Java `DocsvcClient` 调用 8 个操作：`/health/deps`、`/ocr/recognize`、`/ocr/jianbiao`、
-  `/ocr/fill`（两处）、`/ocr/sheet`、`/ocr/blank`、`/wbs/draft`。
+- Java `DocsvcClient` 原调用 8 个操作：`/health/deps`、`/ocr/recognize`、`/ocr/jianbiao`、
+  `/ocr/fill`（两处）、`/ocr/sheet`、`/ocr/blank`、`/wbs/draft`。其中 `/health/deps`
+  已更名为 `/diagnostics`，Java 调用方必须同步更新；其余路径不变。
 - 未观察到 Java 直接调用 `/agents/*` 或 `/ocr/daily-logs`。
 - 前端通过 Java 后端间接调用文档加工接口，未观察到直接访问本服务。
 - 这些观察不能替代外部仓库的实时确认；变更前仍需通知对应调用方。

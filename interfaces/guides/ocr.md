@@ -1,6 +1,6 @@
 # 文档加工接口说明
 
-本文说明 `/health/deps`、`/ocr/*`、`/wbs/draft` 的业务流程、数据池约束、输出副作用和错误
+本文说明 `/diagnostics`、`/ocr/*`、`/wbs/draft` 的业务流程、数据池约束、输出副作用和错误
 处理。字段结构以 [OpenAPI 草案](../drafts/fastapi.openapi.json) 为准；实现细节、模板目录、
 OCR 模型和辅助脚本见 [文档加工与 OCR](../../docs/ocr.md)。
 
@@ -46,10 +46,16 @@ OCR 模型和辅助脚本见 [文档加工与 OCR](../../docs/ocr.md)。
 
 ## 各接口流程
 
-### `GET /health/deps`
+### `GET /diagnostics`
 
-检查 PyMuPDF、openpyxl、OpenCV、NumPy、RapidOCR、ONNX Runtime 能否导入，并报告 OpenCV
-特征和可用推理设备。只证明依赖可导入，不代表模板齐全或识别准确率达标。
+系统级本地诊断，不访问上游模型服务。检查 PyMuPDF、openpyxl、OpenCV、NumPy、RapidOCR、
+ONNX Runtime 能否导入，`OCR_DEVICE` 与 onnxruntime provider 是否一致，以及 OCR 模板清单、
+版面 JSON、WBS 规则、模型目录和数据池是否可用。`data.ok` 汇总必需检查，`data.warnings`
+记录模型目录为空、表样目录缺失等非致命问题；`data.ok=false` 时仍返回 HTTP 200。
+
+该接口不初始化 OCR 引擎、不加载模型、不注册 CUDA DLL、不访问网络、不写文件。“推理设备”
+只证明 provider 可用，CUDA 真实初始化在首次 OCR 时验证；模型文件 sha256 由
+`scripts.models.download_ocr_models --check` 校验。
 
 ### `POST /ocr/recognize`
 
@@ -152,7 +158,7 @@ OCR 模型和辅助脚本见 [文档加工与 OCR](../../docs/ocr.md)。
 
 ## 重试与幂等
 
-- `GET /health/deps`、`/ocr/recognize`、`/ocr/daily-logs`、`/ocr/sheet`、
+- `GET /diagnostics`、`/ocr/recognize`、`/ocr/daily-logs`、`/ocr/sheet`、
   `/ocr/blank`、`/wbs/draft` 为只读操作，可重试。
 - `/ocr/jianbiao`、`/ocr/fill` 在 `out` 非空时写文件；相同 `out` 重试会覆盖输出。
   调用方应确认是否允许覆盖，当前没有幂等键或版本号。

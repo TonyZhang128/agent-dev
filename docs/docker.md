@@ -153,10 +153,10 @@ docker compose -f compose.prod.yml --env-file docker/prod.env up -d --no-deps ap
 ```bash
 curl -fsS http://127.0.0.1:8309/health
 curl -fsS http://127.0.0.1:8309/ready
-curl -fsS http://127.0.0.1:8309/health/deps
+curl -fsS http://127.0.0.1:8309/diagnostics
 ```
 
-`/health` 只表示 API 进程存活；`/ready` 会请求 vLLM 的 `/models`，只有模型已加载且名称一致才返回 200。`/health/deps` 检查 OCR、PDF、Excel、图像库与推理设备导入。
+`/health` 只表示 API 进程存活；`/ready` 会请求 vLLM 的 `/models`，只有模型已加载且名称一致才返回 200。`/diagnostics` 只做本地静态检查，覆盖运行库、ONNX Runtime 与 `OCR_DEVICE` 一致性、OCR 模板、模型目录和数据池；`data.ok=false` 时仍返回 HTTP 200。
 
 真实业务验收在仓库检出目录执行，指向容器暴露的 API：
 

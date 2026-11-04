@@ -32,7 +32,7 @@
 
 | 本服务操作 | Java 调用方 | 兼容性注意 |
 | --- | --- | --- |
-| `GET /health/deps` | 管理端依赖自检 | 期望 `{status:200,data}` |
+| `GET /diagnostics` | 管理端本地依赖自检 | 期望 `{status:200,data}`；`data.ok=false` 时 HTTP 仍为 200 |
 | `POST /ocr/recognize` | 现场照片识别 | 2 分钟超时；读取 `data` 对象 |
 | `POST /ocr/jianbiao` | 简表识别与填表 | 2 分钟超时；读取 `data` 对象 |
 | `POST /ocr/fill` | 保存后重算、预览重算 | 30 秒超时；`out` 可为空字符串 |

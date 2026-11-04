@@ -2,14 +2,14 @@
 
 本目录保存 AI 根据当前实现归纳、但尚未获得用户批准的接口契约。
 
-## 当前评审稿（0.1.0-review.1）
+## 当前评审稿（0.1.0-review.2）
 
 [fastapi.openapi.json](fastapi.openapi.json) 是当前应用 14 个 HTTP 操作的完整 OpenAPI 3.1
 草案，由 `scripts/docs/openapi_contract.py` 从 `app.main:app` 生成并补充。便于阅读的
-第一版评审文档见 [../API.md](../API.md)，它由同一契约自动生成，不是独立契约。
+当前评审文档见 [../API.md](../API.md)，它由同一契约自动生成，不是独立契约。
 
 - 智能体请求/成功响应：沿用 FastAPI/Pydantic 生成结果。
-- `/health`、`/ready` 的成功响应体。
+- `/health`、`/ready`、`/diagnostics` 的成功响应体。
 - OCR/WBS 的 `{"status":200,"data":...}` 响应体及字段说明。
 - 统一错误响应 `RequestError`、`ErrorDetail`。
 - 每个操作的用途、契约状态、来源、副作用和幂等说明。
@@ -31,7 +31,7 @@ Schema 时修改该脚本后重新导出，使变更可审查、可复现。
 
 | 操作 | 需要确认的内容 |
 | --- | --- |
-| `GET /health/deps` | `data.ok`、`data.caps` 的能力分组和可变字段 |
+| `GET /diagnostics` | `data.ok`、`data.warnings`、`data.caps` 的能力分组和可变字段 |
 | `POST /ocr/recognize` | `form`、`formName`、`layout`、`fields`、`keys`、`detail`、`warning`、`align`、`image`、`lines`、`ms` |
 | `POST /ocr/daily-logs` | JLB13 固定栏目、`recognized` 可省略字段、`processed` 固定为 `{}` |
 | `POST /ocr/jianbiao` | 简表识别字段、`values`、`errors`、`anchors`、输出路径字段 |
@@ -65,8 +65,8 @@ Schema 时修改该脚本后重新导出，使变更可审查、可复现。
 请明确回复上述事项的批准或修改意见。示例：
 
 ```text
-确认草案 0.1.0-review.1，同意将以下操作标为 confirmed：
-/health/deps、/ocr/recognize、/ocr/daily-logs、/ocr/jianbiao、
+确认草案 0.1.0-review.2，同意将以下操作标为 confirmed：
+/diagnostics、/ocr/recognize、/ocr/daily-logs、/ocr/jianbiao、
 /ocr/fill、/ocr/blank/{form}.png、/ocr/sheet/{form}、/wbs/draft。
 错误响应和包装差异保持不变。
 ```

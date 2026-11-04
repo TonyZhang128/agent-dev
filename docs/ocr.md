@@ -48,8 +48,8 @@ uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 8309
   首次创建引擎时会验证 CUDA 真实可用：不可用直接返回 503，不会静默退回 CPU。
 - 两个 extra 互斥，不能同时启用；同时安装会覆盖同名 `onnxruntime` 模块。
 
-`GET /health/deps` 的「推理设备」除编译进 onnxruntime 的 provider 列表外，还带
-`configured` 字段显示当前配置的设备。
+`GET /diagnostics` 的「推理设备」除编译进 onnxruntime 的 provider 列表外，还带
+`configured`、`device` 和 `runtime` 字段，用于核对 `OCR_DEVICE`、实际设备与已安装发行包是否一致。
 
 - Linux：由系统 CUDA 12 + cuDNN 9 环境提供动态库（`LD_LIBRARY_PATH`）。
 - Windows 免安装方案：从 NVIDIA redist 索引下载以下 `windows-x86_64-archive.zip`
@@ -67,8 +67,8 @@ uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 8309
   `https://developer.download.nvidia.com/compute/cuda/redist/<包>/windows-x86_64/<包>-windows-x86_64-<版本>-archive.zip`，
   cuDNN 在 `compute/cudnn/redist/cudnn/windows-x86_64/` 下。注意 onnxruntime-gpu
   要求 CUDA 12 系列构建（`>=1.24,<1.25` 已验证；1.31 起改为 CUDA 13，需驱动配套），
-  且驱动支持的 CUDA 版本不能低于运行库版本。`GET /health/deps` 的「推理设备」
-  只反映编译进 onnxruntime 的 provider 列表，不代表 CUDA 初始化成功。
+  且驱动支持的 CUDA 版本不能低于运行库版本。`GET /diagnostics` 的「推理设备」
+  只反映编译进 onnxruntime 的 provider 列表，不代表 CUDA 初始化成功；真实初始化由首次 OCR 调用验证。
 
 
 当前相邻 daolu_v6 资料可在根目录 `.env` 配置为：
@@ -100,7 +100,7 @@ PROJECTS_ROOT=../6_shujuchi/yewu
 
 | 方法和路径 | 请求 | 输出 |
 | --- | --- | --- |
-| `GET /health/deps` | 无 | 运行库版本、OpenCV 特征与推理设备；`data.ok` 汇总依赖可用性 |
+| `GET /diagnostics` | 无 | 运行库、推理设备、模板/版面/WBS 规则、模型目录与数据池的静态检查；`data.ok` 汇总必需检查，`data.warnings` 记录非致命问题 |
 | `POST /ocr/recognize` | `path` 或 `img`（至少提供一个），可选 `form=""` | `fields`、`keys`、`lines`、`detail`、`align`、`warning`、`image`、`ms` |
 | `POST /ocr/daily-logs` | `path` 或 `img`（至少提供一个） | 监理日志（JLB13）固定栏目识别、原始框、`frame`、`processed` 占位、`ms` |
 | `POST /ocr/jianbiao` | `path`、`form`、`cfg`；可选 `bound={}`、`out=""` | 简表定位/识别、公式结果、锚点、PDF/Excel 路径 |
@@ -109,14 +109,14 @@ PROJECTS_ROOT=../6_shujuchi/yewu
 | `GET /ocr/sheet/{form}` | 表号 | `fld_*` 版面栏 + `g*` 可填空格子 |
 | `POST /wbs/draft` | `prefix`、`drawings`；可选 `basis` | `units`、`count`、`drawings` 及识别依据 |
 
-除 PNG 外，成功为 `{"status":200,"data":...}`；原 `/health` 继续返回 `{"status":"ok"}`。依赖自检只检查库能否导入，不代表模板齐全或 OCR 准确率达标。
+除 PNG 外，成功为 `{"status":200,"data":...}`；原 `/health` 继续返回 `{"status":"ok"}`。`/diagnostics` 只做本地静态检查：不初始化 OCR 引擎、不加载模型、不注册 CUDA DLL、不访问网络、不写文件；`data.ok=false` 时仍返回 HTTP 200。它检查模板清单、版面 JSON、WBS 规则、模型目录和数据池是否可用，但不校验模型文件 sha256，也不代表识别准确率达标；完整模型校验使用 `scripts.models.download_ocr_models --check`。
 
 `/ocr/recognize` 的 `path` 为数据池内照片路径，`img` 为 base64 编码的图片（兼容 `data:image/...;base64,` 前缀）；两者至少提供一个，同时提供时优先使用 `img`，都为空白返回 `422`。`/ocr/daily-logs` 使用相同的图片来源规则，但固定识别 JLB13 监理日志的页面栏目，不读取表号、配置、模板或输出文件。`path`、`out`、`drawings` 为数据池相对路径，兼容 `projects/` 前缀。拒绝绝对路径、目录穿越与越界符号链接；照片必须是文件，施工图支持 PDF 或 `_N.pdf` 单页拆分目录。返回的 `pdf`、`xlsx` 相对 `PROJECTS_ROOT`。`out` 为空不写 PDF、Excel、校正图；非空须以 `.pdf` 结尾，Excel 和校正图分别为同名 `.xlsx`、`.warp.jpg`。文档接口未新增鉴权，应由可信调用方在既有部署边界内使用。
 
 示例：
 
 ```zsh
-curl --noproxy '*' -fsS http://127.0.0.1:8309/health/deps
+curl --noproxy '*' -fsS http://127.0.0.1:8309/diagnostics
 
 # 普通照片识别：path 相对 PROJECTS_ROOT，只读取，不写文件。
 curl --noproxy '*' -fsS http://127.0.0.1:8309/ocr/recognize \

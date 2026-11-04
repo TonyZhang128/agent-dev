@@ -18,7 +18,7 @@
 | 公式与填表 | `POST /ocr/fill` | 核对后的值 + 配置 → 公式/引用结果，可输出同源 PDF/Excel |
 | 表样预览与字段 | `GET /ocr/blank/{form}.png`、`GET /ocr/sheet/{form}` | 空白表 PNG、版面栏与格子字段 |
 | 施工图划分 | `POST /wbs/draft` | PDF/工可 → WBS 划分初稿 |
-| 文档依赖自检 | `GET /health/deps` | OCR、PDF、Excel、图像库导入与推理设备检查 |
+| 本地依赖诊断 | `GET /diagnostics` | 运行库、推理设备、OCR 模板/模型与数据池静态检查；`warnings` 记录非致命问题 |
 | 进程存活 | `GET /health` | `{"status":"ok"}`，不访问模型 |
 | 模型就绪 | `GET /ready` | 检查配置模型是否出现在上游模型列表，成功返回 `{"status":"ready"}`，不执行推理 |
 
@@ -164,6 +164,7 @@ zsh scripts/dev/setup.sh
 ```zsh
 curl --noproxy '*' -fsS http://127.0.0.1:8309/health
 curl --noproxy '*' -fsS http://127.0.0.1:8309/ready
+curl --noproxy '*' -fsS http://127.0.0.1:8309/diagnostics
 uv run --locked python -c 'import json; from pathlib import Path; print(json.dumps({"user_id": "example-user", "session_id": "example-session", "content": json.loads(Path("data/log_summary.json").read_text())}, ensure_ascii=False))' | \
   curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/log-summary \
     -H 'Content-Type: application/json' --data-binary @-
@@ -175,7 +176,7 @@ curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/chat \
   -H 'Content-Type: application/json' -d '{"user_id":"example-user","session_id":"example-session","history":[],"message":"你好，请解释业务智能体。"}'
 ```
 
-完整字段、返回示例、意图标签及历史消息限制见 [智能体 API 文档](docs/agents-api.md)。`/health` 检查 API 存活，`/ready` 检查上游列出配置模型；只有业务调用会实际推理。
+完整字段、返回示例、意图标签及历史消息限制见 [智能体 API 文档](docs/agents-api.md)。`/health` 检查 API 存活，`/ready` 检查上游列出配置模型，`/diagnostics` 做本地依赖与 OCR 资源静态检查；只有业务调用会实际推理。
 
 业务端意图使用 `app/resources/intent/business_pages.json` 定义一级页面和二级功能，构建期生成枚举，运行时不读取 JSON。响应使用 `status`（`resolved`/`clarify`/`chat`/`unknown`）、`page`、`action`、`confidence`、`message`、`options` 和 `catalog_version`：`resolved` 返回可跳转的最小功能；只确定一级模块时返回 `clarify` 并调用 Chat 澄清，调用方保存并传回 `pending_clarification.attempts`，同一页面最多 10 轮；问候或概念问答返回 `chat`；目录外或无法确定返回 `unknown`。请求必填 `message`、`current_page`，可选 `history`、`last_navigation`、`pending_clarification`；本服务不保存会话、不做认证，也不跟踪前端跳转。归档端 `/agents/intent/archive` 继续使用独立的 `A`–`D` 占位分类，不含聊天分流。详细契约见 [业务端意图接口](interfaces/intent/README.md)。
 
@@ -211,7 +212,7 @@ ollama ps
 
 ### 接口契约、Swagger 与 API-First
 
-[interfaces/](interfaces/README.md) 是对外接口文档的唯一入口，包含正式契约、待确认草案、业务指南和变更记录。当前 14 个 HTTP 操作全部有文档，其中 `/agents/*`、`/health`、`/ready` 标记为 `confirmed`；`/health/deps`、`/ocr/*`、`/wbs/draft` 的完整响应/错误契约标记为 `pending-review`，见 [待确认草案](interfaces/drafts/README.md)。
+[interfaces/](interfaces/README.md) 是对外接口文档的唯一入口，包含正式契约、待确认草案、业务指南和变更记录。当前 14 个 HTTP 操作全部有文档，其中 `/agents/*`、`/health`、`/ready` 标记为 `confirmed`；`/diagnostics`、`/ocr/*`、`/wbs/draft` 的完整响应/错误契约标记为 `pending-review`，见 [待确认草案](interfaces/drafts/README.md)。
 
 - Swagger UI：启动 API 后访问 <http://127.0.0.1:8309/docs>；ReDoc 为 `/redoc`，运行时 OpenAPI 为 `/openapi.json`。这些是当前实现的投影，不是正式契约。
 - 完整 OpenAPI 草案：[interfaces/drafts/fastapi.openapi.json](interfaces/drafts/fastapi.openapi.json)，覆盖请求、成功响应、400/404/422/502/503/504 错误以及每个操作的副作用和幂等说明。
@@ -231,8 +232,8 @@ app/
   api/
     router.py             # 聚合 Router，由主应用统一 include_router
     agents.py             # /agents：日志总结、意图识别、聊天
-    system.py             # /health、/ready：存活与模型就绪检查
-    ocr.py                # /health/deps、/ocr：识别、监理日志、简表、填表与表样
+    system.py             # /health、/ready、/diagnostics：存活、模型就绪与本地诊断
+    ocr.py                # /ocr：识别、监理日志、简表、填表与表样
     wbs.py                # /wbs/draft：施工图划分初稿
   ocr/                    # 文档加工业务（core 原语与资源 / form 照片模板对齐识别 / sheets 表样格子与 Excel / jianbiao 简表识别与公式填表 / daily_logs 监理日志 / wbs_draft 划分初稿）
   http_errors.py          # 输入与模型异常的统一 HTTP 映射、校验详情脱敏

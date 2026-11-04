@@ -26,7 +26,7 @@
 | `app/main.py` | 应用工厂 `create_app()`、lifespan、共享资源初始化与清理、全局异常处理注册和 `include_router()`；不放具体业务路由或提示词 |
 | `app/api/router.py` | 统一聚合领域 Router；同一个领域仅注册一次 |
 | `app/api/agents.py` | `/agents` 下的日志、意图、聊天入口；分组为“智能体” |
-| `app/api/system.py` | `/health`、`/ready`；保留原路径和 OpenAPI 元信息 |
+| `app/api/system.py` | `/health`、`/ready`、`/diagnostics`；存活、模型就绪与本地依赖诊断 |
 | `app/schemas/` | Pydantic 请求、响应与校验；`base.py` 共用严格模型与会话基础类型，`agents.py` 智能体业务，`ocr.py` 文档加工；拒绝额外字段，保留长度、枚举及跨字段约束 |
 | `app/agents/` | 与 HTTP 请求对象无关的业务逻辑；复用共享基类和运行时；扁平归档意图在 `profiles.py` 声明，业务端层级意图由 `app/resources/intent/business_pages.json` 与 `intent_catalog.py` 派生 |
 | `app/resources/intent/` | 业务页面/二级功能 JSON 唯一数据源；构建期由 `scripts.intent.compile_catalog` 生成枚举，应用运行时不读取 |
@@ -147,8 +147,8 @@ AI 可以设计接口方案，但无权批准自己的草案，也不能把“�
 - 日志接受文字或 JSON 对象，保留原始事实、数值和单位；不得虚构日期、成果、任务或合格结论。具体字段约束以 Schema 和 `interfaces/log_summary/` 为准。
 - 业务端意图的页面/功能编码唯一来源为 `app/resources/intent/business_pages.json`，构建期生成枚举，运行时不读取 JSON；只允许返回目录内 `page/action`。响应使用 `status`（`resolved`/`clarify`/`chat`/`unknown`）、`page`、`action`、`confidence`、`message`、`options` 和 `catalog_version`。`resolved` 必须带合法 `action`；仅一级意图返回 `clarify` 并调用 Chat 澄清，调用方传 `pending_clarification.attempts`，同一页面最多 10 轮。归档端使用独立 profile，当前固定为 `A`、`B`、`C`、`D` 加 `unknown`，不含聊天分流。
 - 业务意图不持久化会话、不跟踪前端跳转；`current_page`、`last_navigation`、`pending_clarification` 由调用方传入。分类分数低于 `0.65`、同页动作不确定或需要澄清时返回 `clarify`；目录外或跨页无法确定返回 `unknown`；有效 `chat` 调用共享 ChatAgent，将回答放入 `message`。非法编码、`action` 不属于 `page` 或结构不合法返回 502。
-- `/health` 只检查进程存活；`/ready` 通过模型列表检查配置模型，不执行推理。
-- 文档接口新增 `/health/deps`、`/ocr/*`、`/wbs/draft`；成功保留 `{"status":200,"data":...}`。模板和 OCR 引擎按需加载，应用资源保存在 `app.state.ocr_resources`，缓存与模型不得跨应用串用；缺模板仅影响相关请求。
+- `/health` 只检查进程存活；`/ready` 通过模型列表检查配置模型，不执行推理；`/diagnostics` 只做本地运行库、推理设备、模板与数据池的静态检查，不初始化引擎、不访问网络，`ok=false` 仍返回 200。
+- 文档接口新增 `/diagnostics`、`/ocr/*`、`/wbs/draft`；成功保留 `{"status":200,"data":...}`。模板和 OCR 引擎按需加载，应用资源保存在 `app.state.ocr_resources`，缓存与模型不得跨应用串用；缺模板仅影响相关请求。
 - OCR 路径由 Settings 的 `TEMPLATES_ROOT`、`ADMIN_ROOT`、`ASSET_ROOT`、`PROJECTS_ROOT` 配置；相对路径以仓库根目录解析。输入输出不得越过数据池，空 out 不写文件；辅助脚本的报告/打包输出写到忽略提交的 `verification/ocr/`。
 - 字段 ID、格子键和坐标语义沿用 docsvc；保留隐藏文字层过滤、OCR 锁、模板引用优先级与 JS 风格舍入。Excel 跳过字段通过本次 `ExcelOutput` / `xlsxSkipped` 返回，不恢复共享函数属性。
 - 错误状态保持：非法输入/上下文超限 422，模型不可达 503，推理超时 504，上游错误或非法输出 502。统一保留 `detail` 响应，禁止泄露密钥、原始输入、身份、历史和上游错误正文。

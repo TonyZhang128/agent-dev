@@ -1,6 +1,6 @@
 # 业务智能体 API
 
-本文说明原有 `/agents/*` 契约。合并后的文档加工接口 `/ocr/*`、`/wbs/draft`、`/health/deps` 见 [OCR API 与路径配置](ocr.md)，与本文共用 `app.main:app` 和 8309 端口。统一接口索引、契约状态和待确认草案见 [interfaces/README.md](../interfaces/README.md)；完整 OpenAPI 草案见 [interfaces/drafts/fastapi.openapi.json](../interfaces/drafts/fastapi.openapi.json)。
+本文说明原有 `/agents/*` 契约。合并后的文档加工接口 `/ocr/*`、`/wbs/draft` 与系统级诊断 `/diagnostics` 见 [OCR API 与路径配置](ocr.md)，与本文共用 `app.main:app` 和 8309 端口。统一接口索引、契约状态和待确认草案见 [interfaces/README.md](../interfaces/README.md)；完整 OpenAPI 草案见 [interfaces/drafts/fastapi.openapi.json](../interfaces/drafts/fastapi.openapi.json)。
 
 服务地址：`http://127.0.0.1:8309`。交互文档：`http://127.0.0.1:8309/docs`。`/docs` 是运行时实现的投影，不是正式契约；接口变更必须按 [AGENTS.md 第四节](../AGENTS.md#四接口契约与-api-first-开发流程)审批。
 

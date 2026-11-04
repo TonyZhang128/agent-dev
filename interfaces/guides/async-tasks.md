@@ -17,7 +17,7 @@
 
 本服务没有统一的 HTTP 请求超时配置；不同操作的实际耗时差异很大：
 
-- `/health`、`/ready`、`/health/deps`：通常很快，但 `/ready` 依赖模型服务响应。
+- `/health`、`/ready`、`/diagnostics`：通常很快，但 `/ready` 依赖模型服务响应。
 - `/agents/*`：受 `LLM_TIMEOUT_SECONDS` 和可选回退预算约束；`/agents/intent/business` 的
   `chat` 或 `clarify` 可能包含两次模型调用。
 - `/ocr/recognize`、`/ocr/daily-logs`：首次调用可能需要加载 OCR 模型。
@@ -30,7 +30,7 @@
 
 ## 重试
 
-- 只读接口可以重试：`GET /health`、`/ready`、`/health/deps`、
+- 只读接口可以重试：`GET /health`、`/ready`、`/diagnostics`、
   `/ocr/sheet/{form}`、`/ocr/blank/{form}.png`，以及不写文件的
   `/ocr/recognize`、`/ocr/daily-logs`、`/ocr/jianbiao`、`/ocr/fill`、`/wbs/draft`。
 - `/ocr/jianbiao`、`/ocr/fill` 在 `out` 非空时会写同名 PDF/Excel/校正图；相同 `out`

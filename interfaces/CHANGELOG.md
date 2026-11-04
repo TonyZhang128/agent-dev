@@ -2,6 +2,17 @@
 
 只记录对外接口契约的变化。运行时行为、提示词和内部重构不在此记录。
 
+## 2026-11-04 — 0.1.0-review.2（diagnostics 端点，用户已确认）
+
+- `GET /health/deps` 更名为一级路由 `GET /diagnostics`，归入系统级接口；旧路径不再注册，
+  仍为 `pending-review` 操作。
+- 响应新增 `data.warnings` 和 `caps["OCR 资源"]`；`caps["推理设备"]` 增加 `configured`、
+  `device`、`runtime`、`note`，`ok` 改为配置设备与 onnxruntime provider 的一致性检查。
+- `/diagnostics` 只做本地静态检查：不初始化 OCR 引擎、不加载模型、不注册 CUDA DLL、
+  不访问网络、不写文件；`data.ok=false` 时仍返回 HTTP 200。
+- `/health`、`/ready` 契约不变。
+- 已知调用方影响：Java `DocsvcClient` 原调用 `/health/deps`，必须同步改为 `/diagnostics`。
+
 ## 2026-11-02 — intent-business 层级意图改造（用户已确认）
 
 - 业务端意图接口由 `POST /agents/intent` 替换为 `POST /agents/intent/business`；

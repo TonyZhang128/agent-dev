@@ -5,16 +5,17 @@
 
 ## 当前状态
 
-截至 2026-11-02：
+截至 2026-11-04：
 
 - 已实现的 14 个 HTTP 操作全部有文档，没有凭空描述尚未实现的接口。
 - `/agents/*`、`/health`、`/ready` 的既有契约由 `AGENTS.md`、`docs/agents-api.md`、
   `docs/sessions.md` 和自动化测试共同保护，标记为 `confirmed`。
-- `/health/deps`、`/ocr/*`、`/wbs/draft` 已有实现和专题文档，但此前没有机器可读的完整
+- `/diagnostics`、`/ocr/*`、`/wbs/draft` 已有实现和专题文档，但此前没有机器可读的完整
   响应/错误契约；本次归纳为 **待确认草案**，标记为 `pending-review`。
+  `/diagnostics` 由原 `/health/deps` 更名并提升为一级路由。
 - 完整 OpenAPI 草案位于 [drafts/fastapi.openapi.json](drafts/fastapi.openapi.json)。
   **它不是正式契约，不能作为接口变更授权。** 用户批准后才能提升到 `openapi/`。
-- 第一版评审稿版本为 `0.1.0-review.1`，评审文档位于 [API.md](API.md)，由 OpenAPI 自动生成，
+- 当前评审稿版本为 `0.1.0-review.2`，评审文档位于 [API.md](API.md)，由 OpenAPI 自动生成，
   便于直接审阅；它不是独立契约，也不能替代 OpenAPI。
 - 三个已发布的固定输出 Schema 仍是对外响应子契约：
   [日志总结](log_summary/README.md)、[业务端意图](intent/README.md)、
@@ -75,7 +76,7 @@ interfaces/
 | 业务端意图识别 | `POST /agents/intent/business` | confirmed | [意图接口](intent/README.md)、[智能体指南](guides/agents.md) |
 | 归档端意图识别 | `POST /agents/intent/archive` | confirmed | [归档接口](intent/archive/README.md) |
 | 自由对话 | `POST /agents/chat` | confirmed | [智能体指南](guides/agents.md) |
-| 文档依赖自检 | `GET /health/deps` | pending-review | [OCR 指南](guides/ocr.md) |
+| 本地依赖诊断 | `GET /diagnostics` | pending-review | [OCR 指南](guides/ocr.md) |
 | 普通照片/简表识别 | `POST /ocr/recognize` | pending-review | [OCR 指南](guides/ocr.md) |
 | 监理日志识别 | `POST /ocr/daily-logs` | pending-review | [OCR 指南](guides/ocr.md) |
 | 简表识别与填表 | `POST /ocr/jianbiao` | pending-review | [OCR 指南](guides/ocr.md) |
@@ -95,7 +96,7 @@ interfaces/
 - 响应包装：
   - `/agents/*` 直接返回业务对象，没有 `data` 包装。
   - `/health`、`/ready` 返回 `{"status":"ok"}` / `{"status":"ready"}`。
-  - `/health/deps`、`/ocr/*`（PNG 除外）、`/wbs/draft` 返回
+  - `/diagnostics`、`/ocr/*`（PNG 除外）、`/wbs/draft` 返回
     `{"status":200,"data":...}`；`status` 是业务成功标记，不是 HTTP 状态码替代品。
   - `GET /ocr/blank/{form}.png` 返回原始 `image/png`。
 - 错误：统一为 `{"detail": ...}`。请求校验失败时 `detail` 是错误数组；上下文超限和
