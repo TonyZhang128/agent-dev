@@ -13,4 +13,4 @@ router = APIRouter(prefix="/wbs", tags=["wbs"])
 def wbs_draft_api(req: DraftReq, request: Request):
     with document_resources(request) as resources:
         paths = [project_path(resources, relative) for relative in req.drawings]
-        return {"status": 200, "data": wbs_draft.draft(req.prefix, paths, req.basis)}
+        return {"status": 200, "data": wbs_draft.draft(req.prefix, paths, req.imgs, req.basis)}

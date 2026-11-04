@@ -9,7 +9,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from app.ocr.core.media import read_image
+from app.ocr.core.media import load_image
 from app.ocr.core.resources import get_resources, resource_cache
 from app.ocr.core.sheet_scan import W, scan
 from app.ocr.jianbiao.fill import compute
@@ -35,14 +35,19 @@ def _frame_dst(aspect: float) -> tuple:
     return dst, (W, H)
 
 
-def run(photo: Path, target: str, cfg: dict, bound: dict, out_pdf: Path | None) -> dict:
-    """现场简表照片:轮廓定位 → 格子识别 → compute(简表上手写的优先于项目资料带入的)"""
+def run(
+    photo: Path | None, target: str, cfg: dict, bound: dict, out_pdf: Path | None, img: str = ""
+) -> dict:
+    """现场简表照片:轮廓定位 → 格子识别 → compute(简表上手写的优先于项目资料带入的)。
+
+    照片路径与 base64 图片至少提供一个；同时提供时优先用 base64。
+    """
     code, lay = jianbiao_of(target)
     if not lay:
         raise ValueError(f"模板库没有 {target} 的简表版面(layouts/jianbiao.json)")
-    img = read_image(photo)
+    image = load_image(photo, img)
     sheet, quad, how, got, detail = scan(
-        img, lay["cells"], lambda _q, _h: _frame_dst(lay["aspect"])
+        image, lay["cells"], lambda _q, _h: _frame_dst(lay["aspect"])
     )
     out = compute(target, cfg, {**bound, **got}, out_pdf)
     if out_pdf:

@@ -1,5 +1,6 @@
 """OCR 提取、公式、PDF/Excel 同源填表与 WBS 的行为回归。"""
 
+import base64
 import json
 from concurrent.futures import ThreadPoolExecutor
 
@@ -34,6 +35,18 @@ def resources(settings):
     resource = OCRResources(settings)
     with use_resources(resource):
         yield resource
+
+
+def encode_image(width: int, height: int) -> str:
+    """返回可直接放进 img 字段的 base64 PNG。"""
+    ok, buffer = cv2.imencode(".png", np.full((height, width, 3), 255, np.uint8))
+    assert ok
+    return base64.b64encode(buffer.tobytes()).decode("ascii")
+
+
+def encode_pdf(document: pymupdf.Document) -> str:
+    """返回可直接放进 imgs 字段的 base64 PDF。"""
+    return base64.b64encode(document.tobytes()).decode("ascii")
 
 
 def test_fill_writes_pdf_and_excel_using_same_calculated_values(resources, tmp_path):
@@ -241,6 +254,29 @@ def test_jianbiao_pipeline_recognizes_and_computes_without_writing(settings):
         assert set(path.name for path in settings.projects_root.iterdir()) == {"simple.png"}
 
 
+def test_jianbiao_accepts_base64_image_without_path(settings):
+    image = np.full((1000, 1000, 3), 255, dtype=np.uint8)
+    cv2.rectangle(image, (50, 50), (950, 950), (0, 0, 0), 5)
+    app = create_app(settings=settings)
+    with TestClient(app) as client:
+        app.state.ocr_resources.engine = lambda image: ocr_result(
+            ([[20, 20], [100, 20], [100, 60], [20, 60]], "96.5", 0.99)
+        )
+        response = client.post(
+            "/ocr/jianbiao",
+            json={
+                "img": encode_image(1000, 1000),
+                "form": CODE,
+                "cfg": {},
+                "bound": {"fld_1": "1"},
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["data"]["recognized"] == {"fld_1": "96.5"}
+        assert response.json()["data"]["values"]["fld_1"] == "96.5"
+        assert list(settings.projects_root.iterdir()) == []
+
+
 def test_ocr_apps_keep_catalogs_caches_and_paths_isolated(tmp_path):
     first = make_ocr_settings(tmp_path / "first", name="first", height=300)
     second = make_ocr_settings(tmp_path / "second", name="second", height=600)
@@ -367,6 +403,56 @@ def test_wbs_reads_drawing_pdf(resources):
     result = wbs_draft.draft("S210", [drawing])
     assert result["drawings"][0]["chainage"] == [1000, 4000]
     assert result["count"]["units"] == 2
+
+
+def test_wbs_reads_base64_drawing_pdf(settings):
+    with TestClient(create_app(settings=settings)) as client:
+        with pymupdf.open() as document:
+            page = document.new_page()
+            page.insert_text((50, 50), "封面\n道路工程\nK1+000~K4+000", fontname="china-s")
+            response = client.post(
+                "/wbs/draft",
+                json={"prefix": "S210", "drawings": [], "imgs": [encode_pdf(document)]},
+            )
+        assert response.status_code == 200
+        result = response.json()["data"]
+        assert result["drawings"][0]["chainage"] == [1000, 4000]
+        assert result["count"]["units"] == 2
+
+
+def test_wbs_draft_rejects_invalid_base64_pdf_with_clear_message(settings):
+    """截断/占位的 base64 解码后不是有效 PDF，应返回明确的 400 而不是通用遮蔽消息。"""
+    with TestClient(create_app(settings=settings)) as client:
+        response = client.post(
+            "/wbs/draft",
+            json={
+                "prefix": "S210",
+                "drawings": [],
+                "imgs": ["data:application/pdf;base64,JVBERi0x..."],
+            },
+        )
+    assert response.status_code == 400
+    assert "不是有效的 PDF" in response.json()["detail"]
+
+
+def test_wbs_draft_rejects_malformed_base64_with_clear_message(settings):
+    with TestClient(create_app(settings=settings)) as client:
+        response = client.post(
+            "/wbs/draft",
+            json={"prefix": "S210", "drawings": [], "imgs": ["data:application/pdf;base64,abc"]},
+        )
+    assert response.status_code == 400
+    assert "base64" in response.json()["detail"]
+
+
+def test_wbs_draft_rejects_corrupt_pdf_file_with_clear_message(settings):
+    (settings.projects_root / "broken.pdf").write_bytes(b"%PDF-1")
+    with TestClient(create_app(settings=settings)) as client:
+        response = client.post(
+            "/wbs/draft", json={"prefix": "S210", "drawings": ["broken.pdf"], "imgs": []}
+        )
+    assert response.status_code == 400
+    assert "不是有效的 PDF" in response.json()["detail"]
 
 
 def test_template_asset_priority_and_renamed_directory(resources):

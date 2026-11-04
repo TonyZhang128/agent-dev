@@ -114,12 +114,15 @@ def daily_logs_recognize(req: DailyLogsReq, request: Request):
 @router.post("/ocr/jianbiao")
 def jianbiao_fill(req: JianbiaoReq, request: Request):
     with document_resources(request) as resources:
-        path = project_path(resources, req.path)
-        if not path.is_file():
-            raise HTTPException(400, "照片必须为数据池内的文件")
         output = project_path(resources, req.out, output=True) if req.out else None
         started = time.monotonic()
-        result = run(path, req.form.strip(), req.cfg, req.bound, output)
+        if req.img:
+            result = run(None, req.form.strip(), req.cfg, req.bound, output, req.img)
+        else:
+            path = project_path(resources, req.path)
+            if not path.is_file():
+                raise HTTPException(400, "照片必须为数据池内的文件")
+            result = run(path, req.form.strip(), req.cfg, req.bound, output)
         result["ms"] = round((time.monotonic() - started) * 1000)
         return {"status": 200, "data": relative_outputs(result, resources)}
 

@@ -509,6 +509,47 @@
   },
   "components": {
     "schemas": {
+      "ArchiveIntentResult": {
+        "properties": {
+          "intent": {
+            "type": "string",
+            "enum": [
+              "A",
+              "B",
+              "C",
+              "D",
+              "unknown"
+            ],
+            "title": "Intent"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Reason"
+          },
+          "needs_clarification": {
+            "type": "boolean",
+            "title": "Needs Clarification"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "intent",
+          "confidence",
+          "reason",
+          "needs_clarification"
+        ],
+        "title": "ArchiveIntentResult",
+        "description": "文件归档系统的意图识别结果；当前无聊天分流，理由始终简短。"
+      },
       "ChatMessage": {
         "properties": {
           "role": {
@@ -591,6 +632,105 @@
           "model"
         ],
         "title": "ChatResponse"
+      },
+      "DailyLogsReq": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path",
+            "description": "PROJECTS_ROOT 数据池内的监理日志照片路径",
+            "default": ""
+          },
+          "img": {
+            "type": "string",
+            "title": "Img",
+            "description": "base64 编码的图片数据；path 与 img 至少提供一个",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "DailyLogsReq"
+      },
+      "DraftReq": {
+        "properties": {
+          "prefix": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Prefix"
+          },
+          "drawings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Drawings",
+            "description": "PROJECTS_ROOT 数据池内的 PDF 路径或目录列表"
+          },
+          "imgs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Imgs",
+            "description": "base64 编码的 PDF 数据列表；drawings 与 imgs 至少提供一个"
+          },
+          "basis": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Basis"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "prefix"
+        ],
+        "title": "DraftReq"
+      },
+      "FillReq": {
+        "properties": {
+          "form": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Form"
+          },
+          "cfg": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Cfg"
+          },
+          "values": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Values"
+          },
+          "out": {
+            "type": "string",
+            "title": "Out",
+            "default": ""
+          },
+          "rects": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Rects"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "form",
+          "cfg",
+          "values"
+        ],
+        "title": "FillReq"
       },
       "HTTPValidationError": {
         "properties": {
@@ -694,46 +834,48 @@
         ],
         "title": "IntentResult"
       },
-      "ArchiveIntentResult": {
+      "JianbiaoReq": {
         "properties": {
-          "intent": {
+          "path": {
             "type": "string",
-            "enum": [
-              "A",
-              "B",
-              "C",
-              "D",
-              "unknown"
-            ],
-            "title": "Intent"
+            "title": "Path",
+            "description": "PROJECTS_ROOT 数据池内的照片路径",
+            "default": ""
           },
-          "confidence": {
-            "type": "number",
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "Confidence"
-          },
-          "reason": {
+          "img": {
             "type": "string",
-            "maxLength": 300,
+            "title": "Img",
+            "description": "base64 编码的图片数据；path 与 img 至少提供一个",
+            "default": ""
+          },
+          "form": {
+            "type": "string",
             "minLength": 1,
-            "title": "Reason"
+            "title": "Form"
           },
-          "needs_clarification": {
-            "type": "boolean",
-            "title": "Needs Clarification"
+          "cfg": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Cfg"
+          },
+          "bound": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Bound"
+          },
+          "out": {
+            "type": "string",
+            "title": "Out",
+            "default": ""
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "intent",
-          "confidence",
-          "reason",
-          "needs_clarification"
+          "form",
+          "cfg"
         ],
-        "title": "ArchiveIntentResult",
-        "description": "文件归档系统的意图识别结果；当前无聊天分流，理由始终简短。"
+        "title": "JianbiaoReq"
       },
       "JsonValue": {},
       "LogSummary": {
@@ -851,6 +993,30 @@
         "title": "LogSummaryRequest",
         "description": "可变结构的工程表单 OCR JSON 或兼容文字，序列化后最多 4000 字符。"
       },
+      "RecognizeReq": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path",
+            "description": "PROJECTS_ROOT 数据池内的照片路径",
+            "default": ""
+          },
+          "form": {
+            "type": "string",
+            "title": "Form",
+            "default": ""
+          },
+          "img": {
+            "type": "string",
+            "title": "Img",
+            "description": "base64 编码的图片数据；path 与 img 至少提供一个",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "RecognizeReq"
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -890,158 +1056,6 @@
           "type"
         ],
         "title": "ValidationError"
-      },
-      "DailyLogsReq": {
-        "properties": {
-          "path": {
-            "type": "string",
-            "title": "Path",
-            "description": "PROJECTS_ROOT 数据池内的监理日志照片路径",
-            "default": ""
-          },
-          "img": {
-            "type": "string",
-            "title": "Img",
-            "description": "base64 编码的图片数据；path 与 img 至少提供一个",
-            "default": ""
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "DailyLogsReq"
-      },
-      "DraftReq": {
-        "properties": {
-          "prefix": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Prefix"
-          },
-          "drawings": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Drawings"
-          },
-          "basis": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Basis"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "prefix",
-          "drawings"
-        ],
-        "title": "DraftReq"
-      },
-      "FillReq": {
-        "properties": {
-          "form": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Form"
-          },
-          "cfg": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Cfg"
-          },
-          "values": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Values"
-          },
-          "out": {
-            "type": "string",
-            "title": "Out",
-            "default": ""
-          },
-          "rects": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Rects"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "form",
-          "cfg",
-          "values"
-        ],
-        "title": "FillReq"
-      },
-      "JianbiaoReq": {
-        "properties": {
-          "path": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Path"
-          },
-          "form": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Form"
-          },
-          "cfg": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Cfg"
-          },
-          "bound": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Bound"
-          },
-          "out": {
-            "type": "string",
-            "title": "Out",
-            "default": ""
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "path",
-          "form",
-          "cfg"
-        ],
-        "title": "JianbiaoReq"
-      },
-      "RecognizeReq": {
-        "properties": {
-          "path": {
-            "type": "string",
-            "title": "Path",
-            "description": "PROJECTS_ROOT 数据池内的照片路径",
-            "default": ""
-          },
-          "form": {
-            "type": "string",
-            "title": "Form",
-            "default": ""
-          },
-          "img": {
-            "type": "string",
-            "title": "Img",
-            "description": "base64 编码的图片数据；path 与 img 至少提供一个",
-            "default": ""
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "RecognizeReq"
       }
     }
   }
