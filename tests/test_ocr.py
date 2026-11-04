@@ -1,5 +1,6 @@
 """OCR 提取、公式、PDF/Excel 同源填表与 WBS 的行为回归。"""
 
+import base64
 import json
 from concurrent.futures import ThreadPoolExecutor
 
@@ -12,8 +13,15 @@ from fastapi.testclient import TestClient
 
 from app.config import Settings
 from app.main import create_app
-from app.ocr import form_ocr, grid, jianbiao, wbs_draft
-from app.ocr.resources import OCRResources, forms, use_resources
+from app.ocr import wbs_draft
+from app.ocr.core import engine as ocr_engine
+from app.ocr.core import sheet_scan
+from app.ocr.core.media import date_value
+from app.ocr.core.resources import OCRResources, forms, use_resources
+from app.ocr.form import form_ocr
+from app.ocr.jianbiao import fill
+from app.ocr.jianbiao.recognize import layouts
+from app.ocr.sheets import grid
 from tests.ocr_helpers import CODE, fill_config, make_ocr_settings, ocr_result
 
 
@@ -29,6 +37,18 @@ def resources(settings):
         yield resource
 
 
+def encode_image(width: int, height: int) -> str:
+    """返回可直接放进 img 字段的 base64 PNG。"""
+    ok, buffer = cv2.imencode(".png", np.full((height, width, 3), 255, np.uint8))
+    assert ok
+    return base64.b64encode(buffer.tobytes()).decode("ascii")
+
+
+def encode_pdf(document: pymupdf.Document) -> str:
+    """返回可直接放进 imgs 字段的 base64 PDF。"""
+    return base64.b64encode(document.tobytes()).decode("ascii")
+
+
 def test_fill_writes_pdf_and_excel_using_same_calculated_values(resources, tmp_path):
     values = {
         "fld_supervisor": "测试监理公司",
@@ -37,7 +57,7 @@ def test_fill_writes_pdf_and_excel_using_same_calculated_values(resources, tmp_p
         "fld_2": "93.2",
         "fld_rate": "999",
     }
-    result = jianbiao.compute(CODE, fill_config(), values, tmp_path / "filled.pdf")
+    result = fill.compute(CODE, fill_config(), values, tmp_path / "filled.pdf")
     assert result["values"]["fld_rate"] == "50"
     assert values["fld_rate"] == "999"
     with pymupdf.open(result["pdf"]) as pdf:
@@ -54,7 +74,7 @@ def test_fill_writes_pdf_and_excel_using_same_calculated_values(resources, tmp_p
 
 
 def test_calculation_without_output_does_not_write_files(resources):
-    result = jianbiao.compute(CODE, fill_config(), {"fld_1": "95", "fld_2": "96"}, None)
+    result = fill.compute(CODE, fill_config(), {"fld_1": "95", "fld_2": "96"}, None)
     assert result["values"]["fld_rate"] == "100"
     assert result["pdf"] == result["xlsx"] == ""
     assert list(resources.projects.iterdir()) == []
@@ -72,7 +92,7 @@ def test_calculation_without_output_does_not_write_files(resources):
     ],
 )
 def test_formula_js_compatible_semantics(expression, expected):
-    result, errors = jianbiao.evaluate(
+    result, errors = fill.evaluate(
         {"formulas": [{"target": "result", "expr": expression}]}, {"a": "2", "b": "3"}
     )
     assert errors == {}
@@ -80,7 +100,7 @@ def test_formula_js_compatible_semantics(expression, expected):
 
 
 def test_formula_dependencies_and_partial_failure():
-    result, errors = jianbiao.evaluate(
+    result, errors = fill.evaluate(
         {
             "formulas": [
                 {"target": "later", "expr": "@{first} * 2"},
@@ -96,7 +116,7 @@ def test_formula_dependencies_and_partial_failure():
 
 def test_formula_cycle_is_reported():
     with pytest.raises(ValueError, match="循环引用"):
-        jianbiao.evaluate(
+        fill.evaluate(
             {"formulas": [{"target": "a", "expr": "@{b}"}, {"target": "b", "expr": "@{a}"}]}, {}
         )
 
@@ -113,7 +133,7 @@ def test_reference_template_takes_precedence_over_copy(resources):
         },
     ]
     values = {"fld_1": "95", "fld_2": "96"}
-    cells = jianbiao.anchor_values(config, CODE, values)
+    cells = fill.anchor_values(config, CODE, values)
     assert next(cell for cell in cells if cell["field"] == "fld_location")["value"] == "实测 96 / —"
 
 
@@ -130,7 +150,7 @@ def test_sheet_grid_keys_are_stable_and_printed_cells_are_not_fillable(resources
     "value,want", [("2026年10月3日", "2026-10-03"), ("2026/10/03", "2026-10-03")]
 )
 def test_ocr_date_normalization(value, want):
-    assert form_ocr.date_value(value) == want
+    assert date_value(value) == want
 
 
 def test_ocr_cell_value_removes_printed_label_and_retains_negative_measurement():
@@ -138,7 +158,7 @@ def test_ocr_cell_value_removes_printed_label_and_retains_negative_measurement()
         {"s": "数值", "box": [0, 0, 40, 10], "conf": 0.99},
         {"s": "一2.5", "box": [0, 20, 60, 40], "conf": 0.9},
     ]
-    assert jianbiao._cell_value(boxes, "数值", "number") == ("-2.5", 0.9)
+    assert sheet_scan._cell_value(boxes, "数值", "number") == ("-2.5", 0.9)
 
 
 def test_ocr_converts_rapidocr_output_to_boxes(resources):
@@ -146,7 +166,7 @@ def test_ocr_converts_rapidocr_output_to_boxes(resources):
         ([[10, 10], [300, 10], [300, 40], [10, 40]], "监理单位：测试公司", 0.99),
         ([[20, 50], [80, 50], [80, 70], [20, 70]], "2026-10-31", 0.5),
     )
-    boxes = form_ocr.ocr(np.zeros((100, 100, 3), np.uint8))
+    boxes = ocr_engine.ocr(np.zeros((100, 100, 3), np.uint8))
     assert [b["s"] for b in boxes] == ["监理单位：测试公司", "2026-10-31"]
     assert [b["box"] for b in boxes] == [[10.0, 10.0, 300.0, 40.0], [20.0, 50.0, 80.0, 70.0]]
     assert boxes[0]["conf"] == pytest.approx(0.99)
@@ -155,7 +175,7 @@ def test_ocr_converts_rapidocr_output_to_boxes(resources):
 
 def test_ocr_empty_detection_returns_no_boxes(resources):
     resources.engine = lambda image: ocr_result()
-    assert form_ocr.ocr(np.zeros((10, 10, 3), np.uint8)) == []
+    assert ocr_engine.ocr(np.zeros((10, 10, 3), np.uint8)) == []
 
 
 def test_engine_uses_ppocrv6_medium_and_ppocrv5_server_direction_model(settings, monkeypatch):
@@ -169,7 +189,7 @@ def test_engine_uses_ppocrv6_medium_and_ppocrv5_server_direction_model(settings,
 
     monkeypatch.setattr(rapidocr, "RapidOCR", FakeRapidOCR)
     with use_resources(OCRResources(settings)):
-        form_ocr.engine()
+        ocr_engine.engine()
 
     assert captured["Global.model_root_dir"] == str(settings.ocr_model_root)
     assert captured["Det.model_type"] is rapidocr.ModelType.MEDIUM
@@ -232,6 +252,29 @@ def test_jianbiao_pipeline_recognizes_and_computes_without_writing(settings):
         assert response.json()["data"]["recognized"] == {"fld_1": "96.5"}
         assert response.json()["data"]["values"]["fld_1"] == "96.5"
         assert set(path.name for path in settings.projects_root.iterdir()) == {"simple.png"}
+
+
+def test_jianbiao_accepts_base64_image_without_path(settings):
+    image = np.full((1000, 1000, 3), 255, dtype=np.uint8)
+    cv2.rectangle(image, (50, 50), (950, 950), (0, 0, 0), 5)
+    app = create_app(settings=settings)
+    with TestClient(app) as client:
+        app.state.ocr_resources.engine = lambda image: ocr_result(
+            ([[20, 20], [100, 20], [100, 60], [20, 60]], "96.5", 0.99)
+        )
+        response = client.post(
+            "/ocr/jianbiao",
+            json={
+                "img": encode_image(1000, 1000),
+                "form": CODE,
+                "cfg": {},
+                "bound": {"fld_1": "1"},
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["data"]["recognized"] == {"fld_1": "96.5"}
+        assert response.json()["data"]["values"]["fld_1"] == "96.5"
+        assert list(settings.projects_root.iterdir()) == []
 
 
 def test_ocr_apps_keep_catalogs_caches_and_paths_isolated(tmp_path):
@@ -362,6 +405,56 @@ def test_wbs_reads_drawing_pdf(resources):
     assert result["count"]["units"] == 2
 
 
+def test_wbs_reads_base64_drawing_pdf(settings):
+    with TestClient(create_app(settings=settings)) as client:
+        with pymupdf.open() as document:
+            page = document.new_page()
+            page.insert_text((50, 50), "封面\n道路工程\nK1+000~K4+000", fontname="china-s")
+            response = client.post(
+                "/wbs/draft",
+                json={"prefix": "S210", "drawings": [], "imgs": [encode_pdf(document)]},
+            )
+        assert response.status_code == 200
+        result = response.json()["data"]
+        assert result["drawings"][0]["chainage"] == [1000, 4000]
+        assert result["count"]["units"] == 2
+
+
+def test_wbs_draft_rejects_invalid_base64_pdf_with_clear_message(settings):
+    """截断/占位的 base64 解码后不是有效 PDF，应返回明确的 400 而不是通用遮蔽消息。"""
+    with TestClient(create_app(settings=settings)) as client:
+        response = client.post(
+            "/wbs/draft",
+            json={
+                "prefix": "S210",
+                "drawings": [],
+                "imgs": ["data:application/pdf;base64,JVBERi0x..."],
+            },
+        )
+    assert response.status_code == 400
+    assert "不是有效的 PDF" in response.json()["detail"]
+
+
+def test_wbs_draft_rejects_malformed_base64_with_clear_message(settings):
+    with TestClient(create_app(settings=settings)) as client:
+        response = client.post(
+            "/wbs/draft",
+            json={"prefix": "S210", "drawings": [], "imgs": ["data:application/pdf;base64,abc"]},
+        )
+    assert response.status_code == 400
+    assert "base64" in response.json()["detail"]
+
+
+def test_wbs_draft_rejects_corrupt_pdf_file_with_clear_message(settings):
+    (settings.projects_root / "broken.pdf").write_bytes(b"%PDF-1")
+    with TestClient(create_app(settings=settings)) as client:
+        response = client.post(
+            "/wbs/draft", json={"prefix": "S210", "drawings": ["broken.pdf"], "imgs": []}
+        )
+    assert response.status_code == 400
+    assert "不是有效的 PDF" in response.json()["detail"]
+
+
 def test_template_asset_priority_and_renamed_directory(resources):
     (resources.admin / "pdf").mkdir(parents=True)
     (resources.admin / "pdf/test.pdf").write_bytes(b"admin wins")
@@ -446,7 +539,7 @@ def test_excel_skipped_fields_are_returned_per_call(resources, tmp_path):
 
 
 def test_zero_length_road_partition_is_reported_as_resource_error(resources):
-    from app.ocr.resources import OCRResourceError
+    from app.ocr.core.resources import OCRResourceError
 
     rules = resources.load("refs/wbs_rules.json")
     rules["units"]["LJ"]["splitKm"] = 0
@@ -457,7 +550,7 @@ def test_zero_length_road_partition_is_reported_as_resource_error(resources):
 def test_mock_sheet_works_without_windows_fonts(resources):
     from scripts.ocr.mock_jianbiao import draw_sheet
 
-    layout = jianbiao.layouts()["SIMPLE"]
+    layout = layouts()["SIMPLE"]
     image = draw_sheet(layout)
     assert image.width == 1120
     assert np.asarray(image).min() < 100

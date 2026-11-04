@@ -14,17 +14,18 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_CACHE_DIR=/root/.cache/uv
 WORKDIR /app
 COPY --from=uv /uv /uvx /bin/
-# 先安装锁定依赖，改业务代码时复用该层；生产不安装 dev 依赖。
+# 先安装锁定依赖，改业务代码时复用该层；生产不安装 dev 依赖，OCR 使用 GPU CUDA EP。
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-dev --no-install-project
+    uv sync --locked --no-dev --no-install-project --extra ocr-gpu
 
 FROM ${PYTHON_IMAGE} AS runtime
 
 LABEL org.opencontainers.image.title="highway-agent-api" \
       org.opencontainers.image.description="公路工程业务智能体 API（不含模型服务）"
 
-# opencv-python 依赖 libGL/libglib，onnxruntime 依赖 libgomp；curl 供健康检查。
+# opencv-python 依赖 libGL/libglib，onnxruntime-gpu 依赖 libgomp；
+# CUDA 12 + cuDNN 9 用户态库不在 wheel 内，需由基础镜像或挂载提供（见 docs/docker.md）；curl 供健康检查。
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       libgl1 libglib2.0-0 libgomp1 libsm6 libxext6 curl tini \

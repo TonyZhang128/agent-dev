@@ -97,6 +97,17 @@ services:
       LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
       # 与下面的只读挂载点一致；宿主机目录由 OCR_MODEL_DIR 指定。
       OCR_MODEL_ROOT: /app/data/ocr/models
+      # OCR 推理设备：生产默认使用 GPU CUDA EP；无 GPU 主机在 docker/prod.env 改为 cpu。
+      OCR_DEVICE: ${OCR_DEVICE:-cuda}
+    # 业务 API 默认分配 GPU；与 vLLM 共享同一块 GPU 时保持 1。
+    # 无 GPU 主机需改用覆盖文件移除本段，并把 OCR_DEVICE 设为 cpu。
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: ${OCR_GPU_COUNT:-1}
+              capabilities: [gpu]
     ports:
       # 默认只绑定回环，由部署平台的反向代理暴露 TLS 与鉴权。
       - "${API_BIND_ADDRESS:-127.0.0.1}:${API_HOST_PORT:-8309}:8309"

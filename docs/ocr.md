@@ -10,13 +10,16 @@
 
 ```zsh
 export UV_CACHE_DIR="$PWD/.cache/uv"
-uv sync --locked --group dev
+# 默认安装 CPU 版 onnxruntime，供 Mac/无 NVIDIA GPU 的开发环境使用
+uv sync --locked --group dev --extra ocr-cpu
+# Linux/Windows 且需要 OCR 使用 NVIDIA GPU CUDA EP 时，改用：
+# uv sync --locked --group dev --extra ocr-gpu
 uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 8309
 ```
 
-继续使用原有 Mac/Linux 服务脚本和 VS Code `Debug API (launch)` 即可。无需启动第二套 docsvc，也不安装其旧 `requirements.txt`。运行依赖统一由 `pyproject.toml` 的 `dependencies` 和 `uv.lock` 管理：PyMuPDF、openpyxl、OpenCV、NumPy、RapidOCR、CPU ONNX Runtime、Pillow。Pillow 被造样图脚本直接使用，因此显式声明。保留现有 FastAPI/Uvicorn/Pydantic/LangChain 版本。
+继续使用原有 Mac/Linux 服务脚本和 VS Code `Debug API (launch)` 即可。VS Code 调试直接使用 `.venv`，不执行 `uv` 同步；切换 extra 后需先按上面的命令重新同步环境。无需启动第二套 docsvc，也不安装其旧 `requirements.txt`。运行依赖统一由 `pyproject.toml` 的 `dependencies`、`optional-dependencies` 和 `uv.lock` 管理：PyMuPDF、openpyxl、OpenCV、NumPy、RapidOCR、Pillow，以及通过互斥 extra `ocr-cpu` / `ocr-gpu` 二选一的 `onnxruntime` 或 `onnxruntime-gpu`。Pillow 被造样图脚本直接使用，因此显式声明。保留现有 FastAPI/Uvicorn/Pydantic/LangChain 版本。
 
-未引入原 requirements 中没有调用代码的 `python-multipart`、预留统计学习依赖 `scikit-learn`，以及仅用于另建训练环境的 `ultralytics`/PyTorch。演示上传脚本使用标准库构造 multipart，服务端接口仍接收 JSON 路径。文字识别使用 RapidOCR 3.x，按识别质量优先选用 PP-OCRv6 Medium（检测与识别）+ PP-OCRv5 Server（方向分类）；这些模型不在安装包内。开发环境首次真实识别时从 ModelScope 自动下载到 `OCR_MODEL_ROOT`（该目录必须可写）；离线或容器部署先用 `uv run --locked python -m scripts.models.download_ocr_models --root <目录>` 预置，再通过 `OCR_MODEL_DIR` 只读挂载，避免运行时联网。无需下载 LLM 或安装 CUDA。本项目统一使用 `opencv-python`，`uv` 通过 `exclude-dependencies` 忽略 `rapidocr` 声明的 `opencv-python-headless`，避免同时安装两份 `cv2`；也不要同时安装 CPU/GPU 两种 ONNX Runtime 包。Linux 极简系统若导入 OpenCV 提示缺少 `libGL.so.1`，需由部署环境提供对应系统库。
+未引入原 requirements 中没有调用代码的 `python-multipart`、预留统计学习依赖 `scikit-learn`，以及仅用于另建训练环境的 `ultralytics`/PyTorch。演示上传脚本使用标准库构造 multipart，服务端接口仍接收 JSON 路径。文字识别使用 RapidOCR 3.x，按识别质量优先选用 PP-OCRv6 Medium（检测与识别）+ PP-OCRv5 Server（方向分类）；这些模型不在安装包内。开发环境首次真实识别时从 ModelScope 自动下载到 `OCR_MODEL_ROOT`（该目录必须可写）；离线或容器部署先用 `uv run --locked python -m scripts.models.download_ocr_models --root <目录>` 预置，再通过 `OCR_MODEL_DIR` 只读挂载，避免运行时联网。推理设备由 `OCR_DEVICE` 切换：cuda（需本机 CUDA 12 + cuDNN 9）或 cpu（无 NVIDIA GPU 的环境，如 Mac 开发）；两种模式共用同一套 ONNX 模型，cpu 模式不检查 CUDA。ONNX Runtime 通过两个互斥 extra 选择：`ocr-cpu` 安装 CPU 版 `onnxruntime==1.31.1`，`ocr-gpu` 安装 `onnxruntime-gpu==1.24.4`。两个发行包都提供同名 `onnxruntime` 模块，装在同一环境会互相覆盖文件，因此 `pyproject.toml` 用 `[tool.uv] conflicts` 声明互斥，uv 会拒绝同时启用两个 extra；单独执行不带 extra 的 `uv sync` 不会安装 ONNX Runtime，并会移除已装的那一个。`exclude-dependencies` 仅用于忽略 `rapidocr` 可能声明的 `opencv-python-headless`，避免与项目的 `opencv-python` 同时提供两份 `cv2`。Linux 极简系统若导入 OpenCV 提示缺少 `libGL.so.1`，需由部署环境提供对应系统库。
 
 ## 路径配置
 
@@ -29,6 +32,44 @@ uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 8309
 | `ASSET_ROOT` | `data/ocr/assets` | 规范 PDF/Excel；兼容 `library/pdf_dirs.json` 目录改名 |
 | `PROJECTS_ROOT` | `data/ocr/projects` | 与 Java 共用的业务数据池，读写边界 |
 | `OCR_MODEL_ROOT` | `.cache/models/ocr` | RapidOCR 模型缓存，开发环境可写自动下载；离线部署用下载脚本预置后只读挂载 |
+| `OCR_DEVICE` | `cpu` | 推理设备：`cpu`（默认，适合无 NVIDIA GPU 的开发环境）或 `cuda`（需 CUDA 12 + cuDNN 9 并通过 `--extra ocr-gpu` 安装 onnxruntime-gpu），见下文「推理设备」 |
+| `OCR_CUDA_ROOT` | `.cache/cuda` | Windows 项目本地 CUDA 运行库目录（Git 已忽略），仅 cuda 模式使用，见下文「推理设备」 |
+
+### 推理设备
+
+`OCR_DEVICE` 切换 onnxruntime 执行设备，两种模式共用同一套 ONNX 模型：
+
+- `cpu`（默认）：供无 NVIDIA GPU 的环境使用（如 Mac 开发）。通过
+  `uv sync --extra ocr-cpu` 安装 CPU 版 `onnxruntime==1.31.1`，不检查 CUDA 运行库，
+  直接 CPU 推理。
+- `cuda`：通过 `onnxruntime-gpu==1.24.4` 的 CUDA EP 推理。需要安装时带上
+  `--extra ocr-gpu`，并确保运行环境有 CUDA 12 + cuDNN 9（1.31 起的 GPU 包改用
+  CUDA 13，本项目未采用）；`onnxruntime-gpu` 不附带 CUDA/cuDNN 动态库，
+  首次创建引擎时会验证 CUDA 真实可用：不可用直接返回 503，不会静默退回 CPU。
+- 两个 extra 互斥，不能同时启用；同时安装会覆盖同名 `onnxruntime` 模块。
+
+`GET /health/deps` 的「推理设备」除编译进 onnxruntime 的 provider 列表外，还带
+`configured` 字段显示当前配置的设备。
+
+- Linux：由系统 CUDA 12 + cuDNN 9 环境提供动态库（`LD_LIBRARY_PATH`）。
+- Windows 免安装方案：从 NVIDIA redist 索引下载以下 `windows-x86_64-archive.zip`
+  并解压到 `OCR_CUDA_ROOT`（默认 `.cache/cuda`），首次推理前应用会把各包的
+  `bin` 目录加入 DLL 搜索路径：
+
+  | 包 | 已验证版本 |
+  | --- | --- |
+  | `cuda_cudart` | 12.8.90 |
+  | `libcublas` | 12.8.5.5 |
+  | `libcufft` | 11.4.1.4（提供 `cufft64_11.dll`） |
+  | `cudnn`（`_cuda12`） | 9.8.0.87 |
+
+  下载地址形如
+  `https://developer.download.nvidia.com/compute/cuda/redist/<包>/windows-x86_64/<包>-windows-x86_64-<版本>-archive.zip`，
+  cuDNN 在 `compute/cudnn/redist/cudnn/windows-x86_64/` 下。注意 onnxruntime-gpu
+  要求 CUDA 12 系列构建（`>=1.24,<1.25` 已验证；1.31 起改为 CUDA 13，需驱动配套），
+  且驱动支持的 CUDA 版本不能低于运行库版本。`GET /health/deps` 的「推理设备」
+  只反映编译进 onnxruntime 的 provider 列表，不代表 CUDA 初始化成功。
+
 
 当前相邻 daolu_v6 资料可在根目录 `.env` 配置为：
 

@@ -10,7 +10,7 @@ import pymupdf
 
 from app.config import ROOT as ROOT
 from app.config import Settings
-from app.ocr.resources import asset as asset
+from app.ocr.core.resources import asset as asset
 
 # CLI 与 API 读取同一份 .env；脚本不再依赖旧部署的目录层级。
 _settings = Settings()

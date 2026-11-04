@@ -6,14 +6,19 @@
   · 路基 / 路面:按施工图路段桩号,每 ≤10 km 一个单位工程,每 ≤3 km 一个分部
   · 工可:取路线起讫桩号、长度,补全没有施工图的路段
 输出与业务库 wbsTrees.rawUnits 同结构:[{ code, title, children:[{ code, title, children:[{ code, title, children:[{ title }] }] }] }]
-每个节点带 src(识别依据:哪份文件、第几页、原文),供管理员核对后「下发初稿」。"""
+每个节点带 src(识别依据:哪份文件、第几页、原文),供管理员核对后「下发初稿」。
 
+输入支持数据池路径或 base64 编码的 PDF 字节流,便于 Java 后端直接透传文件内容。
+"""
+
+import base64
+import binascii
 import re
 from pathlib import Path
 
 import pymupdf
 
-from app.ocr.resources import OCRResourceError, get_resources
+from app.ocr.core.resources import OCRResourceError, get_resources
 
 
 def rules() -> dict:
@@ -30,22 +35,51 @@ def chainage_m(s: str):
     return int(m.group(1)) * 1000 + float(m.group(2)) if m else None
 
 
-def pdf_text(path: Path, max_pages: int = 8) -> list[tuple[int, str]]:
-    """PDF 前几页的文字层(封面、目录):[(页码, 文字)];单页拆分目录则读前 max_pages 个文件"""
+def decode_base64_pdf(data: str) -> bytes:
+    """base64 PDF → 字节流；兼容 data:application/pdf;base64,... 前缀。
+
+    base64 数据本身无效时抛出 ValueError，由接口层返回明确的 400。
+    """
+    if data.startswith("data:") and "," in data:
+        data = data.split(",", 1)[1]
+    try:
+        return base64.b64decode(data)
+    except binascii.Error as exc:
+        raise ValueError("imgs 项不是有效的 base64 数据") from exc
+
+
+def open_pdf(source: Path | bytes) -> pymupdf.Document:
+    """打开 PDF 文件或已解码的字节流；内容不是有效 PDF 时抛出可读的 ValueError。"""
+    try:
+        if isinstance(source, bytes):
+            return pymupdf.open(stream=source)
+        return pymupdf.open(source)
+    except (OSError, RuntimeError) as exc:
+        if isinstance(source, bytes):
+            raise ValueError("imgs 项解码后不是有效的 PDF") from exc
+        raise ValueError("施工图文件不是有效的 PDF，请检查文件内容") from exc
+
+
+def pdf_text(source: Path | bytes, max_pages: int = 8) -> list[tuple[int, str]]:
+    """PDF 前几页的文字层(封面、目录):[(页码, 文字)]。
+
+    source 可以是数据池内的 PDF 文件/目录,也可以是已解码的 PDF 字节流。
+    单页拆分目录则读前 max_pages 个文件。
+    """
     out = []
-    if path.is_dir():
+    if isinstance(source, Path) and source.is_dir():
         files = []
-        for f in path.glob("*.pdf"):
+        for f in source.glob("*.pdf"):
             match = re.search(r"_(\d+)\.pdf$", f.name)
             if match and f.is_file():
                 if not f.resolve().is_relative_to(get_resources().projects):
                     raise ValueError("施工图目录包含数据池外的 PDF 文件")
                 files.append((int(match.group(1)), f))
         for number, f in sorted(files)[:max_pages]:
-            with pymupdf.open(f) as d:
+            with open_pdf(f) as d:
                 out.append((number, d[0].get_text()))
     else:
-        with pymupdf.open(path) as d:
+        with open_pdf(source) as d:
             for i, pg in enumerate(d):
                 if i >= max_pages:
                     break
@@ -57,10 +91,9 @@ def lines_of(text: str) -> list[str]:
     return [ln.strip() for ln in text.split("\n") if ln.strip()]
 
 
-def read_drawing(path: Path) -> dict:
-
-    pages = pdf_text(path, max_pages=12)
-    info = {"file": path.name, "src": []}
+def read_drawing(source: Path | bytes) -> dict:
+    pages = pdf_text(source, max_pages=12)
+    info = {"file": "base64.pdf" if isinstance(source, bytes) else source.name, "src": []}
     cover = lines_of(pages[0][1]) if pages else []
     # 封面册名:「第 n 分册 共 n 分册」的下一行(如「牛鞍溪大桥工程」「岷江二桥 主桥主拱构造」);没有分册行则取含桥 / 隧道 / 工程的行
     i = next((j for j, ln in enumerate(cover) if re.search(r"分\s*册", ln)), -1)
@@ -73,7 +106,7 @@ def read_drawing(path: Path) -> dict:
                 for ln in cover[1:]
                 if re.search(r"桥|隧道|工程$", ln) and not re.search(r"K\d", ln)
             ),
-            path.name,
+            "base64.pdf" if isinstance(source, bytes) else source.name,
         )
     )
     info["volume"] = re.sub(r"\s+", " ", title)
@@ -233,9 +266,16 @@ def road_units(rng, prefix: str, start_no: int = 1) -> list[dict]:
     return out
 
 
-def draft(prefix: str, drawings: list[Path], basis: dict | None = None) -> dict:
-    """prefix = 合同段编码前缀(如 S210);drawings = 施工图(PDF 文件或单页拆分目录);basis = 工可解析出的指标(roads.basis)"""
-    reads = [read_drawing(p) for p in drawings]
+def draft(
+    prefix: str, drawings: list[Path], imgs: list[str] | None = None, basis: dict | None = None
+) -> dict:
+    """prefix = 合同段编码前缀(如 S210);drawings = 施工图(PDF 文件或单页拆分目录);
+    imgs = base64 编码的 PDF 数据列表;basis = 工可解析出的指标(roads.basis)。
+    """
+    imgs = imgs or []
+    reads = [read_drawing(p) for p in drawings] + [
+        read_drawing(decode_base64_pdf(img)) for img in imgs
+    ]
     units, qn = [], 0
     for b in [r for r in reads if r["kind"] == "bridge"]:
         qn += 1

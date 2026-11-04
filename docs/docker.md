@@ -1,6 +1,6 @@
 # Docker 生产部署（业务 API + vLLM）
 
-本说明描述用容器部署生产环境：业务 API 与 vLLM 模型服务是**两个镜像、两个环境**，通过 Compose 编排在同一台 GPU 主机上。业务镜像不含模型和 GPU 依赖；模型镜像不含业务依赖。宿主机预置权重，容器只读挂载，构建阶段不下载模型。
+本说明描述用容器部署生产环境：业务 API 与 vLLM 模型服务是**两个镜像、两个环境**，通过 Compose 编排在同一台 GPU 主机上。业务镜像不含模型权重；构建时通过 `--extra ocr-gpu` 安装 `onnxruntime-gpu`（与 CPU 版 extra `ocr-cpu` 互斥），Compose 默认 `OCR_DEVICE=cuda` 并给 API 容器预留 GPU；无 GPU 主机改为 `cpu` 并移除预留（速度较慢）。模型镜像不含业务依赖。宿主机预置权重，容器只读挂载，构建阶段不下载模型。
 
 非容器部署方式见 [Linux + NVIDIA 部署](deployment-linux.md)。
 
@@ -13,6 +13,7 @@
   docker run --rm --gpus all nvidia/cuda:12.9.1-base-ubuntu24.04 nvidia-smi
   ```
 
+- CUDA 12 + cuDNN 9 用户态库：`onnxruntime-gpu` 不自带这些库，当前业务镜像基于 `python:3.12-slim`，也不包含它们；默认 `OCR_DEVICE=cuda` 时需改用带 CUDA 运行库的基础镜像或挂载对应库，否则 `/ocr/*` 返回 503。仅把 GPU 设备挂进容器不足以让 CUDA EP 初始化。
 - 宿主机已准备 Python 3.12 环境仅供**验收脚本**使用；镜像构建本身不需要本机 Python。
 
 ## 2. 准备权重
@@ -175,6 +176,8 @@ BUSINESS_API_URL=http://127.0.0.1:8309 \
 | `VLLM_API_KEY` | vLLM 原生鉴权变量，同时注入业务 API 的 `LLM_API_KEY` |
 | `VLLM_MAX_MODEL_LEN` | vLLM 上下文上限，必须等于 `LLM_CONTEXT_TOKENS` |
 | `VLLM_GPU_COUNT` / `VLLM_GPU_MEMORY_UTILIZATION` | GPU 数量与显存占比 |
+| `OCR_GPU_COUNT` | 分配给业务 API 容器的 GPU 数量，默认 1；与 vLLM 共享同一块 GPU 时需调低 `VLLM_GPU_MEMORY_UTILIZATION` 给 OCR 留显存 |
+| `OCR_DEVICE` | OCR 推理设备，Compose 默认 `cuda`；无 GPU 主机改为 `cpu` |
 | `API_BIND_ADDRESS` / `API_HOST_PORT` | 业务 API 对外绑定，默认仅 `127.0.0.1:8309` |
 | `OCR_*_DIR` | OCR 数据池宿主机路径；`OCR_MODEL_DIR` 为预置的 ONNX 模型目录 |
 | `LANGSMITH_TRACING` / `LANGSMITH_API_KEY` | 默认关闭；开启后追踪可能包含业务输入 |

@@ -54,11 +54,16 @@ zsh scripts/dev/services.sh status
 
 ```zsh
 export UV_CACHE_DIR="$PWD/.cache/uv"
-uv sync --locked --group dev
+# 默认安装 CPU 版 onnxruntime（适合 Mac/无 NVIDIA GPU 开发）
+uv sync --locked --group dev --extra ocr-cpu
+# 需要 OCR 使用 NVIDIA GPU CUDA EP 时（Linux/Windows GPU 主机）改用：
+# uv sync --locked --group dev --extra ocr-gpu
 test -f .env || cp .env.example .env
 ```
 
-`scripts/dev/setup.sh` 需要已有 Homebrew，缺少时会提示安装地址并退出。缓存齐全时 uv 命令可追加 `--offline`。
+`ocr-cpu` 与 `ocr-gpu` 互斥，不能同时启用；两者提供同名 `onnxruntime` 模块，同时安装会互相覆盖。单独执行不带 extra 的 `uv sync` 不会安装 ONNX Runtime，并会移除已装的那一个。
+
+`scripts/dev/setup.sh` 需要已有 Homebrew，缺少时会提示安装地址并退出。缓存齐全时 uv 命令可追加 `--offline`。Mac 开发默认 CPU 推理，与 `.env.example` 中的 `OCR_DEVICE=cpu` 一致。
 
 ## 配置与启动
 
@@ -89,6 +94,8 @@ test -f .env || cp .env.example .env
 | `ASSET_ROOT` | `data/ocr/assets` | 规范 PDF/Excel 资料目录 |
 | `PROJECTS_ROOT` | `data/ocr/projects` | 与 Java 共用的业务数据池，限制文件读写边界 |
 | `OCR_MODEL_ROOT` | `.cache/models/ocr` | RapidOCR ONNX 模型目录；开发环境自动下载，离线部署预置后只读使用 |
+| `OCR_DEVICE` | `cpu` | OCR 推理设备：`cpu`（默认，适合无 NVIDIA GPU 的开发/Mac 环境）或 `cuda`（需 CUDA 12 + cuDNN 9，同时通过 `--extra ocr-gpu` 安装 onnxruntime-gpu）；cuda 不可用时接口返回 503 |
+| `OCR_CUDA_ROOT` | `.cache/cuda` | 仅 cuda 模式：Windows 可将 NVIDIA redist 解压到此目录免系统安装，需 CUDA 12 + cuDNN 9 |
 
 云端回退默认关闭：只有提供非空 `LLM_FALLBACK_API_KEY` 时才启用。启用后，本地 Ollama/vLLM 的模型调用因连接失败、超时或上游 HTTP 错误抛出异常时，本次调用改用回退模型重试一次，总预算为 `LLM_TIMEOUT_SECONDS + LLM_FALLBACK_TIMEOUT_SECONDS`。回退不重试已返回但未通过 Schema 校验的输出，`/ready` 仍只检查本地模型。DeepSeek 不支持严格 `json_schema`，回退时改用 JSON 模式并继续用 Pydantic 校验，不会退回宽松文本解析。启用回退意味着业务输入会发送到云端，需按数据合规要求决定。
 
@@ -227,7 +234,7 @@ app/
     system.py             # /health、/ready：存活与模型就绪检查
     ocr.py                # /health/deps、/ocr：识别、监理日志、简表、填表与表样
     wbs.py                # /wbs/draft：施工图划分初稿
-  ocr/                    # 文档加工业务：资源隔离、识别、公式、PDF/Excel、WBS
+  ocr/                    # 文档加工业务（core 原语与资源 / form 照片模板对齐识别 / sheets 表样格子与 Excel / jianbiao 简表识别与公式填表 / daily_logs 监理日志 / wbs_draft 划分初稿）
   http_errors.py          # 输入与模型异常的统一 HTTP 映射、校验详情脱敏
   config.py               # .env 配置与默认值
   schemas/                # 请求、响应的 Pydantic 模型和校验
@@ -285,7 +292,7 @@ docs/log-summary-testing.md # OCR 日志描述规则及离线、真实模型验�
 .github/workflows/ci.yml # Linux 自动检查
 Dockerfile               # 生产业务 API 镜像（不含模型服务）
 Dockerfile.vllm          # 生产 vLLM 模型服务镜像，基础镜像由构建参数决定
-compose.prod.yml         # 生产编排：API + 模型服务，GPU 仅分配模型容器
+compose.prod.yml         # 生产编排：API + 模型服务；OCR 的 CUDA 运行前提见部署文档
 docker/                  # 容器入口脚本与 compose 变量模板
 pyproject.toml / uv.lock  # 直接依赖与完整锁文件
 .env.example             # 可提交的配置模板；实际 .env 不提交
@@ -351,7 +358,7 @@ api_router.include_router(example.router)
 bash scripts/prod/setup.sh
 ```
 
-脚本使用 Python 3.12 和 `uv sync --locked --no-dev`，不安装 dev 依赖、不启动服务、不下载模型。根目录 `.env` 不存在时，从 `scripts/prod/api.env.example` 创建；已有 `.env` 保留。将 `LLM_API_KEY` 的占位值改为模型服务密钥，并确认以下配置：
+脚本使用 Python 3.12 和锁定的依赖（`uv sync --locked --no-dev --extra ocr-gpu`，生产默认 GPU 版 OCR 运行时），不安装 dev 依赖、不启动服务、不下载模型。根目录 `.env` 不存在时，从 `scripts/prod/api.env.example` 创建；已有 `.env` 保留。将 `LLM_API_KEY` 的占位值改为模型服务密钥，并确认以下配置：
 
 ```dotenv
 LLM_BASE_URL=http://127.0.0.1:8001/v1
@@ -383,7 +390,7 @@ bash scripts/prod/start-api.sh
 bash scripts/prod/verify.sh
 ```
 
-API 默认监听 `127.0.0.1:8309`，拒绝 `--reload`，启动时不安装或同步依赖。上线需由 systemd 等服务管理器托管，详见 [部署说明](docs/deployment-linux.md)。API 与模型可以部署在不同 Linux 主机；API 主机无需 GPU，`start-vllm.sh` 和完整 `verify.sh` 用于 GPU 主机，远端 API 可单独运行通用业务验收。
+API 默认监听 `127.0.0.1:8309`，拒绝 `--reload`，启动时不安装或同步依赖。上线需由 systemd 等服务管理器托管，详见 [部署说明](docs/deployment-linux.md)。API 与模型可以部署在不同 Linux 主机；`OCR_DEVICE=cuda`（默认）时调用 `/ocr/*` 的 API 主机也需要 NVIDIA GPU 及 CUDA 12 + cuDNN 9，无 GPU 主机可改 `OCR_DEVICE=cpu`（速度较慢）。`start-vllm.sh` 和完整 `verify.sh` 用于 GPU 主机，不调用 OCR 的通用业务验收仍可单独运行。
 
 模型服务需支持 Chat Completions 和原生 JSON Schema 输出；以真实业务验收结果判断具体模型和 vLLM 组合是否可用。验收文件写入 `verification/`，`nvidia-smi` 成功仅确认驱动和设备可见，模型 GPU 占用需另看服务日志和设备监控。本机未执行 Linux GPU 部署。
 

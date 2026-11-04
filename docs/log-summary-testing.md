@@ -36,7 +36,7 @@
 
 ```zsh
 export UV_CACHE_DIR="$PWD/.cache/uv"
-uv sync --locked --group dev
+uv sync --locked --group dev --extra ocr-cpu
 uv run --locked ruff check app tests scripts
 uv run --locked ruff format --check app tests scripts
 uv run --locked pytest -v

@@ -76,6 +76,7 @@ def test_setup_preserves_existing_env_and_installs_runtime_only(deployment):
     assert env_file.read_bytes() == original
     commands = deployment.trace.read_text()
     assert "sync\n--locked\n--no-dev\n" in commands
+    assert "--extra\nocr-gpu" in commands
     assert "vllm" not in commands
 
 
@@ -213,6 +214,8 @@ def test_legacy_mac_api_starts_under_debugpy_on_request(deployment, port):
         str(deployment.root),
         "run",
         "--locked",
+        "--extra",
+        "ocr-cpu",
         "python",
         "-m",
         "debugpy",

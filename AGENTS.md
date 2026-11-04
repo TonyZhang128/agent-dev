@@ -33,7 +33,7 @@
 | `app/prompts/<name>.md` | 系统提示词，使用 `load_prompt()` 加载；可按能力分子目录，如 `intent/business.md` |
 | `app/config.py` | `Settings`、配置默认值及配置校验 |
 | `app/llm.py` | `ChatOpenAI` 工厂、HTTP 客户端及模型列表就绪检查；不放业务规则 |
-| `app/ocr/` | 从 docsvc 迁入的照片/简表识别、公式/引用、PDF/Excel 填表、WBS；不得反向导入 scripts 或 FastAPI |
+| `app/ocr/` | 从 docsvc 迁入的文档加工,按业务分子包:`core/`(资源隔离、CUDA 运行库、依赖自检、OCR 引擎、图像/PDF 原语、扫线、按配置格子的照片识别链 sheet_scan、版面元数据 layouts)、`form/`(现场照片模板对齐识别、栏目正则)、`sheets/`(表样格子提取与 Excel 写出)、`jianbiao/`(简表版面与识别编排、公式/引用填表)、`daily_logs.py`(监理日志)、`wbs_draft.py`(划分初稿);不得反向导入 scripts 或 FastAPI |
 | `app/api/ocr.py`、`app/api/wbs.py` | 文档加工入口、数据池路径限制和文档异常 HTTP 映射；原 `/health` 优先 |
 | `scripts/ocr/` | 模板生成、PDF/Excel 检查和演示工具，使用主项目 Python 3.12 环境 |
 | `scripts/docs/` | OpenAPI 草案导出、契约漂移检查；不得写入正式契约目录 |
@@ -176,12 +176,14 @@ AI 可以设计接口方案，但无权批准自己的草案，也不能把“�
 
 ```zsh
 export UV_CACHE_DIR="$PWD/.cache/uv"
-uv sync --locked --group dev
+uv sync --locked --group dev --extra ocr-cpu
 uv run --locked ruff check app tests scripts
 uv run --locked ruff format --check app tests scripts
 uv run --locked python -m scripts.docs.check_openapi
 uv run --locked pytest -v
 ```
+
+OCR 运行时由互斥 extra 选择：`ocr-cpu`（`onnxruntime==1.31.1`）或 `ocr-gpu`（`onnxruntime-gpu==1.24.4`），两者不能同时启用；单独 `uv sync` 不会安装 ONNX Runtime，并会移除已装的那一个。`uv run` 不会移除已安装的 extra 包，但重新同步环境时仍须带上对应 extra。
 
 离线测试使用真实 LangChain Agent 和模拟模型 HTTP 响应，不要求 Ollama、联网或云端凭据；首次准备依赖可能需要网络。可先运行相关文件或 `pytest -k`，交付代码变更前执行全套检查。生产 `--no-dev` 环境不临时安装开发依赖。
 
@@ -203,6 +205,7 @@ Linux 使用 `scripts/prod/` 对应入口；远端业务验收使用 `BUSINESS_A
 - 项目固定 Python 3.12；Ruff 负责基础 lint、导入排序和格式。遵循现有命名和类型注解，不为本次任务无关的风格批量重写。
 - 注释和 docstring 统一使用中文；标识符、命令、路径、环境变量和必要技术术语保留原文。新增或修改代码时保持该风格，翻译注释不得改变代码行为。
 - 依赖通过 `uv add` 管理，`pyproject.toml` 和 `uv.lock` 一起更新，禁止手改锁文件。固定已验证的 `langchain`、`langchain-core`、`langchain-openai`；升级前查官方文档与 provider 兼容性，不引入不必要框架。
+- OCR 的 ONNX Runtime 只通过互斥 extra 安装：`ocr-cpu`（CPU 版 `onnxruntime`）或 `ocr-gpu`（`onnxruntime-gpu`）。两者提供同名 `onnxruntime` 模块，不得同时装入同一环境；新增部署入口须显式指定其中一个 extra。
 - `Settings` 的读取顺序为 API 进程环境、根目录 `.env`、源码默认值；新增配置同步更新 `Settings`、`.env.example` 和 README，保留本机 `.env`。
 - launchd 启动的后台任务不保证继承当前终端临时导出的所有变量。持久业务配置优先维护根目录 `.env`，不要声称 `export LLM_*` 或 `OLLAMA_*` 一定传入后台任务；Ollama 自身配置需由其实际启动环境提供。
 - `LANGSMITH_TRACING=false` 为默认值，只有显式配置才启用；凭据运行时注入，不记录或提交真实业务 traces。`SecretStr` 不替代日志、错误和提交内容的脱敏。

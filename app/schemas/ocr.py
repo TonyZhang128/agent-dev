@@ -82,11 +82,20 @@ class DailyLogsReq(OCRRequest):
 
 
 class JianbiaoReq(OCRRequest):
-    path: str = Field(min_length=1)
+    path: str = Field(default="", description="PROJECTS_ROOT 数据池内的照片路径")
+    img: str = Field(default="", description="base64 编码的图片数据；path 与 img 至少提供一个")
     form: str = Field(min_length=1)
     cfg: dict
     bound: dict = Field(default_factory=dict)
     out: str = ""
+
+    @model_validator(mode="after")
+    def validate_source(self) -> "JianbiaoReq":
+        self.path = self.path.strip()
+        self.img = self.img.strip()
+        if not self.path and not self.img:
+            raise ValueError("path 与 img 至少提供一个")
+        return self
 
 
 class FillReq(OCRRequest):
@@ -106,8 +115,21 @@ class FillReq(OCRRequest):
 
 class DraftReq(OCRRequest):
     prefix: str = Field(min_length=1)
-    drawings: list[str]
+    drawings: list[str] = Field(
+        default_factory=list, description="PROJECTS_ROOT 数据池内的 PDF 路径或目录列表"
+    )
+    imgs: list[str] = Field(
+        default_factory=list,
+        description="base64 编码的 PDF 数据列表；drawings 与 imgs 至少提供一个",
+    )
     basis: dict | None = None
+
+    @model_validator(mode="after")
+    def validate_source(self) -> "DraftReq":
+        has_basis = self.basis is not None and (self.basis.get("facts") or self.basis.get("roads"))
+        if not self.drawings and not self.imgs and not has_basis:
+            raise ValueError("drawings、imgs 与 basis.facts/roads 至少提供一个")
+        return self
 
     @field_validator("basis")
     @classmethod

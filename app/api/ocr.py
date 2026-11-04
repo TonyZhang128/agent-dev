@@ -11,14 +11,19 @@ import pymupdf
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 
-from app.ocr import daily_logs, deps, form_ocr, grid, jianbiao
-from app.ocr.resources import (
+from app.ocr import daily_logs
+from app.ocr.core import deps
+from app.ocr.core.resources import (
     OCRModelError,
     OCRResourceError,
     OCRResources,
     forms,
     use_resources,
 )
+from app.ocr.form import form_ocr
+from app.ocr.jianbiao.fill import compute
+from app.ocr.jianbiao.recognize import run
+from app.ocr.sheets import grid
 from app.schemas.ocr import DailyLogsReq, FillReq, JianbiaoReq, RecognizeReq
 
 router = APIRouter(tags=["ocr"])
@@ -67,8 +72,9 @@ def relative_outputs(result: dict, resources: OCRResources) -> dict:
 
 
 @router.get("/health/deps")
-def health_deps():
+def health_deps(request: Request):
     capabilities = deps.check()
+    capabilities["推理设备"]["configured"] = request.app.state.ocr_resources.device
     return {
         "status": 200,
         "data": {"ok": all(item["ok"] for item in capabilities.values()), "caps": capabilities},
@@ -108,12 +114,15 @@ def daily_logs_recognize(req: DailyLogsReq, request: Request):
 @router.post("/ocr/jianbiao")
 def jianbiao_fill(req: JianbiaoReq, request: Request):
     with document_resources(request) as resources:
-        path = project_path(resources, req.path)
-        if not path.is_file():
-            raise HTTPException(400, "照片必须为数据池内的文件")
         output = project_path(resources, req.out, output=True) if req.out else None
         started = time.monotonic()
-        result = jianbiao.run(path, req.form.strip(), req.cfg, req.bound, output)
+        if req.img:
+            result = run(None, req.form.strip(), req.cfg, req.bound, output, req.img)
+        else:
+            path = project_path(resources, req.path)
+            if not path.is_file():
+                raise HTTPException(400, "照片必须为数据池内的文件")
+            result = run(path, req.form.strip(), req.cfg, req.bound, output)
         result["ms"] = round((time.monotonic() - started) * 1000)
         return {"status": 200, "data": relative_outputs(result, resources)}
 
@@ -122,7 +131,7 @@ def jianbiao_fill(req: JianbiaoReq, request: Request):
 def fill(req: FillReq, request: Request):
     with document_resources(request) as resources:
         output = project_path(resources, req.out, output=True) if req.out else None
-        result = jianbiao.compute(req.form.strip(), req.cfg, req.values, output, req.rects)
+        result = compute(req.form.strip(), req.cfg, req.values, output, req.rects)
         return {"status": 200, "data": relative_outputs(result, resources)}
 
 

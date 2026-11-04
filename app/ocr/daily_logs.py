@@ -10,11 +10,10 @@
 
 from pathlib import Path
 
-import cv2
 import numpy as np
 
-from app.ocr import jianbiao
-from app.ocr.form_ocr import decode_base64_image, read_image
+from app.ocr.core.media import load_image
+from app.ocr.core.sheet_scan import scan
 
 CODE = "JLB13"
 NAME = "监理日志"
@@ -80,8 +79,8 @@ LAYOUT = (
 )
 
 
-def _destination(quad: np.ndarray, how: str) -> np.ndarray:
-    """外框 → 整页画布上的目标四角。
+def _destination(quad: np.ndarray, how: str) -> tuple:
+    """外框 → (整页画布上的目标四角, 输出尺寸)。
 
     找到表格内框时直接锚到 JLB13 的表格位置；只有纸/整张照片时按长宽比判断
     它更像整页还是更像表格，避免把整页照片当表格裁掉页眉页脚。
@@ -96,7 +95,7 @@ def _destination(quad: np.ndarray, how: str) -> np.ndarray:
             x0, y0, x1, y1 = 0.0, 0.0, 1.0, 1.0
     else:
         x0, y0, x1, y1 = TABLE
-    return np.array(
+    dst = np.array(
         [
             [x0 * W, y0 * height],
             [x1 * W, y0 * height],
@@ -105,13 +104,7 @@ def _destination(quad: np.ndarray, how: str) -> np.ndarray:
         ],
         np.float32,
     )
-
-
-def warp_page(img, quad: np.ndarray, how: str):
-    """把照片上的表格透视校正到整页画布，后续按整页比例裁栏目。"""
-    height = round(W * PAGE_ASPECT)
-    transform = cv2.getPerspectiveTransform(quad, _destination(quad, how))
-    return cv2.warpPerspective(img, transform, (W, height))
+    return dst, (W, height)
 
 
 def process(recognized: dict, detail: list[dict]) -> dict:
@@ -126,15 +119,8 @@ def process(recognized: dict, detail: list[dict]) -> dict:
 
 def run(photo: Path | None, img: str = "") -> dict:
     """识别监理日志照片；照片路径与 base64 图片至少提供一个，同时提供时优先用 base64。"""
-    if img:
-        image = decode_base64_image(img)
-    else:
-        if photo is None:
-            raise ValueError("path 与 img 至少提供一个")
-        image = read_image(photo)
-    quad, how = jianbiao.find_table(image)
-    sheet = warp_page(image, quad, how)
-    recognized, detail = jianbiao.read_cells(sheet, list(LAYOUT))
+    image = load_image(photo, img)
+    _sheet, quad, how, recognized, detail = scan(image, list(LAYOUT), _destination)
     height, width = image.shape[:2]
     return {
         "form": CODE,
