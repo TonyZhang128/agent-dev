@@ -67,3 +67,12 @@ Content-Type: application/json
     "imgs":[],
     "basis":{}
 }
+
+### OCR blank：表样第 1 页渲染成 PNG（width 默认 1400，上限 2400）
+GET {{baseUrl}}/ocr/blank/JB12-4.2.2.png
+
+### OCR blank：指定输出宽度
+# GET {{baseUrl}}/ocr/blank/JB12-4.2.2.png?width=800
+
+### OCR sheet：可填栏位及页面比例坐标（kind=layout 表头字段 + kind=grid 空格子）
+GET {{baseUrl}}/ocr/sheet/JB12-4.2.2
