@@ -26,9 +26,9 @@ if (( debug )); then
         ;;
     esac
   done
-  exec uv run --locked python -m debugpy \
+  exec uv run --locked --extra ocr-cpu python -m debugpy \
     --listen "127.0.0.1:${DEBUGPY_PORT:-5678}" \
     -m uvicorn app.main:app --host 127.0.0.1 --port 8309 "${uvicorn_args[@]}"
 fi
 
-exec uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 8309 "$@"
+exec uv run --locked --extra ocr-cpu uvicorn app.main:app --host 127.0.0.1 --port 8309 "$@"

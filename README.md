@@ -55,11 +55,13 @@ zsh scripts/dev/services.sh status
 ```zsh
 export UV_CACHE_DIR="$PWD/.cache/uv"
 # 默认安装 CPU 版 onnxruntime（适合 Mac/无 NVIDIA GPU 开发）
-uv sync --locked --group dev
+uv sync --locked --group dev --extra ocr-cpu
 # 需要 OCR 使用 NVIDIA GPU CUDA EP 时（Linux/Windows GPU 主机）改用：
 # uv sync --locked --group dev --extra ocr-gpu
 test -f .env || cp .env.example .env
 ```
+
+`ocr-cpu` 与 `ocr-gpu` 互斥，不能同时启用；两者提供同名 `onnxruntime` 模块，同时安装会互相覆盖。单独执行不带 extra 的 `uv sync` 不会安装 ONNX Runtime，并会移除已装的那一个。
 
 `scripts/dev/setup.sh` 需要已有 Homebrew，缺少时会提示安装地址并退出。缓存齐全时 uv 命令可追加 `--offline`。Mac 开发默认 CPU 推理，与 `.env.example` 中的 `OCR_DEVICE=cpu` 一致。
 
@@ -329,7 +331,7 @@ api_router.include_router(example.router)
 bash scripts/prod/setup.sh
 ```
 
-脚本使用 Python 3.12 和 `uv sync --locked --no-dev`，不安装 dev 依赖、不启动服务、不下载模型。根目录 `.env` 不存在时，从 `scripts/prod/api.env.example` 创建；已有 `.env` 保留。将 `LLM_API_KEY` 的占位值改为模型服务密钥，并确认以下配置：
+脚本使用 Python 3.12 和锁定的依赖（`uv sync --locked --no-dev --extra ocr-gpu`，生产默认 GPU 版 OCR 运行时），不安装 dev 依赖、不启动服务、不下载模型。根目录 `.env` 不存在时，从 `scripts/prod/api.env.example` 创建；已有 `.env` 保留。将 `LLM_API_KEY` 的占位值改为模型服务密钥，并确认以下配置：
 
 ```dotenv
 LLM_BASE_URL=http://127.0.0.1:8001/v1

@@ -20,18 +20,21 @@ dependencies = [
   "numpy>=1.26,<3",
   "rapidocr>=3.10,<4",
   "pillow>=10,<13",
-  # OCR 默认使用 CPU 版 onnxruntime；需要 GPU CUDA EP 时通过 --extra ocr-gpu 切换。
-  "onnxruntime>=1.24,<1.25",
 ]
 
+# OCR 推理运行时二选一：CPU 版 onnxruntime 或 GPU 版 onnxruntime-gpu。
+# 两者提供同名 onnxruntime 模块，不能装进同一环境，因此放在互斥 extra 中。
 [project.optional-dependencies]
-ocr-gpu = ["onnxruntime-gpu>=1.24,<1.25"]
+ocr-cpu = ["onnxruntime==1.31.1"]
+# 固定在 1.24.4（CUDA 12 + cuDNN 9）：1.31 起 onnxruntime-gpu 改为依赖 CUDA 13，尚未验证。
+ocr-gpu = ["onnxruntime-gpu==1.24.4"]
 
 [tool.uv]
 package = false
-# 默认使用 opencv-python 与 onnxruntime(CPU)；ocr-gpu extra 切换为 onnxruntime-gpu。
-# rapidocr 会传递依赖 CPU 版 onnxruntime，当使用 GPU 版时需通过本项目的 ocr-gpu extra 覆盖。
+# 统一使用 opencv-python；忽略 rapidocr 可能声明的 headless 版本，避免两份 cv2。
 exclude-dependencies = ["opencv-python-headless"]
+# ocr-cpu 与 ocr-gpu 互斥，uv 拒绝同时启用，避免两种 ONNX Runtime 覆盖同一个顶层模块。
+conflicts = [[{ extra = "ocr-cpu" }, { extra = "ocr-gpu" }]]
 
 [tool.ruff]
 target-version = "py312"

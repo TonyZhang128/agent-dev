@@ -24,7 +24,8 @@ FROM ${PYTHON_IMAGE} AS runtime
 LABEL org.opencontainers.image.title="highway-agent-api" \
       org.opencontainers.image.description="公路工程业务智能体 API（不含模型服务）"
 
-# opencv-python 依赖 libGL/libglib，onnxruntime-gpu 依赖 libgomp；curl 供健康检查。
+# opencv-python 依赖 libGL/libglib，onnxruntime-gpu 依赖 libgomp；
+# CUDA 12 + cuDNN 9 用户态库不在 wheel 内，需由基础镜像或挂载提供（见 docs/docker.md）；curl 供健康检查。
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       libgl1 libglib2.0-0 libgomp1 libsm6 libxext6 curl tini \
