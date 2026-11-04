@@ -12,3 +12,4 @@ else
   echo '保留已有 .env，请确认其指向生产模型服务。'
 fi
 echo '业务环境已准备好；vLLM 需在独立环境部署，GPU 检查由 start-vllm.sh / verify.sh 执行。'
+echo '提示：若本机需要 OCR 使用 NVIDIA GPU CUDA EP，请改用 uv sync --locked --no-dev --extra ocr-gpu。'

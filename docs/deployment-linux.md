@@ -12,7 +12,7 @@
 bash scripts/prod/setup.sh
 ```
 
-安装固定依赖的命令为 `uv sync --locked --no-dev`。无根目录 `.env` 时复制生产模板，权限为 `600`；已有 `.env` 不覆盖。编辑 `.env`，至少确认：
+安装固定依赖的命令为 `uv sync --locked --no-dev`（无 GPU 的 API 主机）或 `uv sync --locked --no-dev --extra ocr-gpu`（需要 OCR 使用 NVIDIA GPU CUDA EP 时）。无根目录 `.env` 时复制生产模板，权限为 `600`；已有 `.env` 不覆盖。编辑 `.env`，至少确认：
 
 ```dotenv
 LLM_BASE_URL=http://127.0.0.1:8001/v1
@@ -111,7 +111,7 @@ bash scripts/prod/verify.sh
 
 输出在 `verification/`：`agents-live-result.json`（日志、完整版本化意图评测集及对话）、`live-result.json`（Agent 直调、ASGI、TCP）、`nvidia-smi.txt`（驱动/显存信息）。意图识别固定五类及成功标准见 [测试说明](intent-testing.md)。验证不会调用 Ollama。硬件可见不等于模型已使用 GPU，结合 `nvidia-smi` 进程显存及 vLLM 日志确认实际分配。
 
-OCR 默认 `OCR_DEVICE=cuda`，因此调用 `/ocr/*` 的 API 主机必须具备 NVIDIA GPU 和 CUDA 12 + cuDNN 9 运行库；无 GPU 主机可在 `.env` 改 `OCR_DEVICE=cpu`。仅执行不调用 OCR 的通用业务验收时，可在没有 GPU 的 API 主机运行：
+OCR 默认 `OCR_DEVICE=cpu`，无 GPU 主机可直接使用；若 API 主机需要调用 `/ocr/*` 并使用 NVIDIA GPU CUDA EP，需在 `.env` 改为 `OCR_DEVICE=cuda`，并确保通过 `uv sync --locked --no-dev --extra ocr-gpu` 安装了 `onnxruntime-gpu`，同时主机具备 CUDA 12 + cuDNN 9 运行库。仅执行不调用 OCR 的通用业务验收时，可在没有 GPU 的 API 主机运行：
 
 ```bash
 UV_CACHE_DIR="$PWD/.cache/uv" uv run --locked --no-sync --no-dev python -m scripts.common.verify_agents

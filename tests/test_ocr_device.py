@@ -26,12 +26,12 @@ def test_rapidocr_params_cpu_mode_disables_cuda_ep():
     assert "EngineConfig.onnxruntime.cuda_ep_cfg" not in params
 
 
-def test_settings_ocr_device_defaults_to_cuda():
-    assert Settings(_env_file=None).ocr_device == "cuda"
+def test_settings_ocr_device_defaults_to_cpu():
+    assert Settings(_env_file=None).ocr_device == "cpu"
 
 
-def test_settings_ocr_device_accepts_cpu():
-    assert Settings(_env_file=None, ocr_device="cpu").ocr_device == "cpu"
+def test_settings_ocr_device_accepts_cuda():
+    assert Settings(_env_file=None, ocr_device="cuda").ocr_device == "cuda"
 
 
 def test_settings_ocr_device_rejects_unknown_value():
@@ -74,10 +74,10 @@ def test_resources_resolve_cuda_root():
     assert resources.cuda_root.is_absolute()
 
 
-def test_engine_requests_cuda_in_default_mode(monkeypatch):
+def test_engine_requests_cuda_in_cuda_mode(monkeypatch):
     import rapidocr
 
-    settings = Settings(_env_file=None)
+    settings = Settings(_env_file=None, ocr_device="cuda")
     monkeypatch.setattr(cuda_runtime, "ensure_cuda_runtime", lambda resources: None)
     captured = {}
 
@@ -132,7 +132,7 @@ def test_ensure_cuda_runtime_rejects_missing_cuda_ep(monkeypatch, tmp_path):
 def test_engine_raises_when_cuda_runtime_unusable(monkeypatch):
     import rapidocr
 
-    settings = Settings(_env_file=None)
+    settings = Settings(_env_file=None, ocr_device="cuda")
 
     def reject_cuda(resources):
         raise OCRModelError(cuda_runtime.CUDA_UNAVAILABLE)

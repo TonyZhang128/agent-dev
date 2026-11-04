@@ -14,10 +14,10 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_CACHE_DIR=/root/.cache/uv
 WORKDIR /app
 COPY --from=uv /uv /uvx /bin/
-# 先安装锁定依赖，改业务代码时复用该层；生产不安装 dev 依赖。
+# 先安装锁定依赖，改业务代码时复用该层；生产不安装 dev 依赖，OCR 使用 GPU CUDA EP。
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-dev --no-install-project
+    uv sync --locked --no-dev --no-install-project --extra ocr-gpu
 
 FROM ${PYTHON_IMAGE} AS runtime
 

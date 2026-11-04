@@ -20,13 +20,18 @@ dependencies = [
   "numpy>=1.26,<3",
   "rapidocr>=3.10,<4",
   "pillow>=10,<13",
-  "onnxruntime-gpu>=1.24,<1.25",
+  # OCR 默认使用 CPU 版 onnxruntime；需要 GPU CUDA EP 时通过 --extra ocr-gpu 切换。
+  "onnxruntime>=1.24,<1.25",
 ]
+
+[project.optional-dependencies]
+ocr-gpu = ["onnxruntime-gpu>=1.24,<1.25"]
 
 [tool.uv]
 package = false
-# 统一使用 opencv-python 与 onnxruntime-gpu，避免 rapidocr 的传递依赖重复安装 CPU 版本。
-exclude-dependencies = ["opencv-python-headless", "onnxruntime"]
+# 默认使用 opencv-python 与 onnxruntime(CPU)；ocr-gpu extra 切换为 onnxruntime-gpu。
+# rapidocr 会传递依赖 CPU 版 onnxruntime，当使用 GPU 版时需通过本项目的 ocr-gpu extra 覆盖。
+exclude-dependencies = ["opencv-python-headless"]
 
 [tool.ruff]
 target-version = "py312"

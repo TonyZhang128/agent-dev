@@ -113,6 +113,8 @@ def make_ocr_settings(root: Path, *, name: str = "测试表", height: int = 300)
         admin_root=root / "admin",
         projects_root=projects,
         ocr_model_root=root / "models",
+        # 离线测试默认 CPU 推理，与 .env.example 一致，不依赖本机 CUDA。
+        ocr_device="cpu",
     )
 
 

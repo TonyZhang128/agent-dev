@@ -54,11 +54,14 @@ zsh scripts/dev/services.sh status
 
 ```zsh
 export UV_CACHE_DIR="$PWD/.cache/uv"
+# 默认安装 CPU 版 onnxruntime（适合 Mac/无 NVIDIA GPU 开发）
 uv sync --locked --group dev
+# 需要 OCR 使用 NVIDIA GPU CUDA EP 时（Linux/Windows GPU 主机）改用：
+# uv sync --locked --group dev --extra ocr-gpu
 test -f .env || cp .env.example .env
 ```
 
-`scripts/dev/setup.sh` 需要已有 Homebrew，缺少时会提示安装地址并退出。缓存齐全时 uv 命令可追加 `--offline`。
+`scripts/dev/setup.sh` 需要已有 Homebrew，缺少时会提示安装地址并退出。缓存齐全时 uv 命令可追加 `--offline`。Mac 开发默认 CPU 推理，与 `.env.example` 中的 `OCR_DEVICE=cpu` 一致。
 
 ## 配置与启动
 
@@ -89,7 +92,7 @@ test -f .env || cp .env.example .env
 | `ASSET_ROOT` | `data/ocr/assets` | 规范 PDF/Excel 资料目录 |
 | `PROJECTS_ROOT` | `data/ocr/projects` | 与 Java 共用的业务数据池，限制文件读写边界 |
 | `OCR_MODEL_ROOT` | `.cache/models/ocr` | RapidOCR ONNX 模型目录；开发环境自动下载，离线部署预置后只读使用 |
-| `OCR_DEVICE` | `cuda` | OCR 推理设备：`cuda`（默认）或 `cpu`（无 NVIDIA GPU 的环境，如 Mac 开发）；cuda 不可用时接口返回 503 |
+| `OCR_DEVICE` | `cpu` | OCR 推理设备：`cpu`（默认，适合无 NVIDIA GPU 的开发/Mac 环境）或 `cuda`（需 CUDA 12 + cuDNN 9，同时通过 `--extra ocr-gpu` 安装 onnxruntime-gpu）；cuda 不可用时接口返回 503 |
 | `OCR_CUDA_ROOT` | `.cache/cuda` | 仅 cuda 模式：Windows 可将 NVIDIA redist 解压到此目录免系统安装，需 CUDA 12 + cuDNN 9 |
 
 云端回退默认关闭：只有提供非空 `LLM_FALLBACK_API_KEY` 时才启用。启用后，本地 Ollama/vLLM 的模型调用因连接失败、超时或上游 HTTP 错误抛出异常时，本次调用改用回退模型重试一次，总预算为 `LLM_TIMEOUT_SECONDS + LLM_FALLBACK_TIMEOUT_SECONDS`。回退不重试已返回但未通过 Schema 校验的输出，`/ready` 仍只检查本地模型。DeepSeek 不支持严格 `json_schema`，回退时改用 JSON 模式并继续用 Pydantic 校验，不会退回宽松文本解析。启用回退意味着业务输入会发送到云端，需按数据合规要求决定。

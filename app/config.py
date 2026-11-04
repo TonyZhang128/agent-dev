@@ -35,8 +35,9 @@ class Settings(BaseSettings):
     asset_root: Path = ROOT / "data/ocr/assets"
     projects_root: Path = ROOT / "data/ocr/projects"
     ocr_model_root: Path = ROOT / ".cache/models/ocr"
-    # OCR 推理设备：cuda（默认，需 CUDA 12 + cuDNN 9，不可用返回 503）或 cpu（无 NVIDIA GPU 的环境，如 Mac 开发）。
-    ocr_device: Literal["cuda", "cpu"] = "cuda"
+    # OCR 推理设备：cpu（默认，适合无 NVIDIA GPU 的开发/Mac 环境）或 cuda（需 CUDA 12 + cuDNN 9，
+    # 需要同时通过 --extra ocr-gpu 安装 onnxruntime-gpu）。两种模式共用同一套 ONNX 模型。
+    ocr_device: Literal["cuda", "cpu"] = "cpu"
     # 项目本地 CUDA 运行库（NVIDIA redist 解压目录，Git 已忽略）；Windows 免系统安装。仅 cuda 模式使用。
     ocr_cuda_root: Path = ROOT / ".cache/cuda"
 
