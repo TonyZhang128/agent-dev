@@ -4,7 +4,7 @@
 
 ## 当前评审稿（0.1.0-review.2）
 
-[fastapi.openapi.json](fastapi.openapi.json) 是当前应用 14 个 HTTP 操作的完整 OpenAPI 3.1
+[fastapi.openapi.json](fastapi.openapi.json) 是当前应用 15 个 HTTP 操作的完整 OpenAPI 3.1
 草案，由 `scripts/docs/openapi_contract.py` 从 `app.main:app` 生成并补充。便于阅读的
 当前评审文档见 [../API.md](../API.md)，它由同一契约自动生成，不是独立契约。
 
@@ -27,13 +27,14 @@ Schema 时修改该脚本后重新导出，使变更可审查、可复现。
 确认后，`interfaces/drafts/fastapi.openapi.json` 提升为
 `interfaces/openapi/fastapi.openapi.json`，作为接口唯一权威来源。
 
-### 2. 是否确认以下 8 个 `pending-review` 操作
+### 2. 是否确认以下 9 个 `pending-review` 操作
 
 | 操作 | 需要确认的内容 |
 | --- | --- |
 | `GET /diagnostics` | `data.ok`、`data.warnings`、`data.caps` 的能力分组和可变字段 |
 | `POST /ocr/recognize` | `form`、`formName`、`layout`、`fields`、`keys`、`detail`、`warning`、`align`、`image`、`lines`、`ms` |
-| `POST /ocr/daily-logs` | JLB13 固定栏目、`recognized` 可省略字段、`processed` 固定为 `{}` |
+| `POST /ocr/daily-logs` | 监理日记固定栏目、`recognized` 可省略字段、`processed` 业务结构（`taskId`/`documentType`/`common`/`fields`） |
+| `POST /ocr/daily-logs-new` | 独立新链路；返回结构与 `/ocr/daily-logs` 相同的 `recognized`、`detail`、`processed`、`frame` |
 | `POST /ocr/jianbiao` | 简表识别字段、`values`、`errors`、`anchors`、输出路径字段 |
 | `POST /ocr/fill` | 计算值、`errors`、`anchors`、输出路径和 `xlsxSkipped` |
 | `GET /ocr/blank/{form}.png` | 原始 `image/png`、`width` 上限 2400 的语义 |
@@ -66,7 +67,7 @@ Schema 时修改该脚本后重新导出，使变更可审查、可复现。
 
 ```text
 确认草案 0.1.0-review.2，同意将以下操作标为 confirmed：
-/diagnostics、/ocr/recognize、/ocr/daily-logs、/ocr/jianbiao、
+/diagnostics、/ocr/recognize、/ocr/daily-logs、/ocr/daily-logs-new、/ocr/jianbiao、
 /ocr/fill、/ocr/blank/{form}.png、/ocr/sheet/{form}、/wbs/draft。
 错误响应和包装差异保持不变。
 ```

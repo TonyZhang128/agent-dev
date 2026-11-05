@@ -360,14 +360,79 @@ SCHEMAS: dict[str, dict[str, Any]] = {
             "number": {"type": "string"},
             "supervision_org": {"type": "string"},
             "recorder": {"type": "string"},
+            "weather": {"type": "string"},
+            "position": {"type": "string"},
             "date": {"type": "string", "description": "归一为 yyyy-mm-dd；识别不到时省略。"},
             "reviewer": {"type": "string"},
-            "weather": {"type": "string"},
             "construction": {"type": "string"},
-            "supervision_work": {"type": "string"},
+            "witness": {"type": "string"},
+            "patrol": {"type": "string"},
             "issues": {"type": "string"},
+            "next_day_plan": {"type": "string"},
         },
-        "description": "JLB13 监理日志固定栏目；未识别到的栏目可能省略。",
+        "description": "监理日记固定栏目；未识别到的栏目可能省略。",
+    },
+    "DailyLogsMainWork": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["construction", "witness", "patrol"],
+        "properties": {
+            "construction": {"type": ["string", "null"]},
+            "witness": {"type": ["string", "null"]},
+            "patrol": {"type": ["string", "null"]},
+        },
+        "description": "当日主要监理工作情况下的三个子栏；识别不到为 null。",
+    },
+    "DailyLogsCommon": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "projectName",
+            "documentNo",
+            "supervisionOrg",
+            "recorderName",
+            "recorderPosition",
+            "weather",
+            "logDate",
+            "reviewerName",
+        ],
+        "properties": {
+            "projectName": {"type": ["string", "null"]},
+            "documentNo": {"type": ["string", "null"]},
+            "supervisionOrg": {"type": ["string", "null"]},
+            "recorderName": {"type": ["string", "null"]},
+            "recorderPosition": {"type": ["string", "null"]},
+            "weather": {"type": ["string", "null"]},
+            "logDate": {"type": ["string", "null"]},
+            "reviewerName": {"type": ["string", "null"]},
+        },
+        "description": "监理日记公共栏目；识别不到为 null，不做推断。",
+    },
+    "DailyLogsFields": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["mainWork", "issues", "nextDayPlan"],
+        "properties": {
+            "mainWork": ref("DailyLogsMainWork"),
+            "issues": {"type": ["string", "null"]},
+            "nextDayPlan": {"type": ["string", "null"]},
+        },
+        "description": "监理日记正文栏目；识别不到为 null。",
+    },
+    "DailyLogsProcessed": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["taskId", "documentType", "common", "fields"],
+        "properties": {
+            "taskId": {
+                "type": ["string", "null"],
+                "description": "请求 taskId 原样回显；未提供为 null。",
+            },
+            "documentType": {"type": "string", "const": "supervision_diary"},
+            "common": ref("DailyLogsCommon"),
+            "fields": ref("DailyLogsFields"),
+        },
+        "description": "监理日记业务结构；由 OCR 栏目文本映射，缺失栏目为 null。",
     },
     "DailyLogsData": {
         "type": "object",
@@ -389,11 +454,7 @@ SCHEMAS: dict[str, dict[str, Any]] = {
             "frame": ref("Frame"),
             "recognized": ref("DailyLogsRecognized"),
             "detail": {"type": "array", "items": ref("DailyLogsDetailItem")},
-            "processed": {
-                "type": "object",
-                "additionalProperties": True,
-                "description": "监理日志后处理占位，当前固定为 {}。",
-            },
+            "processed": ref("DailyLogsProcessed"),
             "warning": {
                 "type": "string",
                 "description": "未检测到表格外框等定位提示；空字符串表示无提示。",
@@ -401,7 +462,7 @@ SCHEMAS: dict[str, dict[str, Any]] = {
             "image": ref("ImageSize"),
             "ms": {"type": "integer", "minimum": 0},
         },
-        "description": "JLB13 监理日志识别草稿；调用方应优先使用 recognized 和 detail。",
+        "description": "监理日记识别草稿；recognized 为原始栏目，processed 为业务结构。",
     },
     "DailyLogsResponse": _envelope_schema("DailyLogsData", "监理日志识别成功响应。"),
     "CellDetailItem": {
@@ -942,15 +1003,19 @@ OPERATIONS: dict[str, dict[str, dict[str, Any]]] = {
     },
     "/ocr/daily-logs": {
         "post": _operation(
-            description="识别 JLB13 监理日志照片，固定栏目输出 recognized 和 detail。"
-            "path 与 img 至少提供一个，同时提供时优先 img。processed 当前固定为 {}。",
-            summary="识别 JLB13 监理日志",
+            description="识别监理日记照片，固定栏目输出 recognized、detail 和业务结构 processed。"
+            "path 与 img 至少提供一个，同时提供时优先 img；taskId 原样回显到 "
+            "processed.taskId，服务不生成任务 ID。",
+            summary="识别监理日记（JLB13）",
             status="pending-review",
             source="AGENTS.md 第四节；docs/ocr.md；app/ocr/daily_logs.py；"
             "tests/test_ocr_daily_logs.py",
             side_effects="只读取数据池照片，不写 PDF/Excel。",
             idempotency="识别结果可能因模型和照片变化而不同；只读调用可重试。",
-            request_example={"path": "projects/监理日志照片.jpg"},
+            request_example={
+                "path": "projects/监理日志照片.jpg",
+                "taskId": "123456789012345678",
+            },
             responses={
                 "200": _json_response(
                     "监理日志识别草稿。",
@@ -966,14 +1031,116 @@ OPERATIONS: dict[str, dict[str, dict[str, Any]]] = {
                             },
                             "recognized": {
                                 "project": "测试高速公路项目",
+                                "position": "专业监理工程师",
                                 "date": "2026-10-03",
                                 "weather": "晴",
+                                "construction": "路基填筑",
+                                "witness": "旁站检查 2 次",
+                                "patrol": "巡视检查",
                                 "issues": "无",
+                                "next_day_plan": "继续填筑",
                             },
                             "detail": [],
-                            "processed": {},
+                            "processed": {
+                                "taskId": "123456789012345678",
+                                "documentType": "supervision_diary",
+                                "common": {
+                                    "projectName": "测试高速公路项目",
+                                    "documentNo": None,
+                                    "supervisionOrg": None,
+                                    "recorderName": None,
+                                    "recorderPosition": "专业监理工程师",
+                                    "weather": "晴",
+                                    "logDate": "2026-10-03",
+                                    "reviewerName": None,
+                                },
+                                "fields": {
+                                    "mainWork": {
+                                        "construction": "路基填筑",
+                                        "witness": "旁站检查 2 次",
+                                        "patrol": "巡视检查",
+                                    },
+                                    "issues": "无",
+                                    "nextDayPlan": "继续填筑",
+                                },
+                            },
                             "warning": "",
                             "image": {"width": 600, "height": 849},
+                            "ms": 123,
+                        },
+                    },
+                ),
+                "400": _error_response(
+                    "路径越界、文件不存在/不是文件、图片无法解码或文档处理失败。"
+                ),
+                "422": REQUEST_ERROR_RESPONSE,
+                "503": _error_response("OCR 模型不可用。"),
+            },
+        )
+    },
+    "/ocr/daily-logs-new": {
+        "post": _operation(
+            description="新版监理日志识别链路预览：在照片上直接定位表格，只做一次整页 OCR，"
+            "再按固定栏目匹配；歧义或漏框字段最多补充识别 3 次。样例表中 "
+            "construction / witness / patrol 同属一个 mainWork 单元格，当前整格识别后"
+            "暂时同时回填到这三个字段，后续再按印刷小标题拆分。返回结构与 "
+            "/ocr/daily-logs 相同，但实现完全独立，不读取旧逐格识别链。",
+            summary="识别监理日记（新版链路）",
+            status="pending-review",
+            source="app/ocr/journal/；tests/test_ocr_journal.py",
+            side_effects="只读取数据池照片，不写 PDF/Excel。",
+            idempotency="识别结果可能因模型和照片变化而不同；只读调用可重试。",
+            request_example={
+                "path": "projects/监理日志照片.jpg",
+                "taskId": "123456789012345678",
+            },
+            responses={
+                "200": _json_response(
+                    "监理日志识别草稿；结构与 /ocr/daily-logs 相同。",
+                    ref("DailyLogsResponse"),
+                    example={
+                        "status": 200,
+                        "data": {
+                            "form": "JLB13",
+                            "formName": "监理日志",
+                            "frame": {
+                                "how": "contour+table",
+                                "quad": [[142, 390], [1150, 392], [1132, 1532], [139, 1550]],
+                            },
+                            "recognized": {
+                                "project": "测试高速公路项目",
+                                "position": "专业监理工程师",
+                                "date": "2026-10-03",
+                                "construction": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
+                                "witness": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
+                                "patrol": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
+                            },
+                            "detail": [],
+                            "processed": {
+                                "taskId": "123456789012345678",
+                                "documentType": "supervision_diary",
+                                "common": {
+                                    "projectName": "测试高速公路项目",
+                                    "documentNo": None,
+                                    "supervisionOrg": None,
+                                    "recorderName": None,
+                                    "recorderPosition": "专业监理工程师",
+                                    "weather": None,
+                                    "logDate": "2026-10-03",
+                                    "reviewerName": None,
+                                },
+                                "fields": {
+                                    "mainWork": {
+                                        "construction": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
+                                        "witness": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
+                                        "patrol": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
+                                    },
+                                    "issues": None,
+                                    "nextDayPlan": None,
+                                },
+                            },
+                            "warning": "",
+                            "image": {"width": 1279, "height": 1741},
                             "ms": 123,
                         },
                     },
@@ -1195,6 +1362,7 @@ COMPONENT_PROPERTY_DESCRIPTIONS: dict[tuple[str, str], str] = {
     ("RecognizeReq", "path"): "PROJECTS_ROOT 数据池内的照片路径；与 img 至少提供一个。",
     ("RecognizeReq", "form"): "表号；省略或空字符串时只按栏目文字取值。",
     ("DailyLogsReq", "path"): "PROJECTS_ROOT 数据池内的监理日志照片路径；与 img 至少提供一个。",
+    ("DailyLogsReq", "taskId"): "业务任务 ID，仅原样回显到 processed.taskId；不传则为 null。",
     ("JianbiaoReq", "path"): "PROJECTS_ROOT 数据池内的简表照片路径。",
     ("JianbiaoReq", "form"): "目标表号，同时用于查找简表版面。",
     ("JianbiaoReq", "cfg"): "配置平台的字段、锚点、引用和公式元数据。",

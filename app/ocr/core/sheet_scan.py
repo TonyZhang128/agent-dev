@@ -83,13 +83,15 @@ def scan(image, cells: list[dict], destination) -> tuple:
 
 
 def _dedup(boxes: list[dict]) -> list[dict]:
-    """OCR 偶尔把同一个字再单独认一遍(「97.1」后面又跟一个「1」,框压在「97.1」的框里):被大框盖住大半的小框去掉"""
+    """OCR 偶尔把同一个字再单独认一遍(「97.1」后面又跟一个「1」,框压在「97.1」的框里):
+    被大框几乎完全盖住的小框去掉。相邻手写行的大框可能互相重叠,只在宽、高都被覆盖
+    八成以上时才判为重复,避免把下一行整行删掉。"""
 
     def inside(a, b):
         ax0, ay0, ax1, ay1 = a["box"]
         bx0, by0, bx1, by1 = b["box"]
         iw, ih = max(0, min(ax1, bx1) - max(ax0, bx0)), max(0, min(ay1, by1) - max(ay0, by0))
-        return iw * ih > 0.5 * (ax1 - ax0) * (ay1 - ay0)
+        return iw > 0.8 * (ax1 - ax0) and ih > 0.8 * (ay1 - ay0)
 
     area = lambda b: (b["box"][2] - b["box"][0]) * (b["box"][3] - b["box"][1])  # noqa: E731
     return [
@@ -148,15 +150,19 @@ def _erase_lines(crop):
 
 
 def read_cells(sheet, cells: list[dict], width: int = W) -> tuple[dict, list[dict]]:
-    """每个格子单独 OCR(往里收 4%,避开框线);width 是校正画布的宽(格子 x 比例 × width)"""
+    """每个格子单独 OCR(默认往里收 4%,避开框线);width 是校正画布的宽(格子 x 比例 × width)。
+
+    cells 可用 `inset` 覆盖收边比例(0 表示整格);整格时框线由 `_erase_lines` 擦除,
+    适合手写内容顶到格子边缘的长文本栏。"""
     H = sheet.shape[0]
     values, detail = {}, []
     for c in cells:
         if not c.get("field"):  # 表上印好的检查项目名,不识别
             continue
         x, y, w, h = c["rect"]
-        x0, y0 = int((x + w * 0.04) * width), int((y + h * 0.04) * H)
-        x1, y1 = int((x + w * 0.96) * width), int((y + h * 0.96) * H)
+        inset = c.get("inset", 0.04)
+        x0, y0 = int((x + w * inset) * width), int((y + h * inset) * H)
+        x1, y1 = int((x + w * (1 - inset)) * width), int((y + h * (1 - inset)) * H)
         crop = sheet[y0:y1, x0:x1]
         if crop.size == 0:
             continue

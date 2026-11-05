@@ -69,13 +69,48 @@ class RecognizeReq(OCRRequest):
 
 
 class DailyLogsReq(OCRRequest):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
     path: str = Field(default="", description="PROJECTS_ROOT 数据池内的监理日志照片路径")
     img: str = Field(default="", description="base64 编码的图片数据；path 与 img 至少提供一个")
+    task_id: str = Field(
+        default="",
+        alias="taskId",
+        title="TaskId",
+        max_length=128,
+        description="业务任务 ID，仅原样回显到 processed.taskId；不传则为 null",
+    )
 
     @model_validator(mode="after")
     def validate_source(self) -> "DailyLogsReq":
         self.path = self.path.strip()
         self.img = self.img.strip()
+        self.task_id = self.task_id.strip()
+        if not self.path and not self.img:
+            raise ValueError("path 与 img 至少提供一个")
+        return self
+
+
+class JournalReq(OCRRequest):
+    """新版监理日志识别请求；与旧接口字段一致，实现链独立。"""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    path: str = Field(default="", description="PROJECTS_ROOT 数据池内的监理日志照片路径")
+    img: str = Field(default="", description="base64 编码的图片数据；path 与 img 至少提供一个")
+    task_id: str = Field(
+        default="",
+        alias="taskId",
+        title="TaskId",
+        max_length=128,
+        description="业务任务 ID，仅原样回显到 processed.taskId；不传则为 null",
+    )
+
+    @model_validator(mode="after")
+    def validate_source(self) -> "JournalReq":
+        self.path = self.path.strip()
+        self.img = self.img.strip()
+        self.task_id = self.task_id.strip()
         if not self.path and not self.img:
             raise ValueError("path 与 img 至少提供一个")
         return self

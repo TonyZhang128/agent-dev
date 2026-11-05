@@ -11,7 +11,7 @@ import pymupdf
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 
-from app.ocr import daily_logs
+from app.ocr import daily_logs, journal
 from app.ocr.core.resources import (
     OCRModelError,
     OCRResourceError,
@@ -23,7 +23,7 @@ from app.ocr.form import form_ocr
 from app.ocr.jianbiao.fill import compute
 from app.ocr.jianbiao.recognize import run
 from app.ocr.sheets import grid
-from app.schemas.ocr import DailyLogsReq, FillReq, JianbiaoReq, RecognizeReq
+from app.schemas.ocr import DailyLogsReq, FillReq, JianbiaoReq, JournalReq, RecognizeReq
 
 router = APIRouter(tags=["ocr"])
 
@@ -90,12 +90,28 @@ def daily_logs_recognize(req: DailyLogsReq, request: Request):
     with document_resources(request) as resources:
         started = time.monotonic()
         if req.img:
-            result = daily_logs.run(None, req.img)
+            result = daily_logs.run(None, req.img, req.task_id)
         else:
             path = project_path(resources, req.path)
             if not path.is_file():
                 raise HTTPException(400, "照片必须为数据池内的文件")
-            result = daily_logs.run(path)
+            result = daily_logs.run(path, task_id=req.task_id)
+        result["ms"] = round((time.monotonic() - started) * 1000)
+        return {"status": 200, "data": result}
+
+
+@router.post("/ocr/daily-logs-new")
+def journal_recognize(req: JournalReq, request: Request):
+    """新版监理日志识别：单次整页 OCR + 固定栏目匹配，不读取旧识别链。"""
+    with document_resources(request) as resources:
+        started = time.monotonic()
+        if req.img:
+            result = journal.read_photo(None, req.img, req.task_id)
+        else:
+            path = project_path(resources, req.path)
+            if not path.is_file():
+                raise HTTPException(400, "照片必须为数据池内的文件")
+            result = journal.read_photo(path, task_id=req.task_id)
         result["ms"] = round((time.monotonic() - started) * 1000)
         return {"status": 200, "data": result}
 

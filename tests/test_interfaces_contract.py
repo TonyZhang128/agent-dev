@@ -55,7 +55,7 @@ def test_contract_covers_exactly_the_registered_operations():
         for method in operations
     }
     assert documented == registered_operations()
-    assert len(documented) == 14
+    assert len(documented) == 15
 
 
 def test_operation_ids_are_unique():
@@ -89,6 +89,7 @@ def test_draft_and_review_states_are_explicit():
             "/diagnostics",
             "/ocr/recognize",
             "/ocr/daily-logs",
+            "/ocr/daily-logs-new",
             "/ocr/jianbiao",
             "/ocr/fill",
             "/ocr/blank/{form}.png",
@@ -125,6 +126,7 @@ def test_document_endpoints_declare_envelope_and_errors():
     for path in (
         "/ocr/recognize",
         "/ocr/daily-logs",
+        "/ocr/daily-logs-new",
         "/ocr/jianbiao",
         "/ocr/fill",
         "/ocr/sheet/{form}",

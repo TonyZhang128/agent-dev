@@ -12,6 +12,8 @@ import numpy as np
 def binarize(gray, block: int = 25, c: int = 10):
     """灰度图 → 前景为白的自适应阈值图。
 
+    自适应阈值灰度
+    应增加纯阈值灰度法作为对比。
     局部均值阈值适应拍照件的光照不均，BINARY_INV 使暗线条、暗文字成为白色
     前景，亮背景成为黑色。block/c 透传给 cv2.adaptiveThreshold。
     """

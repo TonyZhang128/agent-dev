@@ -79,6 +79,7 @@ interfaces/
 | 本地依赖诊断 | `GET /diagnostics` | pending-review | [OCR 指南](guides/ocr.md) |
 | 普通照片/简表识别 | `POST /ocr/recognize` | pending-review | [OCR 指南](guides/ocr.md) |
 | 监理日志识别 | `POST /ocr/daily-logs` | pending-review | [OCR 指南](guides/ocr.md) |
+| 监理日志识别（新版链路） | `POST /ocr/daily-logs-new` | pending-review | [OCR 指南](guides/ocr.md) |
 | 简表识别与填表 | `POST /ocr/jianbiao` | pending-review | [OCR 指南](guides/ocr.md) |
 | 公式与填表 | `POST /ocr/fill` | pending-review | [OCR 指南](guides/ocr.md) |
 | 表样预览 | `GET /ocr/blank/{form}.png` | pending-review | [OCR 指南](guides/ocr.md) |
@@ -101,8 +102,9 @@ interfaces/
   - `GET /ocr/blank/{form}.png` 返回原始 `image/png`。
 - 错误：统一为 `{"detail": ...}`。请求校验失败时 `detail` 是错误数组；上下文超限和
   其余业务/模型错误是字符串。错误响应不回显原始输入、身份、历史、密钥或上游正文。
-- 文件：没有 multipart 上传接口。`/ocr/recognize`、`/ocr/daily-logs` 接受数据池相对路径
-  或 base64；`/ocr/jianbiao` 只接受数据池路径。输入输出不得越过 `PROJECTS_ROOT`。
+- 文件：没有 multipart 上传接口。`/ocr/recognize`、`/ocr/daily-logs`、
+  `/ocr/daily-logs-new` 接受数据池相对路径或 base64；`/ocr/jianbiao` 只接受数据池路径。
+  输入输出不得越过 `PROJECTS_ROOT`。
 - 分页：当前没有列表分页接口。
 - 异步任务：当前没有任务提交、任务状态、轮询、webhook 或取消接口。所有请求同步完成。
 - 流式：`/agents/chat` 返回完整回答，不使用 SSE 或流式响应。

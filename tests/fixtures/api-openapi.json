@@ -296,6 +296,46 @@
         }
       }
     },
+    "/ocr/daily-logs-new": {
+      "post": {
+        "tags": [
+          "ocr"
+        ],
+        "summary": "Journal Recognize",
+        "description": "新版监理日志识别：单次整页 OCR + 固定栏目匹配，不读取旧识别链。",
+        "operationId": "journal_recognize_ocr_daily_logs_new_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JournalReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/ocr/jianbiao": {
       "post": {
         "tags": [
@@ -995,6 +1035,13 @@
             "title": "Img",
             "description": "base64 编码的图片数据；path 与 img 至少提供一个",
             "default": ""
+          },
+          "taskId": {
+            "type": "string",
+            "maxLength": 128,
+            "title": "TaskId",
+            "description": "业务任务 ID，仅原样回显到 processed.taskId；不传则为 null",
+            "default": ""
           }
         },
         "additionalProperties": false,
@@ -1185,6 +1232,33 @@
           "cfg"
         ],
         "title": "JianbiaoReq"
+      },
+      "JournalReq": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path",
+            "description": "PROJECTS_ROOT 数据池内的监理日志照片路径",
+            "default": ""
+          },
+          "img": {
+            "type": "string",
+            "title": "Img",
+            "description": "base64 编码的图片数据；path 与 img 至少提供一个",
+            "default": ""
+          },
+          "taskId": {
+            "type": "string",
+            "maxLength": 128,
+            "title": "TaskId",
+            "description": "业务任务 ID，仅原样回显到 processed.taskId；不传则为 null",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "JournalReq",
+        "description": "新版监理日志识别请求；与旧接口字段一致，实现链独立。"
       },
       "JsonValue": {},
       "LogSummary": {

@@ -2,6 +2,34 @@
 
 只记录对外接口契约的变化。运行时行为、提示词和内部重构不在此记录。
 
+## 2026-11-05 — 监理日记新版识别链路（待确认）
+
+- 新增 `POST /ocr/daily-logs-new`，作为新版监理日志识别链路的独立入口；
+  请求字段与 `/ocr/daily-logs` 相同（`path`、`img`、可选 `taskId`），成功响应沿用
+  `DailyLogsResponse` 结构，未新增或删除响应字段。
+- 新链路在照片上直接定位表格、只做一次透视校正和一次整页 OCR，再按固定栏目匹配；
+  歧义或漏框字段最多补充识别 3 次。旧的 `/ocr/daily-logs` 与其实现保持不变。
+- 样例表中 `construction`、`witness`、`patrol` 同属一个 `mainWork` 单元格；当前只
+  整格识别 `mainWork`，`recognized`、`detail` 和 `processed` 中的这三个字段暂时取
+  同一个整段值，后续再按印刷小标题拆分。响应字段结构不变。
+- 操作状态为 `pending-review`；未提升为正式契约。
+- 调用方影响：新增接口，现有调用方不受影响；启用新链路需显式改调用路径。
+
+## 2026-11-05 — 监理日记业务结构（用户已确认）
+
+- `POST /ocr/daily-logs` 的 `processed` 由固定 `{}` 改为业务结构：
+  `taskId`、`documentType`（固定 `supervision_diary`）、`common`、`fields`；
+  识别不到的栏目为 `null`，不做推断。
+- 请求新增可选 `taskId`（最长 128，去除首尾空白），仅原样回显到 `processed.taskId`；
+  服务仍不生成任务 ID。
+- 识别栏目按现场《监理日记》表样重标定：`recognized` 新增 `position`、`witness`、
+  `patrol`、`next_day_plan`，移除 `supervision_work`。
+- 响应包装仍为 `{"status":200,"data":...}`，未新增 `message`；`form`、`frame`、
+  `detail`、`warning`、`image`、`ms` 保持不变。
+- 操作仍为 `pending-review`，未提升为正式契约。
+- 调用方影响：未使用 `processed` 的调用方不受影响；使用 `supervision_work` 的调用方
+  需改用 `witness`/`patrol`。
+
 ## 2026-11-04 — 0.1.0-review.2（diagnostics 端点，用户已确认）
 
 - `GET /health/deps` 更名为一级路由 `GET /diagnostics`，归入系统级接口；旧路径不再注册，

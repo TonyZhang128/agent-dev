@@ -47,6 +47,7 @@
 - `/agents/intent/archive`
 - `/agents/chat`
 - `/ocr/daily-logs`
+- `/ocr/daily-logs-new`
 - `/health`、`/ready`（可能由运维或监控调用，未在业务源码中确认）
 
 这些接口仍是本仓库的对外契约，不能因为当前未观察到调用而删除或改变语义。

@@ -20,7 +20,7 @@
 - `/health`、`/ready`、`/diagnostics`：通常很快，但 `/ready` 依赖模型服务响应。
 - `/agents/*`：受 `LLM_TIMEOUT_SECONDS` 和可选回退预算约束；`/agents/intent/business` 的
   `chat` 或 `clarify` 可能包含两次模型调用。
-- `/ocr/recognize`、`/ocr/daily-logs`：首次调用可能需要加载 OCR 模型。
+- `/ocr/recognize`、`/ocr/daily-logs`、`/ocr/daily-logs-new`：首次调用可能需要加载 OCR 模型。
 - `/ocr/jianbiao`、`/ocr/fill`、`/wbs/draft`：涉及多页 PDF、Excel 或大图处理，可能明显
   更慢。
 
@@ -32,7 +32,8 @@
 
 - 只读接口可以重试：`GET /health`、`/ready`、`/diagnostics`、
   `/ocr/sheet/{form}`、`/ocr/blank/{form}.png`，以及不写文件的
-  `/ocr/recognize`、`/ocr/daily-logs`、`/ocr/jianbiao`、`/ocr/fill`、`/wbs/draft`。
+  `/ocr/recognize`、`/ocr/daily-logs`、`/ocr/daily-logs-new`、`/ocr/jianbiao`、`/ocr/fill`、
+  `/wbs/draft`。
 - `/ocr/jianbiao`、`/ocr/fill` 在 `out` 非空时会写同名 PDF/Excel/校正图；相同 `out`
   重试会覆盖已有输出。当前没有幂等键，调用方应在重试前确认覆盖是否符合业务要求。
 - 模型和 OCR 推理可能产生不同结果；重试成功不代表与首次结果逐字一致。

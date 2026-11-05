@@ -619,7 +619,7 @@
         "tags": [
           "ocr"
         ],
-        "summary": "识别 JLB13 监理日志",
+        "summary": "识别监理日记（JLB13）",
         "operationId": "daily_logs_recognize_ocr_daily_logs_post",
         "requestBody": {
           "content": {
@@ -628,7 +628,8 @@
                 "$ref": "#/components/schemas/DailyLogsReq"
               },
               "example": {
-                "path": "projects/监理日志照片.jpg"
+                "path": "projects/监理日志照片.jpg",
+                "taskId": "123456789012345678"
               }
             }
           },
@@ -670,12 +671,39 @@
                     },
                     "recognized": {
                       "project": "测试高速公路项目",
+                      "position": "专业监理工程师",
                       "date": "2026-10-03",
                       "weather": "晴",
-                      "issues": "无"
+                      "construction": "路基填筑",
+                      "witness": "旁站检查 2 次",
+                      "patrol": "巡视检查",
+                      "issues": "无",
+                      "next_day_plan": "继续填筑"
                     },
                     "detail": [],
-                    "processed": {},
+                    "processed": {
+                      "taskId": "123456789012345678",
+                      "documentType": "supervision_diary",
+                      "common": {
+                        "projectName": "测试高速公路项目",
+                        "documentNo": null,
+                        "supervisionOrg": null,
+                        "recorderName": null,
+                        "recorderPosition": "专业监理工程师",
+                        "weather": "晴",
+                        "logDate": "2026-10-03",
+                        "reviewerName": null
+                      },
+                      "fields": {
+                        "mainWork": {
+                          "construction": "路基填筑",
+                          "witness": "旁站检查 2 次",
+                          "patrol": "巡视检查"
+                        },
+                        "issues": "无",
+                        "nextDayPlan": "继续填筑"
+                      }
+                    },
                     "warning": "",
                     "image": {
                       "width": 600,
@@ -718,9 +746,145 @@
             }
           }
         },
-        "description": "识别 JLB13 监理日志照片，固定栏目输出 recognized 和 detail。path 与 img 至少提供一个，同时提供时优先 img。processed 当前固定为 {}。",
+        "description": "识别监理日记照片，固定栏目输出 recognized、detail 和业务结构 processed。path 与 img 至少提供一个，同时提供时优先 img；taskId 原样回显到 processed.taskId，服务不生成任务 ID。",
         "x-contract-status": "pending-review",
         "x-contract-source": "AGENTS.md 第四节；docs/ocr.md；app/ocr/daily_logs.py；tests/test_ocr_daily_logs.py",
+        "x-side-effects": "只读取数据池照片，不写 PDF/Excel。",
+        "x-idempotency": "识别结果可能因模型和照片变化而不同；只读调用可重试。"
+      }
+    },
+    "/ocr/daily-logs-new": {
+      "post": {
+        "tags": [
+          "ocr"
+        ],
+        "summary": "识别监理日记（新版链路）",
+        "description": "新版监理日志识别链路预览：在照片上直接定位表格，只做一次整页 OCR，再按固定栏目匹配；歧义或漏框字段最多补充识别 3 次。样例表中 construction / witness / patrol 同属一个 mainWork 单元格，当前整格识别后暂时同时回填到这三个字段，后续再按印刷小标题拆分。返回结构与 /ocr/daily-logs 相同，但实现完全独立，不读取旧逐格识别链。",
+        "operationId": "journal_recognize_ocr_daily_logs_new_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JournalReq"
+              },
+              "example": {
+                "path": "projects/监理日志照片.jpg",
+                "taskId": "123456789012345678"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "监理日志识别草稿；结构与 /ocr/daily-logs 相同。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DailyLogsResponse"
+                },
+                "example": {
+                  "status": 200,
+                  "data": {
+                    "form": "JLB13",
+                    "formName": "监理日志",
+                    "frame": {
+                      "how": "contour+table",
+                      "quad": [
+                        [
+                          142,
+                          390
+                        ],
+                        [
+                          1150,
+                          392
+                        ],
+                        [
+                          1132,
+                          1532
+                        ],
+                        [
+                          139,
+                          1550
+                        ]
+                      ]
+                    },
+                    "recognized": {
+                      "project": "测试高速公路项目",
+                      "position": "专业监理工程师",
+                      "date": "2026-10-03",
+                      "construction": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
+                      "witness": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
+                      "patrol": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查"
+                    },
+                    "detail": [],
+                    "processed": {
+                      "taskId": "123456789012345678",
+                      "documentType": "supervision_diary",
+                      "common": {
+                        "projectName": "测试高速公路项目",
+                        "documentNo": null,
+                        "supervisionOrg": null,
+                        "recorderName": null,
+                        "recorderPosition": "专业监理工程师",
+                        "weather": null,
+                        "logDate": "2026-10-03",
+                        "reviewerName": null
+                      },
+                      "fields": {
+                        "mainWork": {
+                          "construction": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
+                          "witness": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
+                          "patrol": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查"
+                        },
+                        "issues": null,
+                        "nextDayPlan": null
+                      }
+                    },
+                    "warning": "",
+                    "image": {
+                      "width": 1279,
+                      "height": 1741
+                    },
+                    "ms": 123
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求校验失败，或输入与上下文超过预算。校验失败时 detail 为错误数组；输入超限时为字符串。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestError"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "路径越界、文件不存在/不是文件、图片无法解码或文档处理失败。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "OCR 模型不可用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-contract-status": "pending-review",
+        "x-contract-source": "app/ocr/journal/；tests/test_ocr_journal.py",
         "x-side-effects": "只读取数据池照片，不写 PDF/Excel。",
         "x-idempotency": "识别结果可能因模型和照片变化而不同；只读调用可重试。"
       }
@@ -1788,6 +1952,13 @@
             "title": "Img",
             "description": "base64 编码的图片数据；path 与 img 至少提供一个",
             "default": ""
+          },
+          "taskId": {
+            "type": "string",
+            "maxLength": 128,
+            "title": "TaskId",
+            "description": "业务任务 ID，仅原样回显到 processed.taskId；不传则为 null",
+            "default": ""
           }
         },
         "additionalProperties": false,
@@ -1989,6 +2160,33 @@
           "cfg"
         ],
         "title": "JianbiaoReq"
+      },
+      "JournalReq": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path",
+            "description": "PROJECTS_ROOT 数据池内的监理日志照片路径",
+            "default": ""
+          },
+          "img": {
+            "type": "string",
+            "title": "Img",
+            "description": "base64 编码的图片数据；path 与 img 至少提供一个",
+            "default": ""
+          },
+          "taskId": {
+            "type": "string",
+            "maxLength": 128,
+            "title": "TaskId",
+            "description": "业务任务 ID，仅原样回显到 processed.taskId；不传则为 null",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "JournalReq",
+        "description": "新版监理日志识别请求；与旧接口字段一致，实现链独立。"
       },
       "JsonValue": {},
       "LogSummary": {
@@ -2768,6 +2966,12 @@
           "recorder": {
             "type": "string"
           },
+          "weather": {
+            "type": "string"
+          },
+          "position": {
+            "type": "string"
+          },
           "date": {
             "type": "string",
             "description": "归一为 yyyy-mm-dd；识别不到时省略。"
@@ -2775,20 +2979,175 @@
           "reviewer": {
             "type": "string"
           },
-          "weather": {
-            "type": "string"
-          },
           "construction": {
             "type": "string"
           },
-          "supervision_work": {
+          "witness": {
+            "type": "string"
+          },
+          "patrol": {
             "type": "string"
           },
           "issues": {
             "type": "string"
+          },
+          "next_day_plan": {
+            "type": "string"
           }
         },
-        "description": "JLB13 监理日志固定栏目；未识别到的栏目可能省略。"
+        "description": "监理日记固定栏目；未识别到的栏目可能省略。"
+      },
+      "DailyLogsMainWork": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "construction",
+          "witness",
+          "patrol"
+        ],
+        "properties": {
+          "construction": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "witness": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "patrol": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "description": "当日主要监理工作情况下的三个子栏；识别不到为 null。"
+      },
+      "DailyLogsCommon": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "projectName",
+          "documentNo",
+          "supervisionOrg",
+          "recorderName",
+          "recorderPosition",
+          "weather",
+          "logDate",
+          "reviewerName"
+        ],
+        "properties": {
+          "projectName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "documentNo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "supervisionOrg": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "recorderName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "recorderPosition": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "weather": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "logDate": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reviewerName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "description": "监理日记公共栏目；识别不到为 null，不做推断。"
+      },
+      "DailyLogsFields": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mainWork",
+          "issues",
+          "nextDayPlan"
+        ],
+        "properties": {
+          "mainWork": {
+            "$ref": "#/components/schemas/DailyLogsMainWork"
+          },
+          "issues": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nextDayPlan": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "description": "监理日记正文栏目；识别不到为 null。"
+      },
+      "DailyLogsProcessed": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "taskId",
+          "documentType",
+          "common",
+          "fields"
+        ],
+        "properties": {
+          "taskId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "请求 taskId 原样回显；未提供为 null。"
+          },
+          "documentType": {
+            "type": "string",
+            "const": "supervision_diary"
+          },
+          "common": {
+            "$ref": "#/components/schemas/DailyLogsCommon"
+          },
+          "fields": {
+            "$ref": "#/components/schemas/DailyLogsFields"
+          }
+        },
+        "description": "监理日记业务结构；由 OCR 栏目文本映射，缺失栏目为 null。"
       },
       "DailyLogsData": {
         "type": "object",
@@ -2827,9 +3186,7 @@
             "description": "每个固定栏目的识别值、置信度和区域。"
           },
           "processed": {
-            "type": "object",
-            "additionalProperties": true,
-            "description": "监理日志后处理占位，当前固定为 {}。"
+            "$ref": "#/components/schemas/DailyLogsProcessed"
           },
           "warning": {
             "type": "string",
@@ -2843,7 +3200,7 @@
             "minimum": 0
           }
         },
-        "description": "JLB13 监理日志识别草稿；调用方应优先使用 recognized 和 detail。"
+        "description": "监理日记识别草稿；recognized 为原始栏目，processed 为业务结构。"
       },
       "DailyLogsResponse": {
         "type": "object",

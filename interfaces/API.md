@@ -45,12 +45,13 @@
 | 6 | `POST /agents/intent/archive` | 识别文件归档系统意图 | `confirmed` |
 | 7 | `POST /agents/chat` | 自由对话 | `confirmed` |
 | 8 | `POST /ocr/recognize` | 识别普通照片或简表照片 | `pending-review` |
-| 9 | `POST /ocr/daily-logs` | 识别 JLB13 监理日志 | `pending-review` |
-| 10 | `POST /ocr/jianbiao` | 识别简表并回填目标表 | `pending-review` |
-| 11 | `POST /ocr/fill` | 按公式/引用计算并回填目标表 | `pending-review` |
-| 12 | `GET /ocr/blank/{form}.png` | 渲染空白表样 PNG | `pending-review` |
-| 13 | `GET /ocr/sheet/{form}` | 查询表样栏目与格子 | `pending-review` |
-| 14 | `POST /wbs/draft` | 生成施工图 WBS 划分初稿 | `pending-review` |
+| 9 | `POST /ocr/daily-logs` | 识别监理日记（JLB13） | `pending-review` |
+| 10 | `POST /ocr/daily-logs-new` | 识别监理日记（新版链路） | `pending-review` |
+| 11 | `POST /ocr/jianbiao` | 识别简表并回填目标表 | `pending-review` |
+| 12 | `POST /ocr/fill` | 按公式/引用计算并回填目标表 | `pending-review` |
+| 13 | `GET /ocr/blank/{form}.png` | 渲染空白表样 PNG | `pending-review` |
+| 14 | `GET /ocr/sheet/{form}` | 查询表样栏目与格子 | `pending-review` |
+| 15 | `POST /wbs/draft` | 生成施工图 WBS 划分初稿 | `pending-review` |
 
 ## 接口详情
 
@@ -589,19 +590,20 @@ Schema：`RecognizeResponse`
 
 | 项目 | 内容 |
 | --- | --- |
-| 摘要 | 识别 JLB13 监理日志 |
+| 摘要 | 识别监理日记（JLB13） |
 | 契约状态 | `pending-review` |
 | 来源 | AGENTS.md 第四节；docs/ocr.md；app/ocr/daily_logs.py；tests/test_ocr_daily_logs.py |
 | 副作用 | 只读取数据池照片，不写 PDF/Excel。 |
 | 幂等/重试 | 识别结果可能因模型和照片变化而不同；只读调用可重试。 |
 
-识别 JLB13 监理日志照片，固定栏目输出 recognized 和 detail。path 与 img 至少提供一个，同时提供时优先 img。processed 当前固定为 {}。
+识别监理日记照片，固定栏目输出 recognized、detail 和业务结构 processed。path 与 img 至少提供一个，同时提供时优先 img；taskId 原样回显到 processed.taskId，服务不生成任务 ID。
 
 **请求体**
 
 ```json
 {
-  "path": "projects/监理日志照片.jpg"
+  "path": "projects/监理日志照片.jpg",
+  "taskId": "123456789012345678"
 }
 ```
 
@@ -611,6 +613,7 @@ Schema：`RecognizeResponse`
 | --- | --- | --- | --- | --- | --- |
 | `path` | string | 否 | `""` |  | PROJECTS_ROOT 数据池内的监理日志照片路径 |
 | `img` | string | 否 | `""` |  | base64 编码的图片数据；path 与 img 至少提供一个 |
+| `taskId` | string | 否 | `""` | maxLength=128 | 业务任务 ID，仅原样回显到 processed.taskId；不传则为 null |
 
 Schema：`DailyLogsReq`
 
@@ -652,12 +655,39 @@ Schema：`DailyLogsReq`
     },
     "recognized": {
       "project": "测试高速公路项目",
+      "position": "专业监理工程师",
       "date": "2026-10-03",
       "weather": "晴",
-      "issues": "无"
+      "construction": "路基填筑",
+      "witness": "旁站检查 2 次",
+      "patrol": "巡视检查",
+      "issues": "无",
+      "next_day_plan": "继续填筑"
     },
     "detail": [],
-    "processed": {},
+    "processed": {
+      "taskId": "123456789012345678",
+      "documentType": "supervision_diary",
+      "common": {
+        "projectName": "测试高速公路项目",
+        "documentNo": null,
+        "supervisionOrg": null,
+        "recorderName": null,
+        "recorderPosition": "专业监理工程师",
+        "weather": "晴",
+        "logDate": "2026-10-03",
+        "reviewerName": null
+      },
+      "fields": {
+        "mainWork": {
+          "construction": "路基填筑",
+          "witness": "旁站检查 2 次",
+          "patrol": "巡视检查"
+        },
+        "issues": "无",
+        "nextDayPlan": "继续填筑"
+      }
+    },
     "warning": "",
     "image": {
       "width": 600,
@@ -673,7 +703,7 @@ Schema：`DailyLogsReq`
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
 | `status` | const `200` | 是 |  |  | 业务成功状态，与 HTTP 200 一致；不是 HTTP 状态码的替代品。 |
-| `data` | `DailyLogsData` | 是 |  |  | JLB13 监理日志识别草稿；调用方应优先使用 recognized 和 detail。 |
+| `data` | `DailyLogsData` | 是 |  |  | 监理日记识别草稿；recognized 为原始栏目，processed 为业务结构。 |
 
 **`data` 字段**
 
@@ -682,16 +712,148 @@ Schema：`DailyLogsReq`
 | `form` | const `JLB13` | 是 |  |  |  |
 | `formName` | const `监理日志` | 是 |  |  |  |
 | `frame` | `Frame` | 是 |  |  |  |
-| `recognized` | `DailyLogsRecognized` | 是 |  |  | JLB13 监理日志固定栏目；未识别到的栏目可能省略。 |
+| `recognized` | `DailyLogsRecognized` | 是 |  |  | 监理日记固定栏目；未识别到的栏目可能省略。 |
 | `detail` | array<`DailyLogsDetailItem`> | 是 |  |  | 每个固定栏目的识别值、置信度和区域。 |
-| `processed` | object | 是 |  |  | 监理日志后处理占位，当前固定为 {}。 |
+| `processed` | `DailyLogsProcessed` | 是 |  |  | 监理日记业务结构；由 OCR 栏目文本映射，缺失栏目为 null。 |
 | `warning` | string | 是 |  |  | 未检测到表格外框等定位提示；空字符串表示无提示。 |
 | `image` | `ImageSize` | 是 |  |  | 输入图片的像素尺寸。 |
 | `ms` | integer | 是 |  | minimum=0 |  |
 
 Schema：`DailyLogsResponse`
 
-### 10. `POST /ocr/jianbiao`
+### 10. `POST /ocr/daily-logs-new`
+
+| 项目 | 内容 |
+| --- | --- |
+| 摘要 | 识别监理日记（新版链路） |
+| 契约状态 | `pending-review` |
+| 来源 | app/ocr/journal/；tests/test_ocr_journal.py |
+| 副作用 | 只读取数据池照片，不写 PDF/Excel。 |
+| 幂等/重试 | 识别结果可能因模型和照片变化而不同；只读调用可重试。 |
+
+新版监理日志识别链路预览：在照片上直接定位表格，只做一次整页 OCR，再按固定栏目匹配；歧义或漏框字段最多补充识别 3 次。样例表中 construction / witness / patrol 同属一个 mainWork 单元格，当前整格识别后暂时同时回填到这三个字段，后续再按印刷小标题拆分。返回结构与 /ocr/daily-logs 相同，但实现完全独立，不读取旧逐格识别链。
+
+**请求体**
+
+```json
+{
+  "path": "projects/监理日志照片.jpg",
+  "taskId": "123456789012345678"
+}
+```
+
+**请求字段**
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `path` | string | 否 | `""` |  | PROJECTS_ROOT 数据池内的监理日志照片路径 |
+| `img` | string | 否 | `""` |  | base64 编码的图片数据；path 与 img 至少提供一个 |
+| `taskId` | string | 否 | `""` | maxLength=128 | 业务任务 ID，仅原样回显到 processed.taskId；不传则为 null |
+
+Schema：`JournalReq`
+
+**响应**
+
+- `200`：监理日志识别草稿；结构与 /ocr/daily-logs 相同。
+- `400`：路径越界、文件不存在/不是文件、图片无法解码或文档处理失败。
+- `422`：请求校验失败，或输入与上下文超过预算。校验失败时 detail 为错误数组；输入超限时为字符串。
+- `503`：OCR 模型不可用。
+
+**200 响应体**
+
+```json
+{
+  "status": 200,
+  "data": {
+    "form": "JLB13",
+    "formName": "监理日志",
+    "frame": {
+      "how": "contour+table",
+      "quad": [
+        [
+          142,
+          390
+        ],
+        [
+          1150,
+          392
+        ],
+        [
+          1132,
+          1532
+        ],
+        [
+          139,
+          1550
+        ]
+      ]
+    },
+    "recognized": {
+      "project": "测试高速公路项目",
+      "position": "专业监理工程师",
+      "date": "2026-10-03",
+      "construction": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
+      "witness": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
+      "patrol": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查"
+    },
+    "detail": [],
+    "processed": {
+      "taskId": "123456789012345678",
+      "documentType": "supervision_diary",
+      "common": {
+        "projectName": "测试高速公路项目",
+        "documentNo": null,
+        "supervisionOrg": null,
+        "recorderName": null,
+        "recorderPosition": "专业监理工程师",
+        "weather": null,
+        "logDate": "2026-10-03",
+        "reviewerName": null
+      },
+      "fields": {
+        "mainWork": {
+          "construction": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
+          "witness": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
+          "patrol": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查"
+        },
+        "issues": null,
+        "nextDayPlan": null
+      }
+    },
+    "warning": "",
+    "image": {
+      "width": 1279,
+      "height": 1741
+    },
+    "ms": 123
+  }
+}
+```
+
+**响应字段**
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `status` | const `200` | 是 |  |  | 业务成功状态，与 HTTP 200 一致；不是 HTTP 状态码的替代品。 |
+| `data` | `DailyLogsData` | 是 |  |  | 监理日记识别草稿；recognized 为原始栏目，processed 为业务结构。 |
+
+**`data` 字段**
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `form` | const `JLB13` | 是 |  |  |  |
+| `formName` | const `监理日志` | 是 |  |  |  |
+| `frame` | `Frame` | 是 |  |  |  |
+| `recognized` | `DailyLogsRecognized` | 是 |  |  | 监理日记固定栏目；未识别到的栏目可能省略。 |
+| `detail` | array<`DailyLogsDetailItem`> | 是 |  |  | 每个固定栏目的识别值、置信度和区域。 |
+| `processed` | `DailyLogsProcessed` | 是 |  |  | 监理日记业务结构；由 OCR 栏目文本映射，缺失栏目为 null。 |
+| `warning` | string | 是 |  |  | 未检测到表格外框等定位提示；空字符串表示无提示。 |
+| `image` | `ImageSize` | 是 |  |  | 输入图片的像素尺寸。 |
+| `ms` | integer | 是 |  | minimum=0 |  |
+
+Schema：`DailyLogsResponse`
+
+### 11. `POST /ocr/jianbiao`
 
 | 项目 | 内容 |
 | --- | --- |
@@ -811,7 +973,7 @@ Schema：`JianbiaoReq`
 
 Schema：`JianbiaoResponse`
 
-### 11. `POST /ocr/fill`
+### 12. `POST /ocr/fill`
 
 | 项目 | 内容 |
 | --- | --- |
@@ -905,7 +1067,7 @@ Schema：`FillReq`
 
 Schema：`FillResponse`
 
-### 12. `GET /ocr/blank/{form}.png`
+### 13. `GET /ocr/blank/{form}.png`
 
 | 项目 | 内容 |
 | --- | --- |
@@ -934,7 +1096,7 @@ Schema：`FillResponse`
 
 **200 `image/png`**
 
-### 13. `GET /ocr/sheet/{form}`
+### 14. `GET /ocr/sheet/{form}`
 
 | 项目 | 内容 |
 | --- | --- |
@@ -991,7 +1153,7 @@ Schema：`FillResponse`
 
 Schema：`SheetResponse`
 
-### 14. `POST /wbs/draft`
+### 15. `POST /wbs/draft`
 
 | 项目 | 内容 |
 | --- | --- |
@@ -1173,6 +1335,7 @@ Schema：`WbsDraftResponse`
 | --- | --- | --- | --- | --- | --- |
 | `path` | string | 否 | `""` |  | PROJECTS_ROOT 数据池内的监理日志照片路径 |
 | `img` | string | 否 | `""` |  | base64 编码的图片数据；path 与 img 至少提供一个 |
+| `taskId` | string | 否 | `""` | maxLength=128 | 业务任务 ID，仅原样回显到 processed.taskId；不传则为 null |
 
 ### `DraftReq`
 
@@ -1219,6 +1382,16 @@ Schema：`WbsDraftResponse`
 | `cfg` | object | 是 |  |  | 配置平台的字段、锚点、引用和公式元数据。 |
 | `bound` | object | 否 |  |  | 项目资料带入值；照片识别值优先。 |
 | `out` | string | 否 | `""` |  | 输出 PDF 相对路径；为空不写 PDF/Excel/校正图。 |
+
+### `JournalReq`
+
+新版监理日志识别请求；与旧接口字段一致，实现链独立。
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `path` | string | 否 | `""` |  | PROJECTS_ROOT 数据池内的监理日志照片路径 |
+| `img` | string | 否 | `""` |  | base64 编码的图片数据；path 与 img 至少提供一个 |
+| `taskId` | string | 否 | `""` | maxLength=128 | 业务任务 ID，仅原样回显到 processed.taskId；不传则为 null |
 
 ### `JsonValue`
 
@@ -1446,7 +1619,7 @@ Schema：`WbsDraftResponse`
 
 ### `DailyLogsRecognized`
 
-JLB13 监理日志固定栏目；未识别到的栏目可能省略。
+监理日记固定栏目；未识别到的栏目可能省略。
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
@@ -1454,25 +1627,74 @@ JLB13 监理日志固定栏目；未识别到的栏目可能省略。
 | `number` | string | 否 |  |  |  |
 | `supervision_org` | string | 否 |  |  |  |
 | `recorder` | string | 否 |  |  |  |
+| `weather` | string | 否 |  |  |  |
+| `position` | string | 否 |  |  |  |
 | `date` | string | 否 |  |  | 归一为 yyyy-mm-dd；识别不到时省略。 |
 | `reviewer` | string | 否 |  |  |  |
-| `weather` | string | 否 |  |  |  |
 | `construction` | string | 否 |  |  |  |
-| `supervision_work` | string | 否 |  |  |  |
+| `witness` | string | 否 |  |  |  |
+| `patrol` | string | 否 |  |  |  |
 | `issues` | string | 否 |  |  |  |
+| `next_day_plan` | string | 否 |  |  |  |
+
+### `DailyLogsMainWork`
+
+当日主要监理工作情况下的三个子栏；识别不到为 null。
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `construction` | string / null | 是 |  |  |  |
+| `witness` | string / null | 是 |  |  |  |
+| `patrol` | string / null | 是 |  |  |  |
+
+### `DailyLogsCommon`
+
+监理日记公共栏目；识别不到为 null，不做推断。
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `projectName` | string / null | 是 |  |  |  |
+| `documentNo` | string / null | 是 |  |  |  |
+| `supervisionOrg` | string / null | 是 |  |  |  |
+| `recorderName` | string / null | 是 |  |  |  |
+| `recorderPosition` | string / null | 是 |  |  |  |
+| `weather` | string / null | 是 |  |  |  |
+| `logDate` | string / null | 是 |  |  |  |
+| `reviewerName` | string / null | 是 |  |  |  |
+
+### `DailyLogsFields`
+
+监理日记正文栏目；识别不到为 null。
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `mainWork` | `DailyLogsMainWork` | 是 |  |  | 当日主要监理工作情况下的三个子栏；识别不到为 null。 |
+| `issues` | string / null | 是 |  |  |  |
+| `nextDayPlan` | string / null | 是 |  |  |  |
+
+### `DailyLogsProcessed`
+
+监理日记业务结构；由 OCR 栏目文本映射，缺失栏目为 null。
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `taskId` | string / null | 是 |  |  | 请求 taskId 原样回显；未提供为 null。 |
+| `documentType` | const `supervision_diary` | 是 |  |  |  |
+| `common` | `DailyLogsCommon` | 是 |  |  | 监理日记公共栏目；识别不到为 null，不做推断。 |
+| `fields` | `DailyLogsFields` | 是 |  |  | 监理日记正文栏目；识别不到为 null。 |
 
 ### `DailyLogsData`
 
-JLB13 监理日志识别草稿；调用方应优先使用 recognized 和 detail。
+监理日记识别草稿；recognized 为原始栏目，processed 为业务结构。
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
 | `form` | const `JLB13` | 是 |  |  |  |
 | `formName` | const `监理日志` | 是 |  |  |  |
 | `frame` | `Frame` | 是 |  |  |  |
-| `recognized` | `DailyLogsRecognized` | 是 |  |  | JLB13 监理日志固定栏目；未识别到的栏目可能省略。 |
+| `recognized` | `DailyLogsRecognized` | 是 |  |  | 监理日记固定栏目；未识别到的栏目可能省略。 |
 | `detail` | array<`DailyLogsDetailItem`> | 是 |  |  | 每个固定栏目的识别值、置信度和区域。 |
-| `processed` | object | 是 |  |  | 监理日志后处理占位，当前固定为 {}。 |
+| `processed` | `DailyLogsProcessed` | 是 |  |  | 监理日记业务结构；由 OCR 栏目文本映射，缺失栏目为 null。 |
 | `warning` | string | 是 |  |  | 未检测到表格外框等定位提示；空字符串表示无提示。 |
 | `image` | `ImageSize` | 是 |  |  | 输入图片的像素尺寸。 |
 | `ms` | integer | 是 |  | minimum=0 |  |
@@ -1484,7 +1706,7 @@ JLB13 监理日志识别草稿；调用方应优先使用 recognized 和 detail�
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
 | `status` | const `200` | 是 |  |  | 业务成功状态，与 HTTP 200 一致；不是 HTTP 状态码的替代品。 |
-| `data` | `DailyLogsData` | 是 |  |  | JLB13 监理日志识别草稿；调用方应优先使用 recognized 和 detail。 |
+| `data` | `DailyLogsData` | 是 |  |  | 监理日记识别草稿；recognized 为原始栏目，processed 为业务结构。 |
 
 ### `CellDetailItem`
 

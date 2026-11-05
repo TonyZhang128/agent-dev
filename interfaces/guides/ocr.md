@@ -7,7 +7,8 @@ OCR 模型和辅助脚本见 [文档加工与 OCR](../../docs/ocr.md)。
 ## 共同规则
 
 - 全部为同步请求；CPU 处理在线程池执行，同一应用的 OCR 推理串行加锁。
-- 没有任务 ID、异步轮询、webhook、回调、分页或 multipart 上传。
+- 没有服务端任务 ID、异步轮询、webhook、回调、分页或 multipart 上传；
+  `/ocr/daily-logs` 的 `taskId` 仅原样回显调用方传入的值。
 - 没有鉴权。应由可信调用方在既有部署边界内使用。
 - 成功（PNG 除外）返回：
 
@@ -34,13 +35,15 @@ OCR 模型和辅助脚本见 [文档加工与 OCR](../../docs/ocr.md)。
 
 ## 图片输入
 
-`POST /ocr/recognize` 和 `POST /ocr/daily-logs`：
+`POST /ocr/recognize`、`POST /ocr/daily-logs` 和 `POST /ocr/daily-logs-new`：
 
 - `path` 与 `img` 至少提供一个。
 - `img` 为 base64 编码图片，兼容 `data:image/...;base64,` 前缀。
 - 同时提供时优先使用 `img`。
 - 两者都为空或只有空白返回 422。
 - 图片无法解码、路径不存在或不是文件返回 400。
+- `/ocr/daily-logs` 与 `/ocr/daily-logs-new` 额外接受可选 `taskId`（最长 128，去除首尾空白），
+  仅原样回显。
 
 `POST /ocr/jianbiao` 只接受数据池照片 `path`，不接受 base64。
 
@@ -72,13 +75,32 @@ ONNX Runtime 能否导入，`OCR_DEVICE` 与 onnxruntime provider 是否一致�
 ### `POST /ocr/daily-logs`
 
 1. 寻找纸张/表格外框并透视校正。
-2. 按 JLB13 固定栏目逐格 OCR。
+2. 按现场《监理日记》固定栏目逐格 OCR，包括岗位、主要施工情况、旁站情况、巡视情况、
+   问题和次日计划。
 3. 日期归一为 `yyyy-mm-dd`，长文本栏保留拼接结果。
 4. 返回 `recognized`、`detail`、`frame`、`processed`、`warning`、`image`、`ms`。
 
-- `processed` 是后处理占位，当前固定为 `{}`；调用方先使用 `recognized` 和 `detail`。
+- `processed` 是业务结构：`taskId`（请求 `taskId` 原样回显，未传为 `null`）、
+  `documentType`（固定 `supervision_diary`）、`common`、`fields`；识别不到的栏目为 `null`，
+  不做推断。
 - `frame.how` 为 `whole` 时表示未找到外框，应按整张照片校正，需核对定位。
-- 不写 PDF/Excel。
+- 不写 PDF/Excel，不生成服务端任务 ID。
+
+### `POST /ocr/daily-logs-new`
+
+1. 在原图上用横竖线定位表格外框；找不到表格时退回页面或整张照片。
+2. 只做一次透视校正，把整页映射到固定画布。
+3. 整页只调用一次 OCR，得到全部文字框。
+4. 按固定栏目区域，用中心点优先、框内覆盖率兜底的方式归属文字框。
+5. 按栏目名近似剥离印刷字；日期归一为 `yyyy-mm-dd`；长文本栏保留拼接结果。
+6. 对歧义或漏框字段最多补充识别 3 次。
+7. 返回 `recognized`、`detail`、`frame`、`processed`、`warning`、`image`、`ms`。
+
+- 返回结构与 `POST /ocr/daily-logs` 相同，但实现独立，不读取旧逐格识别链。
+- `construction`、`witness`、`patrol` 在样例表上同属一个 `mainWork` 单元格；当前只
+  整格识别 `mainWork`，并把整段值同时回填到这三个字段；后续按印刷小标题拆分。
+- `frame.how` 为 `contour+table`/`contour`/`whole`；`whole` 时表示未找到外框，需核对定位。
+- 不写 PDF/Excel，不生成服务端任务 ID。
 
 ### `POST /ocr/jianbiao`
 
@@ -158,7 +180,7 @@ ONNX Runtime 能否导入，`OCR_DEVICE` 与 onnxruntime provider 是否一致�
 
 ## 重试与幂等
 
-- `GET /diagnostics`、`/ocr/recognize`、`/ocr/daily-logs`、`/ocr/sheet`、
+- `GET /diagnostics`、`/ocr/recognize`、`/ocr/daily-logs`、`/ocr/daily-logs-new`、`/ocr/sheet`、
   `/ocr/blank`、`/wbs/draft` 为只读操作，可重试。
 - `/ocr/jianbiao`、`/ocr/fill` 在 `out` 非空时写文件；相同 `out` 重试会覆盖输出。
   调用方应确认是否允许覆盖，当前没有幂等键或版本号。

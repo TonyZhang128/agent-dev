@@ -161,6 +161,39 @@ def test_ocr_cell_value_removes_printed_label_and_retains_negative_measurement()
     assert sheet_scan._cell_value(boxes, "数值", "number") == ("-2.5", 0.9)
 
 
+def test_ocr_dedup_removes_only_fully_covered_duplicate_boxes():
+    boxes = [
+        {"s": "97.1", "box": [0, 0, 100, 40], "conf": 0.95},
+        {"s": "1", "box": [80, 5, 95, 35], "conf": 0.6},
+    ]
+    assert [box["s"] for box in sheet_scan._dedup(boxes)] == ["97.1"]
+
+
+def test_ocr_cell_value_keeps_adjacent_handwriting_lines():
+    boxes = [
+        {"s": "第一行内容", "box": [0, 0, 200, 80], "conf": 0.9},
+        {"s": "第二行内容", "box": [0, 70, 200, 140], "conf": 0.9},
+    ]
+    assert sheet_scan._cell_value(boxes, "", "") == ("第一行内容第二行内容", 0.9)
+
+
+def test_ocr_read_cells_honors_cell_inset(monkeypatch):
+    sheet = np.full((100, 100, 3), 255, np.uint8)
+    seen = []
+
+    def fake_ocr(crop):
+        seen.append(crop.shape)
+        return [{"s": "整格", "box": [0, 0, 10, 10], "conf": 1.0}]
+
+    monkeypatch.setattr(sheet_scan, "ocr", fake_ocr)
+    cell = {"field": "f", "label": "", "rect": [0.0, 0.0, 1.0, 1.0], "inset": 0.0}
+    values, detail = sheet_scan.read_cells(sheet, [cell], 100)
+
+    assert values == {"f": "整格"}
+    assert detail[0]["rect"] == [0, 0, 100, 100]
+    assert seen == [(132, 132, 3)]  # 100×100 整格再加 16 像素白边
+
+
 def test_ocr_converts_rapidocr_output_to_boxes(resources):
     resources.engine = lambda image: ocr_result(
         ([[10, 10], [300, 10], [300, 40], [10, 40]], "监理单位：测试公司", 0.99),

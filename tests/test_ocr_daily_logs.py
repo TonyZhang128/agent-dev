@@ -1,7 +1,7 @@
-"""`POST /ocr/daily-logs` 的识别链路、来源校验和错误映射。
+"""`POST /ocr/daily-logs` 的识别链路、业务映射、来源校验和错误映射。
 
 离线用例模拟 RapidOCR 边界，照片由测试生成，不读取模板库或数据池。
-监理日志的固定栏目按 JLB13 表样裁剪，后处理函数当前只是占位。
+监理日志的固定栏目按现场《监理日记》表样裁剪，`process()` 负责映射业务结构。
 """
 
 import base64
@@ -21,12 +21,15 @@ TEXTS = (
     "JL-001",
     "测试监理机构",
     "张三",
+    "晴",
+    "专业监理工程师",
     "2026年10月3日",
     "李四",
-    "晴",
     "路基填筑 100m",
+    "旁站检查 2 次",
     "巡视检查",
     "无",
+    "继续填筑",
 )
 
 
@@ -90,14 +93,39 @@ def test_daily_logs_recognizes_regions_and_returns_draft_contract(client, settin
         "number": "JL-001",
         "supervision_org": "测试监理机构",
         "recorder": "张三",
+        "weather": "晴",
+        "position": "专业监理工程师",
         "date": "2026-10-03",
         "reviewer": "李四",
-        "weather": "晴",
         "construction": "路基填筑100m",
-        "supervision_work": "巡视检查",
+        "witness": "旁站检查2次",
+        "patrol": "巡视检查",
         "issues": "无",
+        "next_day_plan": "继续填筑",
     }
-    assert data["processed"] == {}
+    assert data["processed"] == {
+        "taskId": None,
+        "documentType": "supervision_diary",
+        "common": {
+            "projectName": "测试高速公路项目",
+            "documentNo": "JL-001",
+            "supervisionOrg": "测试监理机构",
+            "recorderName": "张三",
+            "recorderPosition": "专业监理工程师",
+            "weather": "晴",
+            "logDate": "2026-10-03",
+            "reviewerName": "李四",
+        },
+        "fields": {
+            "mainWork": {
+                "construction": "路基填筑100m",
+                "witness": "旁站检查2次",
+                "patrol": "巡视检查",
+            },
+            "issues": "无",
+            "nextDayPlan": "继续填筑",
+        },
+    }
     assert data["warning"] == ""
     assert data["image"] == {"width": 600, "height": 849}
     assert data["frame"]["how"] == "contour"
@@ -176,5 +204,42 @@ def test_daily_log_warp_anchors_table_frame_to_known_page_rectangle():
     assert table_destination[2].tolist() == pytest.approx([x1 * daily_logs.W, y1 * height])
 
 
-def test_daily_log_processing_is_reserved():
-    assert daily_logs.process({"date": "2026-10-03"}, []) == {}
+def test_daily_logs_echoes_task_id(client, settings):
+    write_photo(settings)
+    client.app.state.ocr_resources.engine = SequentialEngine()
+
+    response = client.post("/ocr/daily-logs", json={"path": "log.png", "taskId": " 42 "})
+
+    assert response.status_code == 200
+    assert response.json()["data"]["processed"]["taskId"] == "42"
+
+
+def test_process_maps_recognized_and_leaves_missing_fields_null():
+    processed = daily_logs.process(
+        {"project": " 项目 ", "date": "2026-10-03", "witness": "旁站"},
+        [],
+        "42",
+    )
+
+    assert processed["taskId"] == "42"
+    assert processed["documentType"] == "supervision_diary"
+    assert processed["common"]["projectName"] == "项目"
+    assert processed["common"]["documentNo"] is None
+    assert processed["fields"]["mainWork"] == {
+        "construction": None,
+        "witness": "旁站",
+        "patrol": None,
+    }
+    assert processed["fields"]["nextDayPlan"] is None
+
+
+def test_process_returns_null_fields_for_empty_recognition():
+    processed = daily_logs.process({}, [])
+
+    assert processed["taskId"] is None
+    assert all(value is None for value in processed["common"].values())
+    assert processed["fields"] == {
+        "mainWork": {"construction": None, "witness": None, "patrol": None},
+        "issues": None,
+        "nextDayPlan": None,
+    }

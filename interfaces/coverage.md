@@ -30,6 +30,7 @@
 | 本地依赖诊断 | `GET /diagnostics` | `app/api/system.py`、`app/ocr/core/deps.py` | pending-review | Java `DocsvcClient` 原调用 `/health/deps`，需同步改为 `/diagnostics` |
 | 普通照片/简表识别 | `POST /ocr/recognize` | `app/api/ocr.py`、`app/ocr/form_ocr.py` | pending-review | Java 调用；2 分钟超时 |
 | 监理日志识别 | `POST /ocr/daily-logs` | `app/api/ocr.py`、`app/ocr/daily_logs.py` | pending-review | 未观察到 Java 调用 |
+| 监理日志识别（新版链路） | `POST /ocr/daily-logs-new` | `app/api/ocr.py`、`app/ocr/journal/` | pending-review | 独立实现；返回结构与旧接口相同 |
 | 简表识别与填表 | `POST /ocr/jianbiao` | `app/api/ocr.py`、`app/ocr/jianbiao.py` | pending-review | Java 调用；2 分钟超时 |
 | 公式与填表 | `POST /ocr/fill` | `app/api/ocr.py`、`app/ocr/jianbiao.py`、`app/ocr/grid.py` | pending-review | Java 调用；30 秒超时；`out` 可空 |
 | 表样预览 | `GET /ocr/blank/{form}.png` | `app/api/ocr.py` | pending-review | Java 读取原始 PNG |
