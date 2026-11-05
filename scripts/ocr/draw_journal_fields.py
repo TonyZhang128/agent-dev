@@ -1,7 +1,7 @@
 """把 FIELD_SPECS 画到校正页和原照片上，便于人工核对栏目坐标。
 
 不调用 OCR 模型，只复用读图和表格定位：
-    uv run --locked python -m scripts.ocr.draw_journal_fields jl1.jpg
+    uv run --locked python -m scripts.ocr.draw_journal_fields app/ocr/resources/jl1.jpg
     uv run --locked python -m scripts.ocr.draw_journal_fields ./photos/a.jpg --photo-output /tmp/a-fields.png
 
 输出默认写到 Git 忽略的 verification/ocr/，红色线框为检测到的表格外框。
@@ -130,8 +130,8 @@ def main(argv: list[str] | None = None) -> int:
         "photo",
         nargs="?",
         type=Path,
-        default=Path("jl1.jpg"),
-        help="样例照片；默认当前目录的 jl1.jpg。",
+        default=Path("app/ocr/resources/jl1.jpg"),
+        help="样例照片；默认 app/ocr/resources/jl1.jpg。",
     )
     parser.add_argument(
         "--page-output",

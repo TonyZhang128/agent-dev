@@ -2,7 +2,7 @@
 
 示例：
     uv run --locked python -m scripts.ocr.bench_journal ./photos
-    uv run --locked python -m scripts.ocr.bench_journal ./jl1.jpg --output /tmp/result.json
+    uv run --locked python -m scripts.ocr.bench_journal app/ocr/resources/jl1.jpg --output /tmp/result.json
 
 脚本只做批量调用和结果归档，不读取模板、不修改数据池；真实识别需要可用的
 OCR 模型目录和 OCR_DEVICE 配置。

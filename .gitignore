@@ -32,3 +32,6 @@ skills
 .vscode/
 
 data/ocr/imgs/
+
+# OCR 本地样例照片与识别输出，不入库。
+app/ocr/resources/
