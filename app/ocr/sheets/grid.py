@@ -14,7 +14,9 @@ import cv2
 import numpy as np
 import openpyxl
 import pymupdf
+from openpyxl.cell.cell import Cell
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.worksheet import Worksheet
 
 from app.ocr.core.cv import line_mask
 from app.ocr.core.layouts import layout_of
@@ -22,6 +24,11 @@ from app.ocr.core.media import open_form_pdf, visible_chars
 from app.ocr.core.resources import asset, forms, resource_cache
 
 PX = 1400  # 渲染宽度(像素)
+
+# 表样格子的最小尺寸与填充率：过滤页边空白、线交叉碎块和不规则区域。
+MIN_CELL_WIDTH_PX = 15
+MIN_CELL_HEIGHT_PX = 12
+MIN_CELL_FILL_RATIO = 0.6
 
 
 def _text(s: str) -> str:
@@ -47,7 +54,7 @@ def cells(code: str) -> tuple:
     return tuple(out)
 
 
-def _page_cells(pg) -> list:
+def _page_cells(pg: pymupdf.Page) -> list[dict]:
     """表样一页的格子(未排序):横竖框线 → 封闭格,格内文字取 PDF 内容流顺序"""
     W, H = pg.rect.width, pg.rect.height
     z = PX / W
@@ -72,9 +79,9 @@ def _page_cells(pg) -> list:
             or y == 0
             or x + cw >= w
             or y + ch >= h
-            or cw < 15
-            or ch < 12
-            or area < 0.6 * cw * ch
+            or cw < MIN_CELL_WIDTH_PX
+            or ch < MIN_CELL_HEIGHT_PX
+            or area < MIN_CELL_FILL_RATIO * cw * ch
         ):
             continue
         r = pymupdf.Rect(x / z, y / z, (x + cw) / z, (y + ch) / z)
@@ -272,7 +279,7 @@ def grid_rects(code: str) -> dict:
 # ───────── Excel:按 PDF 上的位置换算到表样 Excel 的单元格 ─────────
 
 
-def _edges(ws):
+def _edges(ws: Worksheet) -> tuple[list[float], list[float]]:
     """Excel 列 / 行的累计边界(列宽按字符、行高按磅,只用来比例换算)"""
     dw = ws.sheet_format.defaultColWidth or 8.43
     dh = ws.sheet_format.defaultRowHeight or 15
@@ -293,7 +300,7 @@ def _edges(ws):
     return cols, rows
 
 
-def _bordered(ws):
+def _bordered(ws: Worksheet) -> tuple[int, int, int, int] | None:
     """有框线的单元格范围(表格主体)"""
     r0 = c0 = 10**6
     r1 = c1 = 0
@@ -317,7 +324,7 @@ def _find(edges: list[float], v: float) -> int:
     return len(edges) - 1
 
 
-def _norm(s) -> str:
+def _norm(s: object) -> str:
     return re.sub(r"[\s□☐_＿:：()（）]", "", str(s or ""))[:6]
 
 
@@ -372,13 +379,13 @@ def fill_xlsx(code: str, values: list[dict], excel_anchors: dict, out: Path) -> 
     ex0, ex1, ey0, ey1 = cols[c0 - 1], cols[c1], rows[r0 - 1], rows[r1]
     merged = list(ws.merged_cells.ranges)
 
-    def span(cell):
+    def span(cell: Cell) -> tuple[int, int, int, int]:
         for m in merged:
             if cell.coordinate in m:
                 return m.min_row, m.min_col, m.max_row, m.max_col
         return cell.row, cell.column, cell.row, cell.column
 
-    def top_left(cell):
+    def top_left(cell: Cell) -> Cell:
         r, c, _, _ = span(cell)
         return ws.cell(r, c)
 
@@ -455,4 +462,4 @@ if __name__ == "__main__":  # 自检:python -m app.ocr.sheets.grid JB12-8.3.1-1
 
     for c in sys.argv[1:]:
         s = sheet(c)
-        print(c, len(s), json.dumps(s[:6], ensure_ascii=False))
+        print(c, len(s), json.dumps(s[:6], ensure_ascii=False))  # noqa: T201

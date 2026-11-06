@@ -143,12 +143,12 @@ class ModelService:
             timeout=5,
         )
         response.raise_for_status()
-        data = response.json()
-        if not isinstance(data, dict) or not isinstance(data.get("data"), list):
+        payload = response.json()
+        if not isinstance(payload, dict) or not isinstance(payload.get("data"), list):
             raise ValueError("model server returned invalid model metadata")
         return any(
             isinstance(item, dict) and item.get("id") == self.settings.llm_model
-            for item in data["data"]
+            for item in payload["data"]
         )
 
     async def close(self) -> None:
@@ -164,6 +164,6 @@ class ModelService:
         """尝试清理，但不覆盖启动/关闭错误或取消信号。"""
         try:
             self.http_client.close()
-        except BaseException as exc:
+        except BaseException as exc:  # noqa: BLE001 —— 清理不能丢失取消信号或原始异常
             # 传输异常文本可能包含提供方或请求细节。
             logger.warning("Synchronous model HTTP client cleanup failed (%s)", type(exc).__name__)

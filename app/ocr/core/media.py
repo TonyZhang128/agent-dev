@@ -13,7 +13,14 @@ import pymupdf
 from app.ocr.core.resources import asset, forms
 
 
-def read_image(path: Path):
+def strip_data_url_prefix(data: str) -> str:
+    """去掉 data:image/...;base64, 之类的前缀，保留纯编码内容。"""
+    if data.startswith("data:") and "," in data:
+        return data.split(",", 1)[1]
+    return data
+
+
+def read_image(path: Path) -> np.ndarray:
     img = cv2.imdecode(
         np.fromfile(str(path), np.uint8), cv2.IMREAD_COLOR
     )  # 中文路径不能用 cv2.imread
@@ -22,18 +29,16 @@ def read_image(path: Path):
     return img
 
 
-def decode_base64_image(data: str):
+def decode_base64_image(data: str) -> np.ndarray:
     """base64 图片 -> BGR 图像；兼容 data:image/jpeg;base64,... 前缀。"""
-    if data.startswith("data:") and "," in data:
-        data = data.split(",", 1)[1]
-    buffer = np.frombuffer(base64.b64decode(data), dtype=np.uint8)
+    buffer = np.frombuffer(base64.b64decode(strip_data_url_prefix(data)), dtype=np.uint8)
     img = cv2.imdecode(buffer, cv2.IMREAD_COLOR)
     if img is None:
         raise ValueError("不是可识别的图片:base64 内容无效")
     return img
 
 
-def load_image(path: Path | None, img: str = ""):
+def load_image(path: Path | None, img: str = "") -> np.ndarray:
     """照片路径与 base64 图片至少提供一个；同时提供时优先用 base64。"""
     if img:
         return decode_base64_image(img)
@@ -42,7 +47,7 @@ def load_image(path: Path | None, img: str = ""):
     return read_image(path)
 
 
-def visible_chars(pg) -> Generator[tuple, None, None]:
+def visible_chars(pg: pymupdf.Page) -> Generator[tuple, None, None]:
     """页面上看得见的字(texttrace type 0 填充 / 1 描边),按内容流顺序逐个 yield 字元组。
 
     type 3 是扫描件叠的隐藏文字层，有错字、重复，拼进栏目名会出错，一律跳过。"""

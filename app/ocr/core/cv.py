@@ -9,7 +9,7 @@ import cv2
 import numpy as np
 
 
-def binarize(gray, block: int = 25, c: int = 10):
+def binarize(gray: np.ndarray, block: int = 25, c: int = 10) -> np.ndarray:
     """灰度图 → 前景为白的自适应阈值图。
 
     自适应阈值灰度
@@ -22,7 +22,7 @@ def binarize(gray, block: int = 25, c: int = 10):
     )
 
 
-def line_mask(bw, kw: int, kh: int):
+def line_mask(bw: np.ndarray, kw: int, kh: int) -> np.ndarray:
     """横竖框线掩码：横线核 (kw,1) 与竖线核 (1,kh) 的开运算合并后膨胀 3×3。
 
     开运算只保留容纳得下细长核的连续笔画，文字和短笔画被滤除；膨胀把断开的

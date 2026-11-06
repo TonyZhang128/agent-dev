@@ -27,6 +27,12 @@ from app.schemas.ocr import DailyLogsReq, FillReq, JianbiaoReq, JournalReq, Reco
 
 router = APIRouter(tags=["ocr"])
 
+DEFAULT_BLANK_WIDTH = 1400
+MAX_BLANK_WIDTH = 2400
+BLANK_CACHE_SECONDS = 3600
+
+PhotoRequest = RecognizeReq | DailyLogsReq | JournalReq | JianbiaoReq
+
 
 @contextmanager
 def document_resources(request: Request) -> Generator[OCRResources, None, None]:
@@ -64,76 +70,74 @@ def project_path(resources: OCRResources, relative: str, *, output: bool = False
 
 
 def relative_outputs(result: dict, resources: OCRResources) -> dict:
+    """把数据池内的绝对输出路径转换为相对路径，返回新字典，不修改入参。"""
+    converted = dict(result)
     for key in ("pdf", "xlsx"):
-        if result.get(key):
-            result[key] = Path(result[key]).resolve().relative_to(resources.projects).as_posix()
-    return result
+        if converted.get(key):
+            converted[key] = (
+                Path(converted[key]).resolve().relative_to(resources.projects).as_posix()
+            )
+    return converted
 
 
-@router.post("/ocr/recognize")
-def recognize(req: RecognizeReq, request: Request):
+def photo_input(req: PhotoRequest, resources: OCRResources) -> tuple[Path | None, str]:
+    """base64 图片优先；否则校验并返回数据池内的照片路径。"""
+    if req.img:
+        return None, req.img
+    path = project_path(resources, req.path)
+    if not path.is_file():
+        raise HTTPException(400, "照片必须为数据池内的文件")
+    return path, ""
+
+
+def elapsed_ms(started: float) -> int:
+    return round((time.monotonic() - started) * 1000)
+
+
+@router.post("/ocr/recognize", response_model=None)
+def recognize(req: RecognizeReq, request: Request) -> dict:
     with document_resources(request) as resources:
         started = time.monotonic()
-        if req.img:
-            result = form_ocr.recognize(None, req.form.strip(), req.img)
-        else:
-            path = project_path(resources, req.path)
-            if not path.is_file():
-                raise HTTPException(400, "照片必须为数据池内的文件")
-            result = form_ocr.recognize(path, req.form.strip())
-        result["ms"] = round((time.monotonic() - started) * 1000)
+        path, img = photo_input(req, resources)
+        result = form_ocr.recognize(path, req.form.strip(), img)
+        result["ms"] = elapsed_ms(started)
         return {"status": 200, "data": result}
 
 
-@router.post("/ocr/daily-logs")
-def daily_logs_recognize(req: DailyLogsReq, request: Request):
+@router.post("/ocr/daily-logs", response_model=None)
+def daily_logs_recognize(req: DailyLogsReq, request: Request) -> dict:
     with document_resources(request) as resources:
         started = time.monotonic()
-        if req.img:
-            result = daily_logs.run(None, req.img, req.task_id)
-        else:
-            path = project_path(resources, req.path)
-            if not path.is_file():
-                raise HTTPException(400, "照片必须为数据池内的文件")
-            result = daily_logs.run(path, task_id=req.task_id)
-        result["ms"] = round((time.monotonic() - started) * 1000)
+        path, img = photo_input(req, resources)
+        result = daily_logs.run(path, img, req.task_id)
+        result["ms"] = elapsed_ms(started)
         return {"status": 200, "data": result}
 
 
-@router.post("/ocr/daily-logs-new")
-def journal_recognize(req: JournalReq, request: Request):
+@router.post("/ocr/daily-logs-new", response_model=None)
+def journal_recognize(req: JournalReq, request: Request) -> dict:
     """新版监理日志识别：单次整页 OCR + 固定栏目匹配，不读取旧识别链。"""
     with document_resources(request) as resources:
         started = time.monotonic()
-        if req.img:
-            result = journal.read_photo(None, req.img, req.task_id)
-        else:
-            path = project_path(resources, req.path)
-            if not path.is_file():
-                raise HTTPException(400, "照片必须为数据池内的文件")
-            result = journal.read_photo(path, task_id=req.task_id)
-        result["ms"] = round((time.monotonic() - started) * 1000)
+        path, img = photo_input(req, resources)
+        result = journal.read_photo(path, img, req.task_id)
+        result["ms"] = elapsed_ms(started)
         return {"status": 200, "data": result}
 
 
-@router.post("/ocr/jianbiao")
-def jianbiao_fill(req: JianbiaoReq, request: Request):
+@router.post("/ocr/jianbiao", response_model=None)
+def jianbiao_fill(req: JianbiaoReq, request: Request) -> dict:
     with document_resources(request) as resources:
         output = project_path(resources, req.out, output=True) if req.out else None
         started = time.monotonic()
-        if req.img:
-            result = run(None, req.form.strip(), req.cfg, req.bound, output, req.img)
-        else:
-            path = project_path(resources, req.path)
-            if not path.is_file():
-                raise HTTPException(400, "照片必须为数据池内的文件")
-            result = run(path, req.form.strip(), req.cfg, req.bound, output)
-        result["ms"] = round((time.monotonic() - started) * 1000)
+        path, img = photo_input(req, resources)
+        result = run(path, req.form.strip(), req.cfg, req.bound, output, img)
+        result["ms"] = elapsed_ms(started)
         return {"status": 200, "data": relative_outputs(result, resources)}
 
 
-@router.post("/ocr/fill")
-def fill(req: FillReq, request: Request):
+@router.post("/ocr/fill", response_model=None)
+def fill(req: FillReq, request: Request) -> dict:
     with document_resources(request) as resources:
         output = project_path(resources, req.out, output=True) if req.out else None
         result = compute(req.form.strip(), req.cfg, req.values, output, req.rects)
@@ -141,24 +145,28 @@ def fill(req: FillReq, request: Request):
 
 
 @router.get("/ocr/blank/{form}.png")
-def blank(form: str, request: Request, width: Annotated[int, Query(ge=1)] = 1400):
+def blank(
+    form: str,
+    request: Request,
+    width: Annotated[int, Query(ge=1)] = DEFAULT_BLANK_WIDTH,
+) -> Response:
     with document_resources(request) as resources:
         template = forms().get(form.strip()) or {}
         if not template.get("pdf"):
             raise HTTPException(404, f"模板库没有 {form} 的表样 PDF")
         with pymupdf.open(resources.asset(template["pdf"][0])) as document:
             page = document[0]
-            scale = min(width, 2400) / page.rect.width
+            scale = min(width, MAX_BLANK_WIDTH) / page.rect.width
             pixmap = page.get_pixmap(matrix=pymupdf.Matrix(scale, scale), alpha=False)
             return Response(
                 pixmap.tobytes("png"),
                 media_type="image/png",
-                headers={"Cache-Control": "max-age=3600"},
+                headers={"Cache-Control": f"max-age={BLANK_CACHE_SECONDS}"},
             )
 
 
-@router.get("/ocr/sheet/{form}")
-def sheet(form: str, request: Request):
+@router.get("/ocr/sheet/{form}", response_model=None)
+def sheet(form: str, request: Request) -> dict:
     with document_resources(request):
         if not (forms().get(form.strip()) or {}).get("pdf"):
             raise HTTPException(404, f"模板库没有 {form} 的表样 PDF")

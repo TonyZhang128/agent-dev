@@ -9,6 +9,7 @@
 业务端人工改值后也走 compute；照片识别链路见 jianbiao.py，格子提取见 grid.py。
 """
 
+import logging
 import math
 import re
 from pathlib import Path
@@ -23,6 +24,8 @@ from app.ocr.sheets import grid
 FONT = Path(
     "C:/Windows/Fonts/simhei.ttf"
 )  # 填表用黑体;Docker(Linux)里没有就用 PyMuPDF 自带的 china-s
+
+logger = logging.getLogger(__name__)
 
 
 # ───────── 公式求值（与 admin/src/config/engine.jsx 同一套） ─────────
@@ -117,6 +120,7 @@ def evaluate(cfg: dict, inputs: dict) -> tuple[dict, dict]:
                 {"__builtins__": {}, **FNS, "_v": lambda k: _num(values.get(k))},
             )
         except Exception as e:  # noqa: BLE001 —— 单条公式出错只影响它自己
+            logger.warning("公式计算失败：%s (%s)", f["target"], type(e).__name__)
             errors[f["target"]] = str(e)
             values[f["target"]] = None
     return values, errors

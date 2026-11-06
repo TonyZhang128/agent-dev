@@ -9,13 +9,13 @@ from app.ocr.core import deps
 router = APIRouter()
 
 
-@router.get("/health")
-async def health():
+@router.get("/health", response_model=None)
+async def health() -> dict:
     return {"status": "ok"}
 
 
-@router.get("/ready")
-async def ready(request: Request):
+@router.get("/ready", response_model=None)
+async def ready(request: Request) -> dict:
     try:
         available = await request.app.state.model_service.ready()
     except (APIConnectionError, APIStatusError, httpx.HTTPError, ValueError):
@@ -25,8 +25,8 @@ async def ready(request: Request):
     return {"status": "ready"}
 
 
-@router.get("/diagnostics")
-def diagnostics(request: Request):
+@router.get("/diagnostics", response_model=None)
+def diagnostics(request: Request) -> dict:
     """检查本地依赖与 OCR 资源；始终返回 200，由 data.ok/warnings 表达结果。"""
     resources = getattr(request.app.state, "ocr_resources", None)
     return {"status": 200, "data": deps.check(resources)}

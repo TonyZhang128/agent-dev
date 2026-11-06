@@ -22,18 +22,27 @@ from app.ocr.core.resources import forms, resource_cache
 from app.ocr.form.labels import B1, JB
 
 # 字段 → (栏目正则, 第几个同名栏目):第二册 / 第一册 版面生成时用的同一套栏目正则(两册同一字段的栏目名不同,如标段 / 合同段)
+_JB_LABELS = {field: (rx, 0) for rx, field, *_ in JB}
+_B1_LABELS = {field: (rx, nth or 0) for rx, field, _, _, nth in B1}
 LABELS = {
-    "jb12": {field: (rx, 0) for rx, field, *_ in JB},
-    "book1": {field: (rx, nth or 0) for rx, field, _, _, nth in B1},
-}
-LABELS["any"] = {
-    **LABELS["book1"],
-    **{k: v for k, v in LABELS["jb12"].items() if k not in LABELS["book1"]},
+    "jb12": _JB_LABELS,
+    "book1": _B1_LABELS,
+    "any": {**_B1_LABELS, **{k: v for k, v in _JB_LABELS.items() if k not in _B1_LABELS}},
 }
 ANY_LABEL = re.compile(
     "|".join(f"(?:{rx})" for rx, _ in [*LABELS["jb12"].values(), *LABELS["book1"].values()])
 )
 DATE = re.compile(r"date$")
+
+# 照片与表样对齐阈值：锚点不足或比例不符时退回按栏目文字取值。
+MIN_ANCHOR_PAIRS = 3
+MIN_SCALE_ANCHORS = 4
+ANCHOR_SPREAD = 0.05
+ANCHOR_ERROR_RATIO = 0.01
+OUTLIER_FACTOR = 3.0
+PHOTO_BASELINE_RATIO = 0.8
+MIN_ASPECT_RATIO = 0.75
+MAX_ASPECT_RATIO = 1.33
 
 
 def norm(s: str) -> str:
@@ -51,7 +60,7 @@ def page_aspect(code: str) -> float:
 
 
 @resource_cache(maxsize=256)
-def template_runs(code: str) -> tuple:
+def template_runs(code: str) -> tuple[tuple[str, float, float, float], ...]:
     """表样 PDF 上印好的文字,按行合并成段:((文字, x0, 基线 y, x1), …),页面百分比。
     只取看得见的字(visible_chars);文字层是一个字一项(粗体还会填充 + 描边画两遍),
     同一行相邻的字间距 < 0.02 页宽算一段。"""
@@ -87,7 +96,7 @@ def template_runs(code: str) -> tuple:
     return tuple(r for r in runs if norm(r[0]))
 
 
-def fit(code: str, boxes: list[dict], size) -> dict:
+def fit(code: str, boxes: list[dict], size: tuple[int, int]) -> dict:
     """表样(页面百分比)→ 照片(像素)的换算 { ax, bx, ay, by, anchors, how }"""
     runs = template_runs(code)
     uniq = {}
@@ -107,33 +116,38 @@ def fit(code: str, boxes: list[dict], size) -> dict:
             k = max(hit, key=len)
             r = uniq[k][0]
             x0, y0, x1, y1 = b["box"]
-            pairs.append((k, r[1], r[2], x0, y0 + (y1 - y0) * 0.8))  # 照片取框下沿附近,对表样的基线
+            # 照片取框下沿附近,对表样的基线
+            pairs.append((k, r[1], r[2], x0, y0 + (y1 - y0) * PHOTO_BASELINE_RATIO))
     seen = {}
     for p in pairs:
         seen.setdefault(p[0], []).append(p)
     pairs = [v[0] for v in seen.values() if len(v) == 1]  # 照片里同一段文字出现多次的不作锚点
 
-    def lsq(src, dst):
+    def lsq(src: np.ndarray, dst: np.ndarray) -> np.ndarray:
         A = np.vstack([src, np.ones(len(src))]).T
         return np.linalg.lstsq(A, dst, rcond=None)[0]
 
-    if len(pairs) >= 3:
+    if len(pairs) >= MIN_ANCHOR_PAIRS:
         P = np.array([p[1:] for p in pairs], float)
         keep = np.ones(len(P), bool)
         for _ in range(3):  # 反复剔除残差大的配对(同字不同栏)
-            if keep.sum() < 3 or np.ptp(P[keep, 0]) < 0.05 or np.ptp(P[keep, 1]) < 0.05:
+            if (
+                keep.sum() < MIN_ANCHOR_PAIRS
+                or np.ptp(P[keep, 0]) < ANCHOR_SPREAD
+                or np.ptp(P[keep, 1]) < ANCHOR_SPREAD
+            ):
                 break
             ax, bx = lsq(P[keep, 0], P[keep, 2])
             ay, by = lsq(P[keep, 1], P[keep, 3])
             err = np.hypot(P[:, 0] * ax + bx - P[:, 2], P[:, 1] * ay + by - P[:, 3])
-            lim = max(np.median(err[keep]) * 3, size[1] * 0.01)
+            lim = max(np.median(err[keep]) * OUTLIER_FACTOR, size[1] * ANCHOR_ERROR_RATIO)
             if (err[keep] <= lim).all():
                 # 照片横竖比例应与表样页面一致(拍照有透视,放宽到 ±25%);对不上 = 照片不是这张表
                 if (
                     ax > 0
                     and ay > 0
-                    and keep.sum() >= 4
-                    and 0.75 < (ay / ax) / page_aspect(code) < 1.33
+                    and keep.sum() >= MIN_SCALE_ANCHORS
+                    and MIN_ASPECT_RATIO < (ay / ax) / page_aspect(code) < MAX_ASPECT_RATIO
                 ):
                     return {
                         "ax": ax,
@@ -149,13 +163,13 @@ def fit(code: str, boxes: list[dict], size) -> dict:
     return {"anchors": len(pairs), "how": "mismatch"}
 
 
-def _join(bs):
+def _join(bs: list[dict]) -> str:
     return " ".join(
         b["s"] for b in sorted(bs, key=lambda b: (round(b["box"][1] / 20), b["box"][0]))
     ).strip()
 
 
-def _conf(bs):
+def _conf(bs: list[dict]) -> float:
     return round(sum(b["conf"] for b in bs) / len(bs), 3) if bs else 0.0
 
 
@@ -163,7 +177,9 @@ def _clean(s: str) -> str:
     return re.sub(r"^[\s:：_＿]+|[\s_＿]+$", "", s or "")
 
 
-def label_hits(labels: dict, field: str, boxes: list[dict]):
+def label_hits(
+    labels: dict, field: str, boxes: list[dict]
+) -> tuple[dict | None, re.Match[str] | None]:
     """照片里该字段的栏目框(同名栏目按从上到下、从左到右取第 nth 个)"""
     if field not in labels:
         return None, None
@@ -177,7 +193,7 @@ def label_hits(labels: dict, field: str, boxes: list[dict]):
     return hits[nth] if len(hits) > nth else (None, None)
 
 
-def inline_value(b, m) -> str:
+def inline_value(b: dict, m: re.Match[str]) -> str:
     """「监理单位：四川…」→ 栏目后面的文字(按原文去掉栏目,保留原文的空格)"""
     s, k = b["s"], 0
     for i, ch in enumerate(s):  # 原文里第 m.end() 个非空白 / 冒号 / 下划线字符之后
@@ -188,7 +204,7 @@ def inline_value(b, m) -> str:
     return ""
 
 
-def right_value(lab, boxes, printed):
+def right_value(lab: dict, boxes: list[dict], printed: set[str]) -> dict | None:
     x0, y0, x1, y1 = lab["box"]
     h = y1 - y0
     row = [
@@ -233,7 +249,7 @@ def recognize(path: Path | None, code: str, img: str = "") -> dict:
         )
     used, out, detail = set(), {}, []
 
-    def in_rect(rect, grow=0.15):
+    def in_rect(rect: list[float], grow: float = 0.15) -> list[dict]:
         x, y, w, h = rect
         X0, Y0 = x * tf["ax"] + tf["bx"], y * tf["ay"] + tf["by"]
         X1, Y1 = (x + w) * tf["ax"] + tf["bx"], (y + h) * tf["ay"] + tf["by"]

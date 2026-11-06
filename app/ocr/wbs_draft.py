@@ -15,13 +15,15 @@ import base64
 import binascii
 import re
 from pathlib import Path
+from typing import Any
 
 import pymupdf
 
+from app.ocr.core.media import strip_data_url_prefix
 from app.ocr.core.resources import OCRResourceError, get_resources
 
 
-def rules() -> dict:
+def rules() -> dict[str, Any]:
     return get_resources().load("refs/wbs_rules.json")
 
 
@@ -29,7 +31,7 @@ def cues() -> dict[str, re.Pattern[str]]:
     return {key: re.compile(value) for key, value in rules()["drawingCues"].items()}
 
 
-def chainage_m(s: str):
+def chainage_m(s: str) -> float | None:
     """K3+895.108 → 3895.108(米);ZK0+214.642 → 214.642"""
     m = re.search(r"K(\d+)\+(\d+(?:\.\d+)?)", s or "")
     return int(m.group(1)) * 1000 + float(m.group(2)) if m else None
@@ -40,10 +42,8 @@ def decode_base64_pdf(data: str) -> bytes:
 
     base64 数据本身无效时抛出 ValueError，由接口层返回明确的 400。
     """
-    if data.startswith("data:") and "," in data:
-        data = data.split(",", 1)[1]
     try:
-        return base64.b64decode(data)
+        return base64.b64decode(strip_data_url_prefix(data))
     except binascii.Error as exc:
         raise ValueError("imgs 项不是有效的 base64 数据") from exc
 
@@ -91,7 +91,7 @@ def lines_of(text: str) -> list[str]:
     return [ln.strip() for ln in text.split("\n") if ln.strip()]
 
 
-def read_drawing(source: Path | bytes) -> dict:
+def read_drawing(source: Path | bytes) -> dict[str, Any]:
     pages = pdf_text(source, max_pages=12)
     info = {"file": "base64.pdf" if isinstance(source, bytes) else source.name, "src": []}
     cover = lines_of(pages[0][1]) if pages else []
@@ -164,7 +164,7 @@ def read_drawing(source: Path | bytes) -> dict:
     return info
 
 
-def k(m):
+def k(m: float | None) -> str:
     """3895.108 → K3+895.108"""
     if m is None:
         return ""
@@ -179,7 +179,7 @@ def bridge_units(b: dict, prefix: str, no: int) -> list[dict]:
     title = f"{k(b['chainage'][0]) + ' ' if b.get('chainage') else ''}{b['name']}"
     parts, pi = [], 0
 
-    def part(t, items):
+    def part(t: str, items: list[str]) -> dict[str, Any]:
         nonlocal pi
         pi += 1
         pc = f"{code}-{pi}"
@@ -218,7 +218,7 @@ def bridge_units(b: dict, prefix: str, no: int) -> list[dict]:
     return [{"code": code, "title": title, "src": b["src"], "children": parts}]
 
 
-def road_units(rng, prefix: str, start_no: int = 1) -> list[dict]:
+def road_units(rng: tuple[float, float] | None, prefix: str, start_no: int = 1) -> list[dict]:
     """路段 [起, 止](米)→ 路基 / 路面单位工程(≤10 km 一个),分部每 ≤3 km"""
     if not rng:
         return []
@@ -268,7 +268,7 @@ def road_units(rng, prefix: str, start_no: int = 1) -> list[dict]:
 
 def draft(
     prefix: str, drawings: list[Path], imgs: list[str] | None = None, basis: dict | None = None
-) -> dict:
+) -> dict[str, Any]:
     """prefix = 合同段编码前缀(如 S210);drawings = 施工图(PDF 文件或单页拆分目录);
     imgs = base64 编码的 PDF 数据列表;basis = 工可解析出的指标(roads.basis)。
     """

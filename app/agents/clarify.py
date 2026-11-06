@@ -6,6 +6,7 @@ from typing import Any
 from langchain_core.messages import AnyMessage
 
 from app.agents.base import BaseAgent
+from app.llm import ModelService
 from app.schemas.agents import ChatResponse, ClarifyRequest
 
 
@@ -13,8 +14,8 @@ class ClarificationAgent(BaseAgent[ClarifyRequest, ChatResponse]):
     name = "intent_business_clarify"
     temperature = 0.2
 
-    def __init__(self, models):
-        super().__init__(models, prompt_name="intent/business_clarify")
+    def __init__(self, model_service: ModelService):
+        super().__init__(model_service, prompt_name="intent/business_clarify")
 
     def messages(self, request: ClarifyRequest) -> list[AnyMessage]:
         content = json.dumps(

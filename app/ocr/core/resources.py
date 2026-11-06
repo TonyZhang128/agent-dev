@@ -7,9 +7,12 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import lru_cache, wraps
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.config import Settings
+
+if TYPE_CHECKING:
+    from rapidocr import RapidOCR
 
 
 class OCRResourceError(Exception):
@@ -29,10 +32,10 @@ class OCRResources:
         self.models = settings.ocr_model_root
         self.device = settings.ocr_device
         self.cuda_root = settings.ocr_cuda_root
-        self.engine: Any = None
+        self.engine: RapidOCR | None = None
         self.lock = threading.Lock()
-        self.caches: dict[Callable, Callable] = {}
-        self._json: dict[str, dict] = {}
+        self.caches: dict[Callable[..., Any], Callable[..., Any]] = {}
+        self._json: dict[str, dict[str, Any]] = {}
 
     def close(self) -> None:
         """释放 ONNX 会话引用和模板缓存；应用停止后不保留昂贵资源。"""
@@ -40,7 +43,7 @@ class OCRResources:
         self.caches.clear()
         self._json.clear()
 
-    def load(self, relative: str) -> dict:
+    def load(self, relative: str) -> dict[str, Any]:
         if relative not in self._json:
             try:
                 data = json.loads((self.templates / relative).read_text(encoding="utf-8"))
@@ -98,12 +101,12 @@ def use_resources(resources: OCRResources) -> Generator[None, None, None]:
         _current.reset(token)
 
 
-def resource_cache(maxsize: int = 128) -> Callable:
+def resource_cache(maxsize: int = 128) -> Callable[..., Any]:
     """缓存随应用资源释放，表号相同而资料不同的应用互不串用。"""
 
-    def decorate(function: Callable) -> Callable:
+    def decorate(function: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(function)
-        def wrapped(*args, **kwargs):
+        def wrapped(*args: Any, **kwargs: Any) -> Any:
             resources = get_resources()
             cached = resources.caches.setdefault(function, lru_cache(maxsize=maxsize)(function))
             return cached(*args, **kwargs)
@@ -113,7 +116,7 @@ def resource_cache(maxsize: int = 128) -> Callable:
     return decorate
 
 
-def forms() -> dict:
+def forms() -> dict[str, Any]:
     return get_resources().load("forms/files.json")["forms"]
 
 

@@ -24,4 +24,6 @@ jobs:
       - run: uv sync --locked --group dev --extra ocr-cpu
       - run: uv run --locked ruff check app tests scripts
       - run: uv run --locked ruff format --check app tests scripts
-      - run: uv run --locked pytest -v
+      - run: uv run --locked pyright
+      - run: uv run --locked python -m scripts.docs.check_openapi
+      - run: uv run --locked pytest -v --cov=app --cov-report=term-missing --cov-fail-under=85

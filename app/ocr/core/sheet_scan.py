@@ -7,6 +7,7 @@ OCR 引擎在 core/engine；读图与文字层原语在 core/media。
 """
 
 import re
+from collections.abc import Callable
 
 import cv2
 import numpy as np
@@ -29,7 +30,7 @@ def _order(pts: np.ndarray) -> np.ndarray:
     )
 
 
-def find_frame(img) -> tuple[np.ndarray, str]:
+def find_frame(img: np.ndarray) -> tuple[np.ndarray, str]:
     """面积最大、占照片 ≥ 20% 的四边形;返回 (四角, how)"""
     h, w = img.shape[:2]
     g = cv2.GaussianBlur(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), (5, 5), 0)
@@ -45,7 +46,7 @@ def find_frame(img) -> tuple[np.ndarray, str]:
     return np.array([[0, 0], [w - 1, 0], [w - 1, h - 1], [0, h - 1]], np.float32), "whole"
 
 
-def find_table(img) -> tuple[np.ndarray, str]:
+def find_table(img: np.ndarray) -> tuple[np.ndarray, str]:
     """先找纸(照片里最大的四边形),校正后在纸里再找表格外框(粗黑框):格子坐标是相对表格外框的。
     返回照片上表格外框的四角;纸里找不到外框就用纸的四角。"""
     paper, how = find_frame(img)
@@ -68,7 +69,11 @@ def find_table(img) -> tuple[np.ndarray, str]:
 # ───────── 定位 + 逐格取值 ─────────
 
 
-def scan(image, cells: list[dict], destination) -> tuple:
+def scan(
+    image: np.ndarray,
+    cells: list[dict],
+    destination: Callable[[np.ndarray, str], tuple[np.ndarray, tuple[int, int]]],
+) -> tuple[np.ndarray, np.ndarray, str, dict, list[dict]]:
     """照片 → 找表格外框 → 透视校正 → 逐格 OCR 的共用识别链。
 
     destination(quad, how) 返回 (目标四角, 输出尺寸):简表锚到宽 W、高 W×aspect
@@ -87,7 +92,7 @@ def _dedup(boxes: list[dict]) -> list[dict]:
     被大框几乎完全盖住的小框去掉。相邻手写行的大框可能互相重叠,只在宽、高都被覆盖
     八成以上时才判为重复,避免把下一行整行删掉。"""
 
-    def inside(a, b):
+    def inside(a: dict, b: dict) -> bool:
         ax0, ay0, ax1, ay1 = a["box"]
         bx0, by0, bx1, by1 = b["box"]
         iw, ih = max(0, min(ax1, bx1) - max(ax0, bx0)), max(0, min(ay1, by1) - max(ay0, by0))
@@ -138,7 +143,7 @@ def _cell_value(boxes: list[dict], label: str, typ: str) -> tuple[str, float]:
     return text, conf
 
 
-def _erase_lines(crop):
+def _erase_lines(crop: np.ndarray) -> np.ndarray:
     """格子边上残留的框线(校正有一两个像素偏差时会裁进来)涂白,免得被认成「1」或「一」:
     横线 = 宽度过半的横向连续黑段,竖线 = 高度过半的竖向连续黑段"""
     g = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
@@ -149,7 +154,7 @@ def _erase_lines(crop):
     return out
 
 
-def read_cells(sheet, cells: list[dict], width: int = W) -> tuple[dict, list[dict]]:
+def read_cells(sheet: np.ndarray, cells: list[dict], width: int = W) -> tuple[dict, list[dict]]:
     """每个格子单独 OCR(默认往里收 4%,避开框线);width 是校正画布的宽(格子 x 比例 × width)。
 
     cells 可用 `inset` 覆盖收边比例(0 表示整格);整格时框线由 `_erase_lines` 擦除,

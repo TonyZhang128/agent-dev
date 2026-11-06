@@ -9,8 +9,8 @@ from app.schemas.ocr import DraftReq
 router = APIRouter(prefix="/wbs", tags=["wbs"])
 
 
-@router.post("/draft")
-def wbs_draft_api(req: DraftReq, request: Request):
+@router.post("/draft", response_model=None)
+def wbs_draft_api(req: DraftReq, request: Request) -> dict:
     with document_resources(request) as resources:
         paths = [project_path(resources, relative) for relative in req.drawings]
         return {"status": 200, "data": wbs_draft.draft(req.prefix, paths, req.imgs, req.basis)}
