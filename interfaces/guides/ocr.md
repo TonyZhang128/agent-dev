@@ -94,12 +94,15 @@ ONNX Runtime 能否导入，`OCR_DEVICE` 与 onnxruntime provider 是否一致�
 4. 按固定栏目区域，用中心点优先、框内覆盖率兜底的方式归属文字框。
 5. 按栏目名近似剥离印刷字；日期归一为 `yyyy-mm-dd`；长文本栏保留拼接结果。
 6. 对歧义或漏框字段最多补充识别 3 次。
-7. 返回 `recognized`、`detail`、`frame`、`processed`、`warning`、`image`、`ms`。
+7. 严格返回 `{"status":200,"message":"识别完成","data":...}`；`data` 直接包含
+   `taskId`、`documentType`、`common`、`fields`，缺失值为 `null`。
 
-- 返回结构与 `POST /ocr/daily-logs` 相同，但实现独立，不读取旧逐格识别链。
+- 成功响应依据后端已约定的 `app/ocr/resources/daily-logs-output.json`，正式响应子契约见
+  [journal/response.schema.json](../journal/response.schema.json)。
+- 实现独立，不读取旧逐格识别链；HTTP 成功响应不包含内部诊断信息或 `processed` 包装。
 - `construction`、`witness`、`patrol` 在样例表上同属一个 `mainWork` 单元格；当前只
   整格识别 `mainWork`，并把整段值同时回填到这三个字段；后续按印刷小标题拆分。
-- `frame.how` 为 `contour+table`/`contour`/`whole`；`whole` 时表示未找到外框，需核对定位。
+- 定位信息保留在内部识别链和本地可视化工具中，不通过此接口返回。
 - 不写 PDF/Excel，不生成服务端任务 ID。
 
 ### `POST /ocr/jianbiao`

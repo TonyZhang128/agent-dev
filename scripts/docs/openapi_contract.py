@@ -1080,14 +1080,14 @@ OPERATIONS: dict[str, dict[str, dict[str, Any]]] = {
     },
     "/ocr/daily-logs-new": {
         "post": _operation(
-            description="新版监理日志识别链路预览：在照片上直接定位表格，只做一次整页 OCR，"
-            "再按固定栏目匹配；歧义或漏框字段最多补充识别 3 次。样例表中 "
-            "construction / witness / patrol 同属一个 mainWork 单元格，当前整格识别后"
-            "暂时同时回填到这三个字段，后续再按印刷小标题拆分。返回结构与 "
-            "/ocr/daily-logs 相同，但实现完全独立，不读取旧逐格识别链。",
+            description="新版监理日志识别：定位表格、整页 OCR 后匹配栏目；歧义或漏框字段"
+            "最多补充识别 3 次。成功响应严格遵守已确认的后端格式，顶层只有 status、"
+            "message、data，业务字段直接位于 data，不返回内部识别详情。"
+            "construction / witness / patrol 同属 mainWork 单元格，当前暂时回填同一整段值。",
             summary="识别监理日记（新版链路）",
             status="pending-review",
-            source="app/ocr/journal/；tests/test_ocr_journal.py",
+            source="interfaces/journal/response.schema.json（成功响应已确认）；"
+            "app/ocr/resources/daily-logs-output.json；tests/test_ocr_journal.py",
             side_effects="只读取数据池照片，不写 PDF/Excel。",
             idempotency="识别结果可能因模型和照片变化而不同；只读调用可重试。",
             request_example={
@@ -1096,52 +1096,33 @@ OPERATIONS: dict[str, dict[str, dict[str, Any]]] = {
             },
             responses={
                 "200": _json_response(
-                    "监理日志识别草稿；结构与 /ocr/daily-logs 相同。",
-                    ref("DailyLogsResponse"),
+                    "监理日志业务字段；成功响应结构已由用户确认，不含额外信息。",
+                    ref("JournalResponse"),
                     example={
                         "status": 200,
+                        "message": "识别完成",
                         "data": {
-                            "form": "JLB13",
-                            "formName": "监理日志",
-                            "frame": {
-                                "how": "contour+table",
-                                "quad": [[142, 390], [1150, 392], [1132, 1532], [139, 1550]],
+                            "taskId": "123456789012345678",
+                            "documentType": "supervision_diary",
+                            "common": {
+                                "projectName": "测试高速公路项目",
+                                "documentNo": None,
+                                "supervisionOrg": None,
+                                "recorderName": None,
+                                "recorderPosition": "专业监理工程师",
+                                "weather": None,
+                                "logDate": "2026-10-03",
+                                "reviewerName": None,
                             },
-                            "recognized": {
-                                "project": "测试高速公路项目",
-                                "position": "专业监理工程师",
-                                "date": "2026-10-03",
-                                "construction": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
-                                "witness": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
-                                "patrol": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
-                            },
-                            "detail": [],
-                            "processed": {
-                                "taskId": "123456789012345678",
-                                "documentType": "supervision_diary",
-                                "common": {
-                                    "projectName": "测试高速公路项目",
-                                    "documentNo": None,
-                                    "supervisionOrg": None,
-                                    "recorderName": None,
-                                    "recorderPosition": "专业监理工程师",
-                                    "weather": None,
-                                    "logDate": "2026-10-03",
-                                    "reviewerName": None,
+                            "fields": {
+                                "mainWork": {
+                                    "construction": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
+                                    "witness": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
+                                    "patrol": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
                                 },
-                                "fields": {
-                                    "mainWork": {
-                                        "construction": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
-                                        "witness": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
-                                        "patrol": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
-                                    },
-                                    "issues": None,
-                                    "nextDayPlan": None,
-                                },
+                                "issues": None,
+                                "nextDayPlan": None,
                             },
-                            "warning": "",
-                            "image": {"width": 1279, "height": 1741},
-                            "ms": 123,
                         },
                     },
                 ),
@@ -1431,6 +1412,10 @@ def build_contract() -> dict[str, Any]:
     spec.setdefault("components", {}).setdefault("schemas", {}).update(copy.deepcopy(SCHEMAS))
     # 业务意图使用自包含的 $defs；与已发布 JSON Schema 保持逐字一致。
     spec["components"]["schemas"]["BusinessIntentResult"] = BusinessIntentResult.model_json_schema()
+    # 新版监理日志成功响应由用户指定的后端结构确认，不从内部诊断结果推导。
+    spec["components"]["schemas"]["JournalResponse"] = json.loads(
+        (ROOT / "interfaces/journal/response.schema.json").read_text(encoding="utf-8")
+    )
     _apply_component_descriptions(spec)
     _apply_parameters(spec)
     _apply_operations(spec)

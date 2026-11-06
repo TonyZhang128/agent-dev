@@ -25,10 +25,13 @@
 
 1. 用户明确批准的正式契约：`interfaces/openapi/` 中的文件（当前尚无整包正式契约）。
 2. 已确认的响应子契约：`interfaces/log_summary/`、`interfaces/intent/` 下的 JSON Schema。
-3. 待确认草案：`interfaces/drafts/`。用于评审，不能用于授权实现变更。
-4. 运行时 FastAPI 生成的 `/openapi.json`、`/docs`：实现的投影，便于调试；
+3. 新版监理日志已确认的成功响应子契约：
+   [journal/response.schema.json](journal/response.schema.json)，依据用户指定的后端响应样例；
+   本次确认不代表整包 OpenAPI 已批准。
+4. 待确认草案：`interfaces/drafts/`。用于评审，不能用于授权实现变更。
+5. 运行时 FastAPI 生成的 `/openapi.json`、`/docs`：实现的投影，便于调试；
    **不得**用自动生成结果覆盖正式契约。
-5. `docs/`：实现细节、测试方法和专题说明，不替代 `interfaces/` 的对外契约。
+6. `docs/`：实现细节、测试方法和专题说明，不替代 `interfaces/` 的对外契约。
 
 代码与正式契约不一致时，必须先报告差异并由用户决定修代码还是改契约，不能默认以代码为准。
 
@@ -98,7 +101,9 @@ interfaces/
   - `/agents/*` 直接返回业务对象，没有 `data` 包装。
   - `/health`、`/ready` 返回 `{"status":"ok"}` / `{"status":"ready"}`。
   - `/diagnostics`、`/ocr/*`（PNG 除外）、`/wbs/draft` 返回
-    `{"status":200,"data":...}`；`status` 是业务成功标记，不是 HTTP 状态码替代品。
+    `{"status":200,"data":...}`；其中 `/ocr/daily-logs-new` 严格返回
+    `{"status":200,"message":"识别完成","data":...}`，`data` 为业务字段对象。
+    `status` 是业务成功标记，不是 HTTP 状态码替代品。
   - `GET /ocr/blank/{form}.png` 返回原始 `image/png`。
 - 错误：统一为 `{"detail": ...}`。请求校验失败时 `detail` 是错误数组；上下文超限和
   其余业务/模型错误是字符串。错误响应不回显原始输入、身份、历史、密钥或上游正文。

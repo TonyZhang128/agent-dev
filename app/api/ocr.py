@@ -118,11 +118,9 @@ def daily_logs_recognize(req: DailyLogsReq, request: Request) -> dict:
 def journal_recognize(req: JournalReq, request: Request) -> dict:
     """新版监理日志识别：单次整页 OCR + 固定栏目匹配，不读取旧识别链。"""
     with document_resources(request) as resources:
-        started = time.monotonic()
         path, img = photo_input(req, resources)
         result = journal.read_photo(path, img, req.task_id)
-        result["ms"] = elapsed_ms(started)
-        return {"status": 200, "data": result}
+        return {"status": 200, "message": "识别完成", "data": result["processed"]}
 
 
 @router.post("/ocr/jianbiao", response_model=None)

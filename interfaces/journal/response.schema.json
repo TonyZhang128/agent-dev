@@ -1,0 +1,54 @@
+{
+  "title": "JournalResponse",
+  "description": "用户于 2026-11-06 确认的 POST /ocr/daily-logs-new 成功响应；以 app/ocr/resources/daily-logs-output.json 为结构依据。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "message", "data"],
+  "properties": {
+    "status": {"type": "integer", "const": 200},
+    "message": {"type": "string", "const": "识别完成"},
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["taskId", "documentType", "common", "fields"],
+      "properties": {
+        "taskId": {"type": ["string", "null"]},
+        "documentType": {"type": "string", "const": "supervision_diary"},
+        "common": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["projectName", "documentNo", "supervisionOrg", "recorderName", "recorderPosition", "weather", "logDate", "reviewerName"],
+          "properties": {
+            "projectName": {"type": ["string", "null"]},
+            "documentNo": {"type": ["string", "null"]},
+            "supervisionOrg": {"type": ["string", "null"]},
+            "recorderName": {"type": ["string", "null"]},
+            "recorderPosition": {"type": ["string", "null"]},
+            "weather": {"type": ["string", "null"]},
+            "logDate": {"type": ["string", "null"]},
+            "reviewerName": {"type": ["string", "null"]}
+          }
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mainWork", "issues", "nextDayPlan"],
+          "properties": {
+            "mainWork": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["construction", "witness", "patrol"],
+              "properties": {
+                "construction": {"type": ["string", "null"]},
+                "witness": {"type": ["string", "null"]},
+                "patrol": {"type": ["string", "null"]}
+              }
+            },
+            "issues": {"type": ["string", "null"]},
+            "nextDayPlan": {"type": ["string", "null"]}
+          }
+        }
+      }
+    }
+  }
+}

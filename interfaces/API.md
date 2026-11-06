@@ -727,11 +727,11 @@ Schema：`DailyLogsResponse`
 | --- | --- |
 | 摘要 | 识别监理日记（新版链路） |
 | 契约状态 | `pending-review` |
-| 来源 | app/ocr/journal/；tests/test_ocr_journal.py |
+| 来源 | interfaces/journal/response.schema.json（成功响应已确认）；app/ocr/resources/daily-logs-output.json；tests/test_ocr_journal.py |
 | 副作用 | 只读取数据池照片，不写 PDF/Excel。 |
 | 幂等/重试 | 识别结果可能因模型和照片变化而不同；只读调用可重试。 |
 
-新版监理日志识别链路预览：在照片上直接定位表格，只做一次整页 OCR，再按固定栏目匹配；歧义或漏框字段最多补充识别 3 次。样例表中 construction / witness / patrol 同属一个 mainWork 单元格，当前整格识别后暂时同时回填到这三个字段，后续再按印刷小标题拆分。返回结构与 /ocr/daily-logs 相同，但实现完全独立，不读取旧逐格识别链。
+新版监理日志识别：定位表格、整页 OCR 后匹配栏目；歧义或漏框字段最多补充识别 3 次。成功响应严格遵守已确认的后端格式，顶层只有 status、message、data，业务字段直接位于 data，不返回内部识别详情。construction / witness / patrol 同属 mainWork 单元格，当前暂时回填同一整段值。
 
 **请求体**
 
@@ -754,7 +754,7 @@ Schema：`JournalReq`
 
 **响应**
 
-- `200`：监理日志识别草稿；结构与 /ocr/daily-logs 相同。
+- `200`：监理日志业务字段；成功响应结构已由用户确认，不含额外信息。
 - `400`：路径越界、文件不存在/不是文件、图片无法解码或文档处理失败。
 - `422`：请求校验失败，或输入与上下文超过预算。校验失败时 detail 为错误数组；输入超限时为字符串。
 - `503`：OCR 模型不可用。
@@ -764,68 +764,29 @@ Schema：`JournalReq`
 ```json
 {
   "status": 200,
+  "message": "识别完成",
   "data": {
-    "form": "JLB13",
-    "formName": "监理日志",
-    "frame": {
-      "how": "contour+table",
-      "quad": [
-        [
-          142,
-          390
-        ],
-        [
-          1150,
-          392
-        ],
-        [
-          1132,
-          1532
-        ],
-        [
-          139,
-          1550
-        ]
-      ]
+    "taskId": "123456789012345678",
+    "documentType": "supervision_diary",
+    "common": {
+      "projectName": "测试高速公路项目",
+      "documentNo": null,
+      "supervisionOrg": null,
+      "recorderName": null,
+      "recorderPosition": "专业监理工程师",
+      "weather": null,
+      "logDate": "2026-10-03",
+      "reviewerName": null
     },
-    "recognized": {
-      "project": "测试高速公路项目",
-      "position": "专业监理工程师",
-      "date": "2026-10-03",
-      "construction": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
-      "witness": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
-      "patrol": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查"
-    },
-    "detail": [],
-    "processed": {
-      "taskId": "123456789012345678",
-      "documentType": "supervision_diary",
-      "common": {
-        "projectName": "测试高速公路项目",
-        "documentNo": null,
-        "supervisionOrg": null,
-        "recorderName": null,
-        "recorderPosition": "专业监理工程师",
-        "weather": null,
-        "logDate": "2026-10-03",
-        "reviewerName": null
+    "fields": {
+      "mainWork": {
+        "construction": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
+        "witness": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
+        "patrol": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查"
       },
-      "fields": {
-        "mainWork": {
-          "construction": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
-          "witness": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
-          "patrol": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查"
-        },
-        "issues": null,
-        "nextDayPlan": null
-      }
-    },
-    "warning": "",
-    "image": {
-      "width": 1279,
-      "height": 1741
-    },
-    "ms": 123
+      "issues": null,
+      "nextDayPlan": null
+    }
   }
 }
 ```
@@ -834,24 +795,20 @@ Schema：`JournalReq`
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
-| `status` | const `200` | 是 |  |  | 业务成功状态，与 HTTP 200 一致；不是 HTTP 状态码的替代品。 |
-| `data` | `DailyLogsData` | 是 |  |  | 监理日记识别草稿；recognized 为原始栏目，processed 为业务结构。 |
+| `status` | const `200` | 是 |  |  |  |
+| `message` | const `识别完成` | 是 |  |  |  |
+| `data` | object | 是 |  |  |  |
 
 **`data` 字段**
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
-| `form` | const `JLB13` | 是 |  |  |  |
-| `formName` | const `监理日志` | 是 |  |  |  |
-| `frame` | `Frame` | 是 |  |  |  |
-| `recognized` | `DailyLogsRecognized` | 是 |  |  | 监理日记固定栏目；未识别到的栏目可能省略。 |
-| `detail` | array<`DailyLogsDetailItem`> | 是 |  |  | 每个固定栏目的识别值、置信度和区域。 |
-| `processed` | `DailyLogsProcessed` | 是 |  |  | 监理日记业务结构；由 OCR 栏目文本映射，缺失栏目为 null。 |
-| `warning` | string | 是 |  |  | 未检测到表格外框等定位提示；空字符串表示无提示。 |
-| `image` | `ImageSize` | 是 |  |  | 输入图片的像素尺寸。 |
-| `ms` | integer | 是 |  | minimum=0 |  |
+| `taskId` | string / null | 是 |  |  |  |
+| `documentType` | const `supervision_diary` | 是 |  |  |  |
+| `common` | object | 是 |  |  |  |
+| `fields` | object | 是 |  |  |  |
 
-Schema：`DailyLogsResponse`
+Schema：`JournalResponse`
 
 ### 11. `POST /ocr/jianbiao`
 
@@ -1882,3 +1839,13 @@ Schema：`WbsDraftResponse`
 | --- | --- | --- | --- | --- | --- |
 | `status` | const `200` | 是 |  |  | 业务成功状态，与 HTTP 200 一致；不是 HTTP 状态码的替代品。 |
 | `data` | `WbsDraftData` | 是 |  |  |  |
+
+### `JournalResponse`
+
+用户于 2026-11-06 确认的 POST /ocr/daily-logs-new 成功响应；以 app/ocr/resources/daily-logs-output.json 为结构依据。
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `status` | const `200` | 是 |  |  |  |
+| `message` | const `识别完成` | 是 |  |  |  |
+| `data` | object | 是 |  |  |  |

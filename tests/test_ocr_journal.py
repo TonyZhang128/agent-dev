@@ -5,6 +5,8 @@
 
 import base64
 import io
+import json
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -133,56 +135,79 @@ def test_new_route_reads_one_page_and_maps_fields(client, settings):
     response = client.post("/ocr/daily-logs-new", json={"path": "journal.png", "taskId": " 42 "})
 
     assert response.status_code == 200
-    data = response.json()["data"]
     assert engine.calls == 1
-    assert data["frame"]["how"] == "contour+table"
-    assert data["warning"] == ""
-    assert data["image"] == {"width": 900, "height": 1273}
-    assert data["processed"]["taskId"] == "42"
-    assert data["processed"]["common"] == {
-        "projectName": "成乐高速公路扩容建设",
-        "documentNo": "JL-001",
-        "supervisionOrg": "测试监理机构",
-        "recorderName": "王璐瑶",
-        "recorderPosition": "专业监理工程师",
-        "weather": "晴",
-        "logDate": "2026-11-11",
-        "reviewerName": "王梦瑶",
-    }
-    assert data["processed"]["fields"] == {
-        "mainWork": {
-            "construction": MAIN_WORK_TEXT,
-            "witness": MAIN_WORK_TEXT,
-            "patrol": MAIN_WORK_TEXT,
+    assert response.json() == {
+        "status": 200,
+        "message": "识别完成",
+        "data": {
+            "taskId": "42",
+            "documentType": "supervision_diary",
+            "common": {
+                "projectName": "成乐高速公路扩容建设",
+                "documentNo": "JL-001",
+                "supervisionOrg": "测试监理机构",
+                "recorderName": "王璐瑶",
+                "recorderPosition": "专业监理工程师",
+                "weather": "晴",
+                "logDate": "2026-11-11",
+                "reviewerName": "王梦瑶",
+            },
+            "fields": {
+                "mainWork": {
+                    "construction": MAIN_WORK_TEXT,
+                    "witness": MAIN_WORK_TEXT,
+                    "patrol": MAIN_WORK_TEXT,
+                },
+                "issues": "挡土墙墙背回填局部压实不足",
+                "nextDayPlan": "见证水稳基层检测",
+            },
         },
-        "issues": "挡土墙墙背回填局部压实不足",
-        "nextDayPlan": "见证水稳基层检测",
     }
-    assert data["recognized"]["construction"] == MAIN_WORK_TEXT
-    assert data["recognized"]["witness"] == MAIN_WORK_TEXT
-    assert data["recognized"]["patrol"] == MAIN_WORK_TEXT
-    assert data["frame"]["quad"][0][0] < data["frame"]["quad"][1][0]
-    assert [item["field"] for item in data["detail"]] == [
-        "project",
-        "number",
-        "supervision_org",
-        "recorder",
-        "weather",
-        "position",
-        "date",
-        "reviewer",
-        "construction",
-        "witness",
-        "patrol",
-        "issues",
-        "next_day_plan",
-    ]
-    main_work_rects = {
-        tuple(item["rect"])
-        for item in data["detail"]
-        if item["field"] in {"construction", "witness", "patrol"}
+
+
+def test_new_route_keeps_null_fields_and_matches_backend_contract(client, settings):
+    """空识别也必须保留约定字段；递归比较正式响应子契约，拒绝任何额外信息。"""
+    write_photo(settings)
+    client.app.state.ocr_resources.engine = lambda picture: ocr_result()
+
+    response = client.post("/ocr/daily-logs-new", json={"path": "journal.png"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload == {
+        "status": 200,
+        "message": "识别完成",
+        "data": {
+            "taskId": None,
+            "documentType": "supervision_diary",
+            "common": {
+                "projectName": None,
+                "documentNo": None,
+                "supervisionOrg": None,
+                "recorderName": None,
+                "recorderPosition": None,
+                "weather": None,
+                "logDate": None,
+                "reviewerName": None,
+            },
+            "fields": {
+                "mainWork": {"construction": None, "witness": None, "patrol": None},
+                "issues": None,
+                "nextDayPlan": None,
+            },
+        },
     }
-    assert len(main_work_rects) == 1
+    contract_path = Path(__file__).resolve().parents[1] / "interfaces/journal/response.schema.json"
+    contract = json.loads(contract_path.read_text(encoding="utf-8"))
+
+    def assert_keys(actual, schema):
+        if schema.get("type") == "object":
+            assert isinstance(actual, dict)
+            assert actual.keys() == schema["properties"].keys()
+            for key, field_schema in schema["properties"].items():
+                assert_keys(actual[key], field_schema)
+
+    assert_keys(payload, contract)
 
 
 def test_missing_field_uses_one_targeted_crop(client, settings):
@@ -195,7 +220,7 @@ def test_missing_field_uses_one_targeted_crop(client, settings):
     data = response.json()["data"]
     assert response.status_code == 200
     assert engine.calls == 2
-    assert data["recognized"]["reviewer"] == "王梦瑶"
+    assert data["common"]["reviewerName"] == "王梦瑶"
 
 
 def test_cleaning_strips_printed_labels_and_normalizes_dates():
@@ -304,7 +329,7 @@ def test_new_route_accepts_base64_and_prefers_it(client, settings):
     )
 
     assert response.status_code == 200
-    assert response.json()["data"]["recognized"]["project"] == "成乐高速公路扩容建设"
+    assert response.json()["data"]["common"]["projectName"] == "成乐高速公路扩容建设"
 
 
 def test_new_route_maps_invalid_image_and_model_failure(client, settings):

@@ -156,3 +156,11 @@ def test_fixed_output_schemas_are_still_the_published_contracts():
     assert schemas["LogSummary"] == log_summary
     assert schemas["BusinessIntentResult"] == intent
     assert schemas["ArchiveIntentResult"] == archive
+    journal = json.loads(
+        (ROOT / "interfaces/journal/response.schema.json").read_text(encoding="utf-8")
+    )
+    assert schemas["JournalResponse"] == journal
+    response = read_contract()["paths"]["/ocr/daily-logs-new"]["post"]["responses"]["200"]
+    assert response["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/JournalResponse"
+    }

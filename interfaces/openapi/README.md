@@ -12,6 +12,8 @@
   [response.schema.json](../intent/response.schema.json)
 - `POST /agents/intent/archive` 的固定四字段响应：
   [response.schema.json](../intent/archive/response.schema.json)
+- `POST /ocr/daily-logs-new` 的成功响应（2026-11-06 用户指定后端格式）：
+  [response.schema.json](../journal/response.schema.json)
 - `/agents/*`、`/health`、`/ready` 的请求路径、方法和既有业务规则：
   [AGENTS.md 第四节](../../AGENTS.md#四接口契约与-api-first-开发流程)、
   [agents-api.md](../../docs/agents-api.md)

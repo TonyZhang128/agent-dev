@@ -2,6 +2,18 @@
 
 只记录对外接口契约的变化。运行时行为、提示词和内部重构不在此记录。
 
+## 2026-11-06 — 新版监理日志成功响应对齐后端约定（用户已确认）
+
+- 用户指定 `app/ocr/resources/daily-logs-output.json` 为 `POST /ocr/daily-logs-new`
+  的成功响应格式；已确认的响应子契约保存在 `journal/response.schema.json`。
+- 顶层严格为 `status`、`message`、`data`，成功值为 `200`、`识别完成`；原
+  `data.processed` 的业务字段直接放到 `data`，不返回 `form`、`formName`、`frame`、
+  `recognized`、`detail`、`processed`、`warning`、`image`、`ms`。
+- `data` 严格包含 `taskId`、`documentType`、`common`、`fields`；缺失值保留为
+  `null`，`mainWork` 整段暂时回填三个子字段的规则不变。
+- 调用方直接读取 `data.common` 和 `data.fields`，不再读取 `data.processed`。
+  本次只确认新版接口的成功响应，未批准整包 OpenAPI；旧接口和错误响应保持原约定。
+
 ## 2026-11-05 — 监理日记新版识别链路（待确认）
 
 - 新增 `POST /ocr/daily-logs-new`，作为新版监理日志识别链路的独立入口；

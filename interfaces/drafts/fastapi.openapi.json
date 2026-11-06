@@ -759,7 +759,7 @@
           "ocr"
         ],
         "summary": "识别监理日记（新版链路）",
-        "description": "新版监理日志识别链路预览：在照片上直接定位表格，只做一次整页 OCR，再按固定栏目匹配；歧义或漏框字段最多补充识别 3 次。样例表中 construction / witness / patrol 同属一个 mainWork 单元格，当前整格识别后暂时同时回填到这三个字段，后续再按印刷小标题拆分。返回结构与 /ocr/daily-logs 相同，但实现完全独立，不读取旧逐格识别链。",
+        "description": "新版监理日志识别：定位表格、整页 OCR 后匹配栏目；歧义或漏框字段最多补充识别 3 次。成功响应严格遵守已确认的后端格式，顶层只有 status、message、data，业务字段直接位于 data，不返回内部识别详情。construction / witness / patrol 同属 mainWork 单元格，当前暂时回填同一整段值。",
         "operationId": "journal_recognize_ocr_daily_logs_new_post",
         "requestBody": {
           "content": {
@@ -777,76 +777,37 @@
         },
         "responses": {
           "200": {
-            "description": "监理日志识别草稿；结构与 /ocr/daily-logs 相同。",
+            "description": "监理日志业务字段；成功响应结构已由用户确认，不含额外信息。",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DailyLogsResponse"
+                  "$ref": "#/components/schemas/JournalResponse"
                 },
                 "example": {
                   "status": 200,
+                  "message": "识别完成",
                   "data": {
-                    "form": "JLB13",
-                    "formName": "监理日志",
-                    "frame": {
-                      "how": "contour+table",
-                      "quad": [
-                        [
-                          142,
-                          390
-                        ],
-                        [
-                          1150,
-                          392
-                        ],
-                        [
-                          1132,
-                          1532
-                        ],
-                        [
-                          139,
-                          1550
-                        ]
-                      ]
+                    "taskId": "123456789012345678",
+                    "documentType": "supervision_diary",
+                    "common": {
+                      "projectName": "测试高速公路项目",
+                      "documentNo": null,
+                      "supervisionOrg": null,
+                      "recorderName": null,
+                      "recorderPosition": "专业监理工程师",
+                      "weather": null,
+                      "logDate": "2026-10-03",
+                      "reviewerName": null
                     },
-                    "recognized": {
-                      "project": "测试高速公路项目",
-                      "position": "专业监理工程师",
-                      "date": "2026-10-03",
-                      "construction": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
-                      "witness": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
-                      "patrol": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查"
-                    },
-                    "detail": [],
-                    "processed": {
-                      "taskId": "123456789012345678",
-                      "documentType": "supervision_diary",
-                      "common": {
-                        "projectName": "测试高速公路项目",
-                        "documentNo": null,
-                        "supervisionOrg": null,
-                        "recorderName": null,
-                        "recorderPosition": "专业监理工程师",
-                        "weather": null,
-                        "logDate": "2026-10-03",
-                        "reviewerName": null
+                    "fields": {
+                      "mainWork": {
+                        "construction": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
+                        "witness": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
+                        "patrol": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查"
                       },
-                      "fields": {
-                        "mainWork": {
-                          "construction": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
-                          "witness": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
-                          "patrol": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查"
-                        },
-                        "issues": null,
-                        "nextDayPlan": null
-                      }
-                    },
-                    "warning": "",
-                    "image": {
-                      "width": 1279,
-                      "height": 1741
-                    },
-                    "ms": 123
+                      "issues": null,
+                      "nextDayPlan": null
+                    }
                   }
                 }
               }
@@ -884,7 +845,7 @@
           }
         },
         "x-contract-status": "pending-review",
-        "x-contract-source": "app/ocr/journal/；tests/test_ocr_journal.py",
+        "x-contract-source": "interfaces/journal/response.schema.json（成功响应已确认）；app/ocr/resources/daily-logs-output.json；tests/test_ocr_journal.py",
         "x-side-effects": "只读取数据池照片，不写 PDF/Excel。",
         "x-idempotency": "识别结果可能因模型和照片变化而不同；只读调用可重试。"
       }
@@ -3754,6 +3715,165 @@
           }
         },
         "description": "施工图划分初稿成功响应。"
+      },
+      "JournalResponse": {
+        "title": "JournalResponse",
+        "description": "用户于 2026-11-06 确认的 POST /ocr/daily-logs-new 成功响应；以 app/ocr/resources/daily-logs-output.json 为结构依据。",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "message",
+          "data"
+        ],
+        "properties": {
+          "status": {
+            "type": "integer",
+            "const": 200
+          },
+          "message": {
+            "type": "string",
+            "const": "识别完成"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "taskId",
+              "documentType",
+              "common",
+              "fields"
+            ],
+            "properties": {
+              "taskId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "documentType": {
+                "type": "string",
+                "const": "supervision_diary"
+              },
+              "common": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "projectName",
+                  "documentNo",
+                  "supervisionOrg",
+                  "recorderName",
+                  "recorderPosition",
+                  "weather",
+                  "logDate",
+                  "reviewerName"
+                ],
+                "properties": {
+                  "projectName": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "documentNo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "supervisionOrg": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "recorderName": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "recorderPosition": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "weather": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "logDate": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "reviewerName": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              "fields": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "mainWork",
+                  "issues",
+                  "nextDayPlan"
+                ],
+                "properties": {
+                  "mainWork": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "construction",
+                      "witness",
+                      "patrol"
+                    ],
+                    "properties": {
+                      "construction": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "witness": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "patrol": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    }
+                  },
+                  "issues": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "nextDayPlan": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     }
   },

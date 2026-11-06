@@ -103,7 +103,7 @@ PROJECTS_ROOT=../6_shujuchi/yewu
 | `GET /diagnostics` | 无 | 运行库、推理设备、模板/版面/WBS 规则、模型目录与数据池的静态检查；`data.ok` 汇总必需检查，`data.warnings` 记录非致命问题 |
 | `POST /ocr/recognize` | `path` 或 `img`（至少提供一个），可选 `form=""` | `fields`、`keys`、`lines`、`detail`、`align`、`warning`、`image`、`ms` |
 | `POST /ocr/daily-logs` | `path` 或 `img`（至少提供一个），可选 `taskId=""` | 监理日记（JLB13）固定栏目识别、原始框、`frame`、业务结构 `processed`、`ms` |
-| `POST /ocr/daily-logs-new` | 同 `/ocr/daily-logs` | 独立新链路的监理日记识别；单次整页 OCR + 栏目匹配，返回结构相同 |
+| `POST /ocr/daily-logs-new` | 同 `/ocr/daily-logs` | 独立新链路；严格返回 `status`、`message`、`data`，业务字段直接在 `data` 内 |
 | `POST /ocr/jianbiao` | `path`、`form`、`cfg`；可选 `bound={}`、`out=""` | 简表定位/识别、公式结果、锚点、PDF/Excel 路径 |
 | `POST /ocr/fill` | `form`、`cfg`、`values`；可选 `out=""`、`rects={}` | `values`、`errors`、`anchors`、`pdf`、`xlsx`、`xlsxSkipped` |
 | `GET /ocr/blank/{form}.png` | 可选 `width=1400`，正整数，上限按 2400 渲染 | 第 1 页 PNG，带缓存头 |
@@ -149,7 +149,7 @@ curl --noproxy '*' -fsS http://127.0.0.1:8309/ocr/fill \
 
 `/ocr/daily-logs` 复用「找外框 → 透视校正 → 逐格 OCR」，按现场《监理日记》表样返回 `recognized`（`project`、`number`、`supervision_org`、`recorder`、`weather`、`position`、`date`、`reviewer`、`construction`、`witness`、`patrol`、`issues`、`next_day_plan`）和 `detail`；`date` 归一为 `yyyy-mm-dd`，长文本栏保留 OCR 拼接结果。`frame.how` 为 `contour`/`contour+table`/`whole` 等定位方式，`whole` 时 `warning` 提示核对定位。`processed` 是业务结构：`taskId`（请求原样回显，未传为 `null`）、`documentType`（固定 `supervision_diary`）、`common` 和 `fields`；识别不到的栏目为 `null`，不做推断。该接口只读取照片，不写 PDF/Excel，也不生成任务 ID。
 
-`/ocr/daily-logs-new` 是独立实现，返回结构与 `/ocr/daily-logs` 相同：在原图上用横竖线定位表格外框，只做一次透视校正；整页只调用一次 OCR；文字框按栏目区域用中心点和框内覆盖率匹配；印刷栏目名按栏目名近似剥离；歧义或漏框字段最多补充识别 3 次。样例表中 `construction`、`witness`、`patrol` 同属一个 `mainWork` 单元格，当前整格识别后暂时同时回填到这三个字段，后续再按"主要施工情况 / 旁站情况 / 巡视情况"小标题拆分。`frame.how` 为 `contour+table`/`contour`/`whole`，`whole` 时仍返回定位 warning。
+`/ocr/daily-logs-new` 是独立实现，成功响应严格按 `app/ocr/resources/daily-logs-output.json` 返回 `{"status":200,"message":"识别完成","data":...}`。`data` 直接包含 `taskId`、`documentType`、`common`、`fields`，缺失值为 `null`，不返回 `processed` 包装或其他识别详情。算法流程为：在原图上用横竖线定位表格外框，只做一次透视校正；整页只调用一次 OCR；文字框按栏目区域用中心点和框内覆盖率匹配；印刷栏目名按栏目名近似剥离；歧义或漏框字段最多补充识别 3 次。样例表中 `construction`、`witness`、`patrol` 同属一个 `mainWork` 单元格，当前整格识别后暂时同时回填到这三个字段，后续再按"主要施工情况 / 旁站情况 / 巡视情况"小标题拆分。定位信息与 warning 只保留在内部结果及本地工具中，不通过新版 HTTP 接口返回。
 
 `cfg` 保留配置平台的 fields/anchors/edges/formulas 元数据；处理所需字段会校验，非法结构返回 `422`。`EXCEL_RANGE.range` 为单个单元格地址（如 `A3`），合并单元格归到左上角。`PDF_REGION.rect` 和 `rects` 是 `{x,y,w,h}` 页面比例坐标；简表 `cells[].rect` 是 `[x,y,w,h]` 外框比例，二者不可混用。
 

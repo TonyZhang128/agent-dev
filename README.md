@@ -14,7 +14,7 @@
 | 业务端意图识别 | `POST /agents/intent/business` | 当前消息、当前页面与可选上下文 → 最小功能 `page/action`、一级意图澄清、聊天或未知状态、判断分数、目录版本 |
 | 归档端意图识别 | `POST /agents/intent/archive` | 文字与历史消息 → `A`–`D` 占位分类或 `unknown`、判断分数、澄清标记 |
 | 自由对话 | `POST /agents/chat` | 当前消息、必填历史（首轮 `[]`）→ 回答和模型名称 |
-| 照片/简表/监理日志 OCR | `POST /ocr/recognize`、`POST /ocr/jianbiao`、`POST /ocr/daily-logs`、`POST /ocr/daily-logs-new` | 数据池照片或 base64 图片 → 草稿字段、定位与识别详情 |
+| 照片/简表/监理日志 OCR | `POST /ocr/recognize`、`POST /ocr/jianbiao`、`POST /ocr/daily-logs`、`POST /ocr/daily-logs-new` | 数据池照片或 base64 图片 → 识别字段；新版监理日志仅返回后端约定的业务结构 |
 | 公式与填表 | `POST /ocr/fill` | 核对后的值 + 配置 → 公式/引用结果，可输出同源 PDF/Excel |
 | 表样预览与字段 | `GET /ocr/blank/{form}.png`、`GET /ocr/sheet/{form}` | 空白表 PNG、版面栏与格子字段 |
 | 施工图划分 | `POST /wbs/draft` | PDF/工可 → WBS 划分初稿 |
