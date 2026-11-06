@@ -184,7 +184,7 @@ uv run --locked python -m scripts.docs.check_openapi
 uv run --locked pytest -v --cov=app --cov-fail-under=85
 ```
 
-`pyright` 当前只检查 `app/api`、`app/schemas` 和配置层；扩展 `include` 前先修复目标目录的存量错误，不用批量 `ignore` 换取通过。覆盖率门槛当前为 85%，低于基线约 90%；新增核心逻辑应同步补测试。
+`pyright` 检查整个 `app/`，包括 Agent 与 OCR。不得通过排除业务目录、关闭诊断或批量 `Any` / `ignore` 换取通过。覆盖率门槛当前为 85%，低于基线约 90%；新增核心逻辑应同步补测试。
 
 OCR 运行时由互斥 extra 选择：`ocr-cpu`（`onnxruntime==1.31.1`）或 `ocr-gpu`（`onnxruntime-gpu==1.24.4`），两者不能同时启用；单独 `uv sync` 不会安装 ONNX Runtime，并会移除已装的那一个。`uv run` 不会移除已安装的 extra 包，但重新同步环境时仍须带上对应 extra。
 
@@ -247,7 +247,7 @@ Linux 使用 `scripts/prod/` 对应入口；远端业务验收使用 `BUSINESS_A
 - 业务数据禁止裸 `dict[str, Any]`；`Any` 仅用于 LangChain state、第三方无类型返回值等外部边界。
 - 同一数据在模块间传递时复用 `app/schemas/` 的模型或既有类型定义，不重复定义平行结构。
 - 明确区分必填、可选（`| None`）和默认值；外部输入必须经 Pydantic 或显式校验。
-- `pyright` 当前检查 `app/api`、`app/schemas` 和配置层；扩展 `include` 前先修复该目录的存量错误，不通过批量 `ignore` 换取通过。
+- `pyright` 覆盖整个 `app/`；优先修正实际参数、共享类型与可选值分支。第三方边界使用 `cast` 时必须有已核实的类型依据；`cast` 不执行运行时校验，不能代替异常输出检查。
 
 ### 7.6 异常与日志
 

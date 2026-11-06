@@ -199,6 +199,8 @@ uv run --locked python -m scripts.dev.verify_live
 ollama ps
 ```
 
+pyright 以 `basic` 模式检查整个 `app/`，包含 Agent 和 OCR；Ruff 格式通过不代表类型检查通过。Pylance 与命令行检查应使用项目的 Python 3.12 `.venv` 环境。
+
 自动化测试使用 pytest / pytest-asyncio，运行真实 LangChain Agent 和模拟模型 HTTP 传输，不需要 Ollama、联网或云端凭据；首次安装依赖可能需要联网。测试文件直接位于 `tests/test_*.py`，目前没有 `tests/unit/` 或 `tests/integration/`。测试覆盖脚本分流、生产启动限制、配置保留，以及既有 API、结构化输出、业务意图层级与澄清、并发消息隔离、超时、异常、工具调用循环、路由注册和共享资源生命周期。真实验收脚本覆盖用户提供的 OCR 输入、完整意图及测试目录中的日志回归集、文字日志和对话，记录写入本地 `verification/agents-live-result.json`；验收记录、日志和缓存不提交 Git。离线与真实模型验收标准见 [意图识别测试说明](docs/intent-testing.md) 和 [日志总结测试说明](docs/log-summary-testing.md)。GitHub Actions 在 Linux 上执行锁定依赖安装、Ruff、pyright、契约检查和带覆盖率门槛的自动化测试，不执行模型下载和真实推理。
 
 业务验收报告的每条 `checks` 记录使用 `request` 保存实际 JSON 输入（含聊天历史），使用 `response` 保存 API 输出，方便逐条核对。

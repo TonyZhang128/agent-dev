@@ -59,15 +59,8 @@ asyncio_default_test_loop_scope = "function"
 [tool.pyright]
 pythonVersion = "3.12"
 typeCheckingMode = "basic"
-# 先约束类型边界清晰的 HTTP/Schema/配置层；agents 与 OCR 的存量类型问题分批处理。
-include = [
-  "app/api",
-  "app/schemas",
-  "app/config.py",
-  "app/errors.py",
-  "app/http_errors.py",
-  "app/main.py",
-]
+# 覆盖整个主应用，包括 Agent 和 OCR；不通过排除业务目录绕过诊断。
+include = ["app"]
 
 [tool.coverage.run]
 source = ["app"]
