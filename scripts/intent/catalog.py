@@ -161,22 +161,23 @@ def render_generated(catalog: IntentCatalog, version: str) -> str:
         "",
         f"CATALOG_VERSION = {_string_literal(version)}",
         "",
-        f"PAGE_CODES: tuple[str, ...] = {_tuple_lines(page_codes, 0)}",
+        _literal_lines("BusinessPageLabel", page_codes),
         "",
-        f"ACTION_CODES: tuple[str, ...] = {_tuple_lines(action_codes, 0)}",
+        _literal_lines("BusinessActionLabel", action_codes),
+        "",
+        f"PAGE_CODES: tuple[BusinessPageLabel, ...] = {_tuple_lines(page_codes, 0)}",
+        "",
+        f"ACTION_CODES: tuple[BusinessActionLabel, ...] = {_tuple_lines(action_codes, 0)}",
         "",
         f"PAGE_NAMES: dict[str, str] = {_dict_of_strings_lines(catalog.page_names, 0)}",
         "",
         f"ACTION_NAMES: dict[str, str] = {_dict_of_strings_lines(catalog.action_names, 0)}",
         "",
-        "ACTIONS_BY_PAGE: dict[str, tuple[str, ...]] = "
+        "ACTIONS_BY_PAGE: dict[str, tuple[BusinessActionLabel, ...]] = "
         f"{_dict_of_tuples_lines(catalog.actions_by_page, 0)}",
         "",
-        f"PAGE_BY_ACTION: dict[str, str] = {_dict_of_strings_lines(catalog.page_by_action, 0)}",
-        "",
-        _literal_lines("BusinessPageLabel", page_codes),
-        "",
-        _literal_lines("BusinessActionLabel", action_codes),
+        "PAGE_BY_ACTION: dict[str, BusinessPageLabel] = "
+        f"{_dict_of_strings_lines(catalog.page_by_action, 0)}",
         "",
     ]
     return "\n".join(parts)

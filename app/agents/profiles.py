@@ -22,7 +22,7 @@ def _labels(model: type[BaseModel]) -> tuple[str, ...]:
 
 
 @dataclass(frozen=True)
-class IntentProfile:
+class IntentProfile[ResultT: BaseModel]:
     """一个业务端的意图识别配置；实现共享，差异只在这里声明。"""
 
     name: str
@@ -30,7 +30,7 @@ class IntentProfile:
     prompt_name: str
     intents: tuple[IntentDefinition, ...]
     classification_type: type[BaseModel]
-    response_type: type[BaseModel]
+    response_type: type[ResultT]
     chat_label: str | None = None
     fallback_label: str = "unknown"
     # 修改该阈值时，同步更新对应提示词中关于 0.65 的说明。

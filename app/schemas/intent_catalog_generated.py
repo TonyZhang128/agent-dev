@@ -4,7 +4,50 @@ from typing import Literal
 
 CATALOG_VERSION = "b158b448e3cf4d0a"
 
-PAGE_CODES: tuple[str, ...] = (
+BusinessPageLabel = Literal[
+    "supervision_diary",
+    "work_list",
+    "image_library",
+    "recognition_platform",
+    "business_management",
+    "workbench",
+]
+
+BusinessActionLabel = Literal[
+    "fill_supervision_log",
+    "fill_monthly_report",
+    "assign_monthly_report",
+    "view_supervision_log",
+    "fill_inspection_record",
+    "fill_standby_record",
+    "fill_environmental_log",
+    "fill_safety_log",
+    "approve_log",
+    "view_work_tasks",
+    "create_work_task",
+    "add_form",
+    "delete_supervision_form",
+    "view_approval_workflow",
+    "view_image_library",
+    "delete_image",
+    "create_album",
+    "delete_album",
+    "navigate_to_recognition",
+    "recognize_photo",
+    "add_personnel_configuration",
+    "delete_project_member",
+    "view_wbs",
+    "add_subproject",
+    "add_child_subproject",
+    "delete_subproject",
+    "delete_child_subproject",
+    "assign_wbs_personnel",
+    "navigate_to_work",
+    "view_today_tasks",
+    "view_pending_approvals",
+]
+
+PAGE_CODES: tuple[BusinessPageLabel, ...] = (
     "supervision_diary",
     "work_list",
     "image_library",
@@ -13,7 +56,7 @@ PAGE_CODES: tuple[str, ...] = (
     "workbench",
 )
 
-ACTION_CODES: tuple[str, ...] = (
+ACTION_CODES: tuple[BusinessActionLabel, ...] = (
     "fill_supervision_log",
     "fill_monthly_report",
     "assign_monthly_report",
@@ -90,7 +133,7 @@ ACTION_NAMES: dict[str, str] = {
     "view_pending_approvals": "查看需审批的文件",
 }
 
-ACTIONS_BY_PAGE: dict[str, tuple[str, ...]] = {
+ACTIONS_BY_PAGE: dict[str, tuple[BusinessActionLabel, ...]] = {
     "supervision_diary": (
         "fill_supervision_log",
         "fill_monthly_report",
@@ -136,7 +179,7 @@ ACTIONS_BY_PAGE: dict[str, tuple[str, ...]] = {
     ),
 }
 
-PAGE_BY_ACTION: dict[str, str] = {
+PAGE_BY_ACTION: dict[str, BusinessPageLabel] = {
     "fill_supervision_log": "supervision_diary",
     "fill_monthly_report": "supervision_diary",
     "assign_monthly_report": "supervision_diary",
@@ -169,46 +212,3 @@ PAGE_BY_ACTION: dict[str, str] = {
     "view_today_tasks": "workbench",
     "view_pending_approvals": "workbench",
 }
-
-BusinessPageLabel = Literal[
-    "supervision_diary",
-    "work_list",
-    "image_library",
-    "recognition_platform",
-    "business_management",
-    "workbench",
-]
-
-BusinessActionLabel = Literal[
-    "fill_supervision_log",
-    "fill_monthly_report",
-    "assign_monthly_report",
-    "view_supervision_log",
-    "fill_inspection_record",
-    "fill_standby_record",
-    "fill_environmental_log",
-    "fill_safety_log",
-    "approve_log",
-    "view_work_tasks",
-    "create_work_task",
-    "add_form",
-    "delete_supervision_form",
-    "view_approval_workflow",
-    "view_image_library",
-    "delete_image",
-    "create_album",
-    "delete_album",
-    "navigate_to_recognition",
-    "recognize_photo",
-    "add_personnel_configuration",
-    "delete_project_member",
-    "view_wbs",
-    "add_subproject",
-    "add_child_subproject",
-    "delete_subproject",
-    "delete_child_subproject",
-    "assign_wbs_personnel",
-    "navigate_to_work",
-    "view_today_tasks",
-    "view_pending_approvals",
-]

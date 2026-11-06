@@ -4,8 +4,9 @@ import logging
 from typing import Any
 
 import httpx
-from langchain_core.language_models import LanguageModelInput
+from langchain_core.language_models import LanguageModelInput, ModelProfile
 from langchain_openai import ChatOpenAI
+from pydantic import SecretStr
 
 from app.config import Settings
 
@@ -112,7 +113,7 @@ class ModelService:
         temperature: float,
         reasoning_effort: str,
         model_cls: type[ChatOpenAI],
-        profile: dict[str, bool],
+        profile: ModelProfile,
     ) -> ChatOpenAI:
         options = {}
         if reasoning_effort:
@@ -120,10 +121,10 @@ class ModelService:
         return model_cls(
             model=model,
             base_url=base_url,
-            api_key=api_key,
+            api_key=SecretStr(api_key),
             timeout=timeout,
             max_retries=0,
-            max_tokens=self.settings.llm_max_tokens,
+            max_completion_tokens=self.settings.llm_max_tokens,
             temperature=temperature,
             http_client=self.http_client,
             http_async_client=self.http_async_client,

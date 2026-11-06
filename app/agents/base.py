@@ -40,7 +40,9 @@ class BaseAgent[RequestT: BaseModel, ResultT: BaseModel](ABC):
     def response_schema(self, request: RequestT) -> dict | None:
         return None
 
-    def conversation_messages(self, request: ConversationRequest, current: str) -> list[AnyMessage]:
+    def conversation_messages(self, request: RequestT, current: str) -> list[AnyMessage]:
+        if not isinstance(request, ConversationRequest):
+            raise TypeError("会话消息需要包含 history 的请求模型")
         schema = prepared_schema(self.response_schema(request), self.name)
         prompt_schema = schema if self.include_schema_in_prompt else None
         return trim_history(

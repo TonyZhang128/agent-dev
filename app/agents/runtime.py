@@ -6,7 +6,7 @@ from copy import deepcopy
 from typing import Any
 
 from langchain.agents import create_agent
-from langchain.agents.middleware import ModelFallbackMiddleware
+from langchain.agents.middleware import AgentMiddleware, ModelFallbackMiddleware
 from langchain.agents.structured_output import ProviderStrategy, StructuredOutputError
 from langchain_core.exceptions import OutputParserException
 from langchain_core.messages import AnyMessage
@@ -51,7 +51,7 @@ def build_agent(
     schema = prepared_schema(schema, name)
     if schema is not None:
         strategy = ProviderStrategy(schema=schema, strict=True)
-    middleware = [ResponseGuard(allow_tool_calls=bool(tools))]
+    middleware: list[AgentMiddleware] = [ResponseGuard(allow_tool_calls=bool(tools))]
     if models.fallback_enabled:
         # 主模型调用失败（连接、超时、上游错误）时改用云端模型重试；
         # 重试后仍会执行输出校验。

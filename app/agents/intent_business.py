@@ -26,7 +26,7 @@ from app.schemas.agents import (
     ChatRequest,
     ClarifyRequest,
 )
-from app.schemas.intent_catalog_generated import CATALOG_VERSION
+from app.schemas.intent_catalog_generated import CATALOG_VERSION, BusinessPageLabel
 
 MIN_CONFIDENCE = 0.65
 MAX_CLARIFICATION_ATTEMPTS = 10
@@ -129,7 +129,7 @@ class BusinessIntentAgent(StructuredAgent[BusinessIntentRequest, BusinessIntentC
 
     async def _clarify(
         self,
-        page: str,
+        page: BusinessPageLabel,
         confidence: float,
         request: BusinessIntentRequest,
         deadline: asyncio.Timeout,
@@ -201,6 +201,6 @@ class BusinessIntentAgent(StructuredAgent[BusinessIntentRequest, BusinessIntentC
         )
 
     @staticmethod
-    def _fallback_message(page: str, options: list[BusinessIntentOption]) -> str:
+    def _fallback_message(page: BusinessPageLabel, options: list[BusinessIntentOption]) -> str:
         names = "、".join(option.name for option in options)
         return f"你想在「{page_name(page)}」中执行哪个操作？可选：{names}。"

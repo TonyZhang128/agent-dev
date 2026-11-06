@@ -7,6 +7,7 @@ from app.schemas.intent_catalog_generated import (
     PAGE_BY_ACTION,
     PAGE_CODES,
     PAGE_NAMES,
+    BusinessPageLabel,
 )
 
 
@@ -18,7 +19,7 @@ def page_name(page: str) -> str:
     return PAGE_NAMES[page]
 
 
-def options_for_page(page: str) -> list[BusinessIntentOption]:
+def options_for_page(page: BusinessPageLabel) -> list[BusinessIntentOption]:
     return [
         BusinessIntentOption(page=page, action=action, name=ACTION_NAMES[action])
         for action in ACTIONS_BY_PAGE[page]
