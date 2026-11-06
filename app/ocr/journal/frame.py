@@ -17,7 +17,7 @@ from app.ocr.journal.spec import (
     TABLE_LINE_DENSITY,
     TABLE_RECT,
 )
-from app.ocr.journal.types import PageLocation, Photo
+from app.ocr.journal.types import LocationKind, PageLocation, Photo
 
 
 def locate(photo: Photo) -> PageLocation:
@@ -45,7 +45,7 @@ def locate(photo: Photo) -> PageLocation:
     )
 
 
-def _find_table_quad(photo: Photo) -> tuple[np.ndarray, str]:
+def _find_table_quad(photo: Photo) -> tuple[np.ndarray, LocationKind]:
     height, width = photo.gray.shape
     binary = cv2.adaptiveThreshold(
         photo.gray,
@@ -56,13 +56,15 @@ def _find_table_quad(photo: Photo) -> tuple[np.ndarray, str]:
         12,
     )
     binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
-    horizontal = _line_mask(binary, (max(20, width // 30), 1)) | _line_mask(
-        binary, (max(20, width // 12), 1)
+    horizontal = cv2.bitwise_or(
+        _line_mask(binary, (max(20, width // 30), 1)),
+        _line_mask(binary, (max(20, width // 12), 1)),
     )
-    vertical = _line_mask(binary, (1, max(20, height // 30))) | _line_mask(
-        binary, (1, max(20, height // 12))
+    vertical = cv2.bitwise_or(
+        _line_mask(binary, (1, max(20, height // 30))),
+        _line_mask(binary, (1, max(20, height // 12))),
     )
-    grid = cv2.dilate(horizontal | vertical, np.ones((3, 3), np.uint8))
+    grid = cv2.dilate(cv2.bitwise_or(horizontal, vertical), np.ones((3, 3), np.uint8))
 
     candidates: list[np.ndarray] = []
     closed = cv2.morphologyEx(grid, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
@@ -201,7 +203,7 @@ def _score(quad: np.ndarray, grid: np.ndarray, width: int, height: int) -> float
     return density * 50 + area + 0.5 / (1 + aspect_gap * 10) + 0.2 * (1 - min(distance, 2))
 
 
-def _candidate_kind(quad: np.ndarray, grid: np.ndarray, width: int, height: int) -> str:
+def _candidate_kind(quad: np.ndarray, grid: np.ndarray, width: int, height: int) -> LocationKind:
     return "table" if _looks_like_table(quad, grid, width, height) else "page"
 
 
@@ -256,7 +258,7 @@ def _line_density(quad: np.ndarray, grid: np.ndarray) -> float:
     return cv2.countNonZero(cv2.bitwise_and(grid, mask)) / area
 
 
-def _canvas_size(quad: np.ndarray, kind: str) -> tuple[int, int]:
+def _canvas_size(quad: np.ndarray, kind: LocationKind) -> tuple[int, int]:
     top = float(np.linalg.norm(quad[1] - quad[0]))
     bottom = float(np.linalg.norm(quad[2] - quad[3]))
     measured = (top + bottom) / 2
@@ -271,7 +273,7 @@ def _canvas_size(quad: np.ndarray, kind: str) -> tuple[int, int]:
     return max(width, 1), max(height, 1)
 
 
-def _destination(kind: str, width: int, height: int) -> np.ndarray:
+def _destination(kind: LocationKind, width: int, height: int) -> np.ndarray:
     if kind != "table":
         return np.array(
             [[0, 0], [width - 1, 0], [width - 1, height - 1], [0, height - 1]],
@@ -308,5 +310,5 @@ def _whole_quad(width: int, height: int) -> np.ndarray:
     )
 
 
-def _how(kind: str) -> str:
+def _how(kind: LocationKind) -> str:
     return {"table": "contour+table", "page": "contour"}.get(kind, "whole")

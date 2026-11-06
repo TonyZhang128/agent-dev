@@ -15,7 +15,7 @@ from pathlib import Path
 
 import numpy as np
 
-from app.ocr.core.engine import ocr
+from app.ocr.core.engine import OCRBox, ocr
 from app.ocr.core.layouts import layout_of
 from app.ocr.core.media import date_value, load_image, open_form_pdf, visible_chars
 from app.ocr.core.resources import forms, resource_cache
@@ -96,7 +96,7 @@ def template_runs(code: str) -> tuple[tuple[str, float, float, float], ...]:
     return tuple(r for r in runs if norm(r[0]))
 
 
-def fit(code: str, boxes: list[dict], size: tuple[int, int]) -> dict:
+def fit(code: str, boxes: list[OCRBox], size: tuple[int, int]) -> dict:
     """表样(页面百分比)→ 照片(像素)的换算 { ax, bx, ay, by, anchors, how }"""
     runs = template_runs(code)
     uniq = {}
@@ -163,13 +163,13 @@ def fit(code: str, boxes: list[dict], size: tuple[int, int]) -> dict:
     return {"anchors": len(pairs), "how": "mismatch"}
 
 
-def _join(bs: list[dict]) -> str:
+def _join(bs: list[OCRBox]) -> str:
     return " ".join(
         b["s"] for b in sorted(bs, key=lambda b: (round(b["box"][1] / 20), b["box"][0]))
     ).strip()
 
 
-def _conf(bs: list[dict]) -> float:
+def _conf(bs: list[OCRBox]) -> float:
     return round(sum(b["conf"] for b in bs) / len(bs), 3) if bs else 0.0
 
 
@@ -178,8 +178,8 @@ def _clean(s: str) -> str:
 
 
 def label_hits(
-    labels: dict, field: str, boxes: list[dict]
-) -> tuple[dict | None, re.Match[str] | None]:
+    labels: dict, field: str, boxes: list[OCRBox]
+) -> tuple[OCRBox | None, re.Match[str] | None]:
     """照片里该字段的栏目框(同名栏目按从上到下、从左到右取第 nth 个)"""
     if field not in labels:
         return None, None
@@ -193,7 +193,7 @@ def label_hits(
     return hits[nth] if len(hits) > nth else (None, None)
 
 
-def inline_value(b: dict, m: re.Match[str]) -> str:
+def inline_value(b: OCRBox, m: re.Match[str]) -> str:
     """「监理单位：四川…」→ 栏目后面的文字(按原文去掉栏目,保留原文的空格)"""
     s, k = b["s"], 0
     for i, ch in enumerate(s):  # 原文里第 m.end() 个非空白 / 冒号 / 下划线字符之后
@@ -204,7 +204,7 @@ def inline_value(b: dict, m: re.Match[str]) -> str:
     return ""
 
 
-def right_value(lab: dict, boxes: list[dict], printed: set[str]) -> dict | None:
+def right_value(lab: OCRBox, boxes: list[OCRBox], printed: set[str]) -> OCRBox | None:
     x0, y0, x1, y1 = lab["box"]
     h = y1 - y0
     row = [
@@ -249,7 +249,7 @@ def recognize(path: Path | None, code: str, img: str = "") -> dict:
         )
     used, out, detail = set(), {}, []
 
-    def in_rect(rect: list[float], grow: float = 0.15) -> list[dict]:
+    def in_rect(rect: list[float], grow: float = 0.15) -> list[OCRBox]:
         x, y, w, h = rect
         X0, Y0 = x * tf["ax"] + tf["bx"], y * tf["ay"] + tf["by"]
         X1, Y1 = (x + w) * tf["ax"] + tf["bx"], (y + h) * tf["ay"] + tf["by"]
@@ -271,7 +271,7 @@ def recognize(path: Path | None, code: str, img: str = "") -> dict:
     for field in names:
         val, how, conf, src = "", "", 0.0, []
         lab, m = label_hits(labels, field, boxes)
-        if lab is not None:
+        if lab is not None and m is not None:
             v = inline_value(lab, m)
             if v:
                 val, how, conf, src = v, "inline", round(lab["conf"], 3), [lab]
@@ -281,7 +281,7 @@ def recognize(path: Path | None, code: str, img: str = "") -> dict:
                 for b in in_rect(rects[field])
                 if b is not lab
                 and not (
-                    ANY_LABEL.search(norm(b["s"])) and ANY_LABEL.search(norm(b["s"])).start() == 0
+                    (match := ANY_LABEL.search(norm(b["s"]))) is not None and match.start() == 0
                 )
             ]
             if bs:

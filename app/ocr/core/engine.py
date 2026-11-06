@@ -1,7 +1,7 @@
 """本机 RapidOCR 引擎：单例加载、全局推理锁、模型缺失统一报 OCRModelError（无业务）。"""
 
 from pathlib import Path
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, Protocol, TypedDict, runtime_checkable
 
 import numpy as np
 
@@ -65,19 +65,58 @@ def engine() -> "RapidOCR":
     return resources.engine
 
 
+@runtime_checkable
+class _OCROutput(Protocol):
+    """只描述第三方结果的读取边界；字段内容随后显式验证。"""
+
+    @property
+    def boxes(self) -> object: ...
+
+    @property
+    def txts(self) -> object: ...
+
+    @property
+    def scores(self) -> object: ...
+
+
+def _output_boxes(result: object) -> list[OCRBox]:
+    """校验第三方完整输出；单阶段或不完整结果不能伪装成无文字。"""
+    invalid_output = "OCR 模型输出不完整，请检查检测与识别模型的运行状态"
+    if not isinstance(result, _OCROutput):
+        raise OCRModelError(invalid_output)
+    boxes, texts, scores = result.boxes, result.txts, result.scores
+    if boxes is None and texts is None and scores is None:
+        return []
+    if (
+        not isinstance(boxes, np.ndarray)
+        or boxes.ndim != 3
+        or boxes.shape[1:] != (4, 2)
+        or not isinstance(texts, (tuple, list))
+        or not isinstance(scores, (tuple, list, np.ndarray))
+        or not len(boxes) == len(texts) == len(scores)
+    ):
+        raise OCRModelError(invalid_output)
+    out: list[OCRBox] = []
+    try:
+        for points, text, confidence in zip(boxes, texts, scores, strict=True):
+            if not isinstance(text, str):
+                raise ValueError("OCR 文字必须为字符串")
+            xs, ys = [float(p[0]) for p in points], [float(p[1]) for p in points]
+            out.append(
+                {"s": text, "box": [min(xs), min(ys), max(xs), max(ys)], "conf": float(confidence)}
+            )
+    except (TypeError, ValueError) as exc:
+        raise OCRModelError(invalid_output) from exc
+    return out
+
+
 def ocr(img: np.ndarray) -> list[OCRBox]:
     """单图 OCR → [{s, box:[x0,y0,x1,y1](像素), conf}];模型不可用时抛 OCRModelError。"""
     with get_resources().lock:
         try:
-            res = engine()(img)
+            result = engine()(img)
         except OCRModelError:
             raise
         except Exception as exc:  # noqa: BLE001 —— 模型文件缺失或下载失败发生在首次推理时
             raise OCRModelError(MODEL_UNAVAILABLE) from exc
-    if res.boxes is None:
-        return []
-    out: list[OCRBox] = []
-    for pts, s, conf in zip(res.boxes, res.txts or (), res.scores or (), strict=True):
-        xs, ys = [float(p[0]) for p in pts], [float(p[1]) for p in pts]
-        out.append({"s": s, "box": [min(xs), min(ys), max(xs), max(ys)], "conf": float(conf)})
-    return out
+    return _output_boxes(result)

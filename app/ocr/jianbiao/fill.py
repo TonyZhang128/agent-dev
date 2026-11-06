@@ -13,6 +13,7 @@ import logging
 import math
 import re
 from pathlib import Path
+from typing import TypedDict, overload
 
 import pymupdf
 
@@ -26,6 +27,13 @@ FONT = Path(
 )  # 填表用黑体;Docker(Linux)里没有就用 PyMuPDF 自带的 china-s
 
 logger = logging.getLogger(__name__)
+
+
+class FontOptions(TypedDict, total=False):
+    """PyMuPDF 写字使用的字体参数，避免展开字典被解释为其他关键字。"""
+
+    fontfile: str
+    fontname: str
 
 
 # ───────── 公式求值（与 admin/src/config/engine.jsx 同一套） ─────────
@@ -44,7 +52,15 @@ def _nums(a):
     return out
 
 
-def _round(x, d=0):
+@overload
+def _round(x: None, d: int = 0) -> None: ...
+
+
+@overload
+def _round(x: float, d: int = 0) -> float: ...
+
+
+def _round(x: float | None, d: int = 0) -> float | None:
     if x is None:
         return None
     v = math.floor(x * 10**d + 0.5) / 10**d  # 与 JS Math.round 一致(.5 进位)
@@ -200,7 +216,7 @@ def anchor_values(cfg: dict, target: str, values: dict) -> list[dict]:
 # ───────── 填表：空白表样 PDF 上写字 ─────────
 
 
-def _date_marks(pg) -> list:
+def _date_marks(pg: pymupdf.Page) -> list[tuple[str, pymupdf.Rect]]:
     """表样上看得见的「年」「月」「日」逐字位置。有的表样叠着一层隐藏文字(扫描件的 OCR 层,渲染方式 3 = 不显示),
     位置和印的字差好几个点,按它写会压字,所以只取显示出来的字(visible_chars)"""
     out = []
@@ -211,7 +227,13 @@ def _date_marks(pg) -> list:
     return out
 
 
-def _fill_date(pg, box, value: str, marks: list, font: dict) -> bool:
+def _fill_date(
+    pg: pymupdf.Page,
+    box: pymupdf.Rect,
+    value: str,
+    marks: list[tuple[str, pymupdf.Rect]],
+    font: FontOptions,
+) -> bool:
     """日期栏表样上印着「年 月 日」:年、月、日分别写在这三个字前面的空里(整串写会压在「年」前面、错位)。
     栏里没印「年月日」或值不是 yyyy-mm-dd 时返回 False,照常整串写"""
     m = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", value.strip())
@@ -251,7 +273,7 @@ def fill_pdf(target: str, cells: list[dict], out: Path) -> str:
             raise ValueError(f"模板库没有 {target} 的表样 PDF")
         pg = doc[0]
         PW, PH = pg.rect.width, pg.rect.height
-        font = (
+        font: FontOptions = (
             {"fontfile": str(FONT), "fontname": "hei"} if FONT.exists() else {"fontname": "china-s"}
         )
         marks = _date_marks(pg)

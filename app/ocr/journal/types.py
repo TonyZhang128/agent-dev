@@ -5,6 +5,9 @@ from typing import Literal
 
 import numpy as np
 
+# 页面定位各阶段共用的取值，避免退化为任意字符串。
+type LocationKind = Literal["table", "page", "whole"]
+
 
 @dataclass(frozen=True)
 class Photo:
@@ -58,7 +61,7 @@ class PageLocation:
 
     sheet: np.ndarray
     quad: np.ndarray
-    kind: Literal["table", "page", "whole"]
+    kind: LocationKind
     how: str
     width: int
     height: int

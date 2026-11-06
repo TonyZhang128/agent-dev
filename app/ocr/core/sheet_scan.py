@@ -13,7 +13,7 @@ import cv2
 import numpy as np
 
 from app.ocr.core.cv import binarize, line_mask
-from app.ocr.core.engine import ocr
+from app.ocr.core.engine import OCRBox, ocr
 from app.ocr.core.media import date_value
 
 W = 1000  # 归一化画布默认宽度(像素);实际宽度由 destination 返回,经 scan 显式传给 read_cells
@@ -87,12 +87,12 @@ def scan(
     return sheet, quad, how, recognized, detail
 
 
-def _dedup(boxes: list[dict]) -> list[dict]:
+def _dedup(boxes: list[OCRBox]) -> list[OCRBox]:
     """OCR 偶尔把同一个字再单独认一遍(「97.1」后面又跟一个「1」,框压在「97.1」的框里):
     被大框几乎完全盖住的小框去掉。相邻手写行的大框可能互相重叠,只在宽、高都被覆盖
     八成以上时才判为重复,避免把下一行整行删掉。"""
 
-    def inside(a: dict, b: dict) -> bool:
+    def inside(a: OCRBox, b: OCRBox) -> bool:
         ax0, ay0, ax1, ay1 = a["box"]
         bx0, by0, bx1, by1 = b["box"]
         iw, ih = max(0, min(ax1, bx1) - max(ax0, bx0)), max(0, min(ay1, by1) - max(ay0, by0))
@@ -106,7 +106,7 @@ def _dedup(boxes: list[dict]) -> list[dict]:
     ]
 
 
-def _cell_value(boxes: list[dict], label: str, typ: str) -> tuple[str, float]:
+def _cell_value(boxes: list[OCRBox], label: str, typ: str) -> tuple[str, float]:
     """格子里认出的字 → 值:去掉印的栏目名;数字栏只取数字"""
     boxes = _dedup(boxes)
     lab = re.sub(r"\s", "", label)

@@ -6,8 +6,10 @@
 
 import importlib
 import os
+from collections.abc import Iterable
 from importlib import metadata
 from pathlib import Path
+from types import ModuleType
 
 from app.ocr.core.resources import OCRResources
 
@@ -21,12 +23,12 @@ CAPS = {
 }
 
 
-def _load(name: str):
+def _load(name: str) -> ModuleType:
     """可替换的导入入口，便于测试模拟缺失或异常的运行时。"""
     return importlib.import_module(name)
 
 
-def _version(mod) -> str:
+def _version(mod: ModuleType) -> str:
     for attr in ("__version__", "VersionBind", "version"):
         v = getattr(mod, attr, None)
         if isinstance(v, str):
@@ -37,7 +39,7 @@ def _version(mod) -> str:
         return "unknown"
 
 
-def _imports(mods) -> dict:
+def _imports(mods: Iterable[tuple[str, str]]) -> dict:
     items = []
     for name, label in mods:
         try:
@@ -129,7 +131,7 @@ def _templates_cap(resources: OCRResources) -> dict:
 
 
 def _layouts_cap(resources: OCRResources) -> dict:
-    status = {"ok": True}
+    status: dict[str, object] = {"ok": True}
     for kind in ("jb12", "book1"):
         try:
             status[kind] = len(resources.load(f"layouts/{kind}.json")["forms"])
@@ -169,7 +171,7 @@ def _ocr_resources(resources: OCRResources | None, warnings: list[str]) -> dict:
     layouts = _layouts_cap(resources)
     wbs_rules = _wbs_rules_cap(resources)
     models = _models_cap(resources, warnings)
-    projects = {"ok": resources.projects.is_dir()}
+    projects: dict[str, object] = {"ok": resources.projects.is_dir()}
     if not projects["ok"]:
         projects["error"] = "PROJECTS_ROOT 不存在或不是目录"
     admin = {"ok": resources.admin.is_dir()}

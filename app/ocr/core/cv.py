@@ -29,7 +29,8 @@ def line_mask(bw: np.ndarray, kw: int, kh: int) -> np.ndarray:
     线接回成封闭格。kw/kh 是线长下限：贯穿表宽/表高的框线才留得下。
     """
     lines = cv2.morphologyEx(bw, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (kw, 1)))
-    lines |= cv2.morphologyEx(
+    vertical = cv2.morphologyEx(
         bw, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (1, kh))
     )
+    lines = cv2.bitwise_or(lines, vertical)
     return cv2.dilate(lines, np.ones((3, 3), np.uint8))

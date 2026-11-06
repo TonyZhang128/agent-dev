@@ -21,15 +21,18 @@ CUDA_UNAVAILABLE = (
 def enable_local_cuda(root: Path) -> list[Path]:
     """把 root 下各 redist 包的 bin 目录加入 DLL 搜索路径，返回加入的目录（升序）。
 
-    同时前置 PATH，兼容依赖 PATH 解析的间接加载；目录不存在或为空时返回 []。
+    同时前置 PATH，兼容依赖 PATH 解析的间接加载；非 Windows 或目录为空时返回 []。
     """
+    add_dll_directory = getattr(os, "add_dll_directory", None)
+    if not callable(add_dll_directory):
+        return []
     added = sorted(
         d.resolve() for pattern in ("bin", "*/bin") for d in root.glob(pattern) if d.is_dir()
     )
     if not added:
         return []
     for directory in added:
-        os.add_dll_directory(str(directory))
+        add_dll_directory(str(directory))
     os.environ["PATH"] = os.pathsep.join([*(str(d) for d in added), os.environ.get("PATH", "")])
     return added
 

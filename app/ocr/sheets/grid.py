@@ -14,14 +14,14 @@ import cv2
 import numpy as np
 import openpyxl
 import pymupdf
-from openpyxl.cell.cell import Cell
-from openpyxl.utils import get_column_letter
+from openpyxl.cell.cell import Cell, MergedCell
+from openpyxl.utils import coordinate_to_tuple, get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
 from app.ocr.core.cv import line_mask
 from app.ocr.core.layouts import layout_of
 from app.ocr.core.media import open_form_pdf, visible_chars
-from app.ocr.core.resources import asset, forms, resource_cache
+from app.ocr.core.resources import OCRResourceError, asset, forms, resource_cache
 
 PX = 1400  # 渲染宽度(像素)
 
@@ -304,15 +304,15 @@ def _bordered(ws: Worksheet) -> tuple[int, int, int, int] | None:
     """有框线的单元格范围(表格主体)"""
     r0 = c0 = 10**6
     r1 = c1 = 0
-    for row in ws.iter_rows():
-        for c in row:
-            b = c.border
-            if b.left.style or b.right.style or b.top.style or b.bottom.style:
+    for row_index, row in enumerate(ws.iter_rows(), start=1):
+        for column_index, cell in enumerate(row, start=1):
+            border = cell.border
+            if border.left.style or border.right.style or border.top.style or border.bottom.style:
                 r0, r1, c0, c1 = (
-                    min(r0, c.row),
-                    max(r1, c.row),
-                    min(c0, c.column),
-                    max(c1, c.column),
+                    min(r0, row_index),
+                    max(r1, row_index),
+                    min(c0, column_index),
+                    max(c1, column_index),
                 )
     return (r0, c0, r1, c1) if r1 else None
 
@@ -365,6 +365,9 @@ def fill_xlsx(code: str, values: list[dict], excel_anchors: dict, out: Path) -> 
         return ExcelOutput()
     wb = openpyxl.load_workbook(asset(rel))
     ws = wb.active
+    if not isinstance(ws, Worksheet):
+        wb.close()
+        raise OCRResourceError("Excel 模板活动页必须为普通工作表，请检查模板资源")
     box = _bordered(ws)
     tbl = cells(code)
     if not box or not tbl:
@@ -379,15 +382,19 @@ def fill_xlsx(code: str, values: list[dict], excel_anchors: dict, out: Path) -> 
     ex0, ex1, ey0, ey1 = cols[c0 - 1], cols[c1], rows[r0 - 1], rows[r1]
     merged = list(ws.merged_cells.ranges)
 
-    def span(cell: Cell) -> tuple[int, int, int, int]:
+    def span(cell: Cell | MergedCell) -> tuple[int, int, int, int]:
         for m in merged:
             if cell.coordinate in m:
                 return m.min_row, m.min_col, m.max_row, m.max_col
-        return cell.row, cell.column, cell.row, cell.column
+        row_index, column_index = coordinate_to_tuple(cell.coordinate)
+        return row_index, column_index, row_index, column_index
 
-    def top_left(cell: Cell) -> Cell:
+    def top_left(cell: Cell | MergedCell) -> Cell:
         r, c, _, _ = span(cell)
-        return ws.cell(r, c)
+        first = ws.cell(r, c)
+        if not isinstance(first, Cell):
+            raise OCRResourceError("Excel 模板的合并单元格起点无效，请检查模板资源")
+        return first
 
     # 两边都印着、且各只出现一次的栏目名 → 对齐点(行取上沿,列取左沿)
     pdf_lab, xls_lab = {}, {}
@@ -414,7 +421,9 @@ def fill_xlsx(code: str, values: list[dict], excel_anchors: dict, out: Path) -> 
         if not v.get("value"):
             continue
         if v["field"] in excel_anchors:
-            cell = top_left(ws[excel_anchors[v["field"]]])
+            address = excel_anchors[v["field"]]
+            row_index, column_index = coordinate_to_tuple(address)
+            cell = top_left(ws.cell(row_index, column_index))
         else:
             r = v["rect"]
             cx, cy = r["x"] + r["w"] / 2, r["y"] + r["h"] / 2

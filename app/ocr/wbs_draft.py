@@ -14,6 +14,7 @@
 import base64
 import binascii
 import re
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -80,10 +81,8 @@ def pdf_text(source: Path | bytes, max_pages: int = 8) -> list[tuple[int, str]]:
                 out.append((number, d[0].get_text()))
     else:
         with open_pdf(source) as d:
-            for i, pg in enumerate(d):
-                if i >= max_pages:
-                    break
-                out.append((i + 1, pg.get_text()))
+            for i in range(min(len(d), max_pages)):
+                out.append((i + 1, d[i].get_text()))
     return out
 
 
@@ -218,7 +217,7 @@ def bridge_units(b: dict, prefix: str, no: int) -> list[dict]:
     return [{"code": code, "title": title, "src": b["src"], "children": parts}]
 
 
-def road_units(rng: tuple[float, float] | None, prefix: str, start_no: int = 1) -> list[dict]:
+def road_units(rng: Sequence[float] | None, prefix: str, start_no: int = 1) -> list[dict]:
     """路段 [起, 止](米)→ 路基 / 路面单位工程(≤10 km 一个),分部每 ≤3 km"""
     if not rng:
         return []
@@ -280,11 +279,15 @@ def draft(
     for b in [r for r in reads if r["kind"] == "bridge"]:
         qn += 1
         units += bridge_units(b, prefix, qn)
-    road = next((r["chainage"] for r in reads if r["kind"] == "road" and r.get("chainage")), None)
+    road: Sequence[float] | None = next(
+        (r["chainage"] for r in reads if r["kind"] == "road" and r.get("chainage")), None
+    )
     if not road and basis:
         f = dict(basis.get("facts") or [])
         m = re.findall(r"K\d+\+\d+(?:\.\d+)?", f.get("路线起讫", ""))
-        road = [chainage_m(m[0]), chainage_m(m[1])] if len(m) == 2 else None
+        if len(m) == 2:
+            start, end = chainage_m(m[0]), chainage_m(m[1])
+            road = [start, end] if start is not None and end is not None else None
     units += road_units(road, prefix)
     count = {
         "units": len(units),
