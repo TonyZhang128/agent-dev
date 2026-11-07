@@ -282,7 +282,7 @@ def test_unknown_categories_never_reach_the_values():
 
 
 @pytest.mark.asyncio
-async def test_split_uses_the_model_plan_when_it_is_complete():
+async def test_split_prefers_rules_and_never_calls_the_model():
     calls = []
 
     async def planner(request):
@@ -291,30 +291,52 @@ async def test_split_uses_the_model_plan_when_it_is_complete():
 
     outcome = await split.split_main_work(readings("巡视情况巡视检查。"), planner)
 
-    assert outcome.strategy == "llm"
+    assert outcome.strategy == "rules"
     assert outcome.values.patrol == "巡视情况巡视检查。"
     assert outcome.values.construction is None
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_split_uses_the_model_plan_when_rules_cannot_split():
+    calls = []
+    text = "对K3+280段进行了旁站和巡视。"
+
+    async def planner(request):
+        calls.append(request)
+        return plan_for(request.units, {unit.unit_id: "witness" for unit in request.units})
+
+    outcome = await split.split_main_work(readings(text), planner)
+
+    assert outcome.strategy == "llm"
+    assert outcome.values.witness == text
+    assert outcome.values.construction is None
+    assert outcome.values.patrol is None
     assert len(calls) == 1
 
 
 @pytest.mark.asyncio
-async def test_split_falls_back_to_rules_when_the_model_fails():
-    async def planner(request):
-        raise TimeoutError
-
-    outcome = await split.split_main_work(readings("巡视情况巡视检查。"), planner)
-
-    assert outcome.strategy == "rules"
-    assert outcome.values.patrol == "巡视情况巡视检查。"
-
-
-@pytest.mark.asyncio
-async def test_split_raises_a_controlled_error_when_rules_also_fail():
+async def test_split_raises_a_controlled_error_when_rules_and_model_both_fail():
     async def planner(request):
         raise TimeoutError
 
     with pytest.raises(split.MainWorkSplitError):
         await split.split_main_work(readings("对K3+280段进行了旁站和巡视。"), planner)
+
+
+@pytest.mark.asyncio
+async def test_split_raises_when_rules_fail_and_the_model_plan_is_invalid():
+    async def planner(request):
+        return MainWorkSplitPlan(assignments=[])
+
+    with pytest.raises(split.MainWorkSplitError):
+        await split.split_main_work(readings("对K3+280段进行了旁站和巡视。"), planner)
+
+
+@pytest.mark.asyncio
+async def test_split_raises_when_rules_fail_and_no_planner_is_available():
+    with pytest.raises(split.MainWorkSplitError):
+        await split.split_main_work(readings("对K3+280段进行了旁站和巡视。"))
 
 
 @pytest.mark.asyncio
@@ -333,7 +355,7 @@ async def test_empty_main_work_never_calls_the_model():
 
 
 @pytest.mark.asyncio
-async def test_overlong_text_skips_the_model_and_uses_rules():
+async def test_overlong_text_is_split_by_rules_without_calling_the_model():
     calls = []
     text = "旁站情况：" + "填筑。" * (split.MAX_SPLIT_CHARACTERS // 3 + 1)
 
@@ -349,9 +371,23 @@ async def test_overlong_text_skips_the_model_and_uses_rules():
 
 
 @pytest.mark.asyncio
+async def test_overlong_text_that_rules_cannot_split_raises_without_calling_the_model():
+    calls = []
+    text = "对K3+280段进行了旁站和巡视。" + "填筑。" * (split.MAX_SPLIT_CHARACTERS // 3 + 1)
+
+    async def planner(request):
+        calls.append(request)
+        return plan_for(request.units, {})
+
+    with pytest.raises(split.MainWorkSplitError):
+        await split.split_main_work(readings(text), planner)
+    assert calls == []
+
+
+@pytest.mark.asyncio
 async def test_split_does_not_swallow_cancellation():
     async def planner(request):
         raise asyncio.CancelledError
 
     with pytest.raises(asyncio.CancelledError):
-        await split.split_main_work(readings("巡视情况巡视检查。"), planner)
+        await split.split_main_work(readings("对K3+280段进行了旁站和巡视。"), planner)

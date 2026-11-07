@@ -1,7 +1,8 @@
-"""mainWork 原文拆分：文字单元、可靠标题、规则回退、结果校验与字段组装。
+"""mainWork 原文拆分：文字单元、可靠标题、规则优先、模型兜底与字段组装。
 
-只做“把原文分配到三个字段”，不生成、不纠错、不润色。模型只返回单元 ID 的
-类别；字段值一律由本模块从 source_text 原样截取。
+只做“把原文分配到三个字段”，不生成、不纠错、不润色。先尝试标题/强标记规则；
+规则无法完整覆盖时，才调用模型返回单元 ID 的类别。字段值一律由本模块从
+source_text 原样截取。
 """
 
 import logging
@@ -23,7 +24,7 @@ from app.schemas.ocr import (
 
 logger = logging.getLogger(__name__)
 
-# 初始值；超过上限不截断，直接跳过模型改用标题规则，规则失败则返回受控 502。
+# 初始值；超过上限不截断，直接跳过模型。规则已优先尝试，规则失败且超长时返回受控 502。
 MAX_SPLIT_CHARACTERS = 4000
 
 STRONG_BOUNDARIES = "。；;！？!?"
@@ -182,7 +183,7 @@ def assemble(
 async def split_main_work(
     readings: Sequence[FieldReading], planner: Planner | None = None
 ) -> SplitOutcome:
-    """模型为主、规则兜底；两者都无法可靠完成时抛出 MainWorkSplitError。"""
+    """规则为主、模型兜底；规则与模型都无法可靠完成时抛出 MainWorkSplitError。"""
     reading = next((item for item in readings if item.spec.key == "mainWork"), None)
     source_text = reading.value if reading is not None else ""
     if not source_text.strip():
@@ -190,6 +191,17 @@ async def split_main_work(
 
     segments = reading.segments if reading is not None else ()
     units = build_units(source_text, segments)
+
+    assignments = rule_assignments(units)
+    if assignments is not None:
+        return _outcome(
+            values=assemble(units, assignments),
+            units=units,
+            assignments=assignments,
+            strategy="rules",
+            source_text=source_text,
+        )
+
     if planner is not None and len(source_text) <= MAX_SPLIT_CHARACTERS:
         plan = await _plan(planner, units)
         if plan is not None:
@@ -202,26 +214,17 @@ async def split_main_work(
                     strategy="llm",
                     source_text=source_text,
                 )
-            logger.warning("mainWork 分类结果未通过校验，改用标题规则")
+            logger.warning("mainWork 标题规则无法拆分，模型分类结果也未通过校验")
 
-    assignments = rule_assignments(units)
-    if assignments is None:
-        raise MainWorkSplitError("mainWork cannot be split reliably")
-    return _outcome(
-        values=assemble(units, assignments),
-        units=units,
-        assignments=assignments,
-        strategy="rules",
-        source_text=source_text,
-    )
+    raise MainWorkSplitError("mainWork cannot be split reliably")
 
 
 async def _plan(planner: Planner, units: tuple[MainWorkUnit, ...]) -> MainWorkSplitPlan | None:
     try:
         return await planner(MainWorkSplitRequest(units=units))
-    except Exception as exc:  # noqa: BLE001 —— 模型边界；失败整体转规则
+    except Exception as exc:  # noqa: BLE001 —— 模型边界；失败后无其他兜底
         # 只记录异常类型，不记录原文、单元或上游错误正文。
-        logger.warning("mainWork 分类模型调用失败，改用标题规则（%s）", type(exc).__name__)
+        logger.warning("mainWork 标题规则无法拆分，分类模型调用失败（%s）", type(exc).__name__)
         return None
 
 

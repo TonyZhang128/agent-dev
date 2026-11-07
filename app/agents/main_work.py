@@ -12,13 +12,15 @@ class MainWorkSplitAgent(StructuredAgent[MainWorkSplitRequest, MainWorkSplitPlan
     """把原文单元分类到 construction/witness/patrol/unknown。
 
     请求之间只共享编译后的 Agent 和并发信号量；单元、动态结果均由请求局部构造。
-    该能力只做一次主模型尝试，失败由编排层改用标题规则，不做云端回退。
+    只有标题/强标记规则无法完整拆分时，编排层才会调用该能力；模型失败或结果不合格
+    时返回受控错误，不追加修复调用。配置 LLM_FALLBACK_API_KEY 时，主模型连接失败、
+    超时或上游错误会按运行时配置回退到云端模型一次。
     """
 
     name = "main_work_split"
     result_type = MainWorkSplitPlan
     temperature = 0.0
-    allow_model_fallback = False
+    allow_model_fallback = True
 
     def __init__(self, models: ModelService, *, prompt_name: str | None = None):
         # Agent 名称用于 JSON Schema 标题；提示词文件名独立，避免改动已有命名。

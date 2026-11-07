@@ -759,7 +759,7 @@
           "ocr"
         ],
         "summary": "识别监理日记（新版链路）",
-        "description": "新版监理日志识别：定位表格、整页 OCR 后匹配栏目；歧义或漏框字段最多补充识别 3 次。mainWork 原文按可靠标题或模型分类拆分为 construction、witness、patrol；字段值始终原样取自 OCR 文本，不生成、不纠错、不润色，原文没有的类别为 null。成功响应严格遵守已确认的后端格式，顶层只有 status、message、data，业务字段直接位于 data，不返回内部识别详情。mainWork 无法可靠拆分时返回 502。",
+        "description": "新版监理日志识别：定位表格、整页 OCR 后匹配栏目；歧义或漏框字段最多补充识别 3 次。mainWork 原文优先按可靠标题或单元开头强标记做规则拆分，规则无法完整覆盖时才用模型分类拆分 construction、witness、patrol；字段值始终原样取自 OCR 文本，不生成、不纠错、不润色，原文没有的类别为 null。成功响应严格遵守已确认的后端格式，顶层只有 status、message、data，业务字段直接位于 data，不返回内部识别详情。mainWork 无法可靠拆分时返回 502。",
         "operationId": "journal_recognize_ocr_daily_logs_new_post",
         "requestBody": {
           "content": {
@@ -834,7 +834,7 @@
             }
           },
           "502": {
-            "description": "mainWork 无法可靠拆分：模型分类不合格，标题规则也无法完整覆盖原文。",
+            "description": "mainWork 无法可靠拆分：标题规则无法完整覆盖原文，模型分类也不合格。",
             "content": {
               "application/json": {
                 "schema": {

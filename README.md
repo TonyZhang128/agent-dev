@@ -88,7 +88,7 @@ test -f .env || cp .env.example .env
 | `LLM_FALLBACK_TIMEOUT_SECONDS` | `60` | 回退调用超时，叠加在 `LLM_TIMEOUT_SECONDS` 之上 |
 | `LLM_FALLBACK_REASONING_EFFORT` | `none` | 关闭回退模型思考；不支持的服务可设为空 |
 | `AGENT_RECURSION_LIMIT` | `8` | Agent 运行步数上限，包含工具调用循环 |
-| `MAIN_WORK_SPLIT_TIMEOUT_SECONDS` | `30` | 新版监理日志 `mainWork` 分类的总预算（含并发排队），超时改用标题规则 |
+| `MAIN_WORK_SPLIT_TIMEOUT_SECONDS` | `30` | 新版监理日志 `mainWork` 规则失败后模型分类的总预算（含并发排队），超时返回受控 `502` |
 | `MAIN_WORK_SPLIT_CONCURRENCY` | `1` | `mainWork` 分类的本地模型并发上限；OCR 推理仍按应用串行加锁 |
 | `LANGSMITH_TRACING` | `false` | 是否开启 LangSmith 追踪 |
 | `TEMPLATES_ROOT` | `data/ocr/templates` | 模板 JSON：forms、layouts、refs |

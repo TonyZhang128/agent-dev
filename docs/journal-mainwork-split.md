@@ -34,10 +34,10 @@
 | 决策 | 选择 |
 | --- | --- |
 | 模型输出 | 只返回原文单元 ID 的分类，不直接返回三个字符串 |
-| 主次策略 | LLM 为主；失败或结果不合格时使用标题规则回退 |
+| 主次策略 | 标题/强标记规则为主；规则无法完整覆盖时才调用 LLM |
 | 标题处理 | 保留各节标题原文，随所属正文进入字段 |
 | 最终无法分类 | 返回受控 `502`，不复制原文、不强塞 `construction` |
-| 模型与回退边界 | 一次配置主模型尝试；不启用运行时云端回退；随后规则回退 |
+| 模型与回退边界 | 规则失败后一次主模型尝试；配置 `LLM_FALLBACK_API_KEY` 时允许一次云端回退；全部失败返回受控 `502` |
 | 持久审计 | 仅请求内保留原文与分类计划，不新增持久化存储 |
 
 `502` 与 `mainWork` 语义变化已随方案确认；接口整体仍保持 `pending-review`，不提升为正式契约。
@@ -100,17 +100,17 @@ mainWork 为空
 
 mainWork 非空
   → 构建 source_text、文本单元、位置映射
-  → 构造标题提示（可靠标题 / 正文 / 容器标签）
-  → 调用 MainWorkSplitAgent，返回单元 ID → 类别
-  → 校验
-      ├─ 全部可靠 → 程序按原文位置提取，组装三个字段
-      └─ 失败或仍有有效 unknown
-            → 整体改用关键词标题规则
-                ├─ 规则可靠 → 程序提取并组装
-                └─ 仍不能完成 → 抛出 MainWorkSplitError → HTTP 502
+  → 先按可靠标题 / 单元开头强标记做规则拆分
+      ├─ 规则完整覆盖 → 程序按原文位置提取，组装三个字段
+      └─ 规则无法完整覆盖
+            → 超过字符上限 → 抛出 MainWorkSplitError → HTTP 502
+            → 调用 MainWorkSplitAgent，返回单元 ID → 类别
+            → 校验
+                ├─ 通过 → 程序按原文位置提取，组装三个字段
+                └─ 失败或仍有有效 unknown → 抛出 MainWorkSplitError → HTTP 502
 ```
 
-规则结果与 LLM 结果不混用：LLM 结果一旦出现有效 `unknown` 或校验失败，整体改用规则结果，避免同一份输出中两套分配来源。
+规则结果与 LLM 结果不混用：规则可以完整覆盖时不再调用模型；规则失败后，模型结果一旦出现有效 `unknown` 或校验失败，不做第二次修复调用，直接返回受控 `502`，避免同一份输出中两套分配来源。
 
 ### 4.2 模块职责
 
@@ -124,7 +124,7 @@ mainWork 非空
 | `app/api/ocr.py` | 编排 OCR 与拆分，保持 HTTP 响应包装 |
 | `app/errors.py` | 新增 `MainWorkSplitError` |
 | `app/http_errors.py` | 将 `MainWorkSplitError` 映射为受控 `502` |
-| `app/agents/base.py` / `runtime.py` | 增加能力级“禁用模型回退”开关 |
+| `app/agents/base.py` / `runtime.py` | 增加能力级模型回退开关 |
 
 不新建通用工作流框架，不新增 Service/Repository 层。
 
@@ -314,14 +314,16 @@ assert "".join(unit.text for unit in units) == source_text
 
 ### 8.1 模型结果校验
 
+模型只在规则无法完整覆盖时调用，因此以下任一校验失败都直接返回受控 `502`，不再回到规则。
+
 | 检查 | 条件 | 失败处理 |
 | --- | --- | --- |
-| 结构 | Pydantic/JSON Schema 通过，`category` 只允许四值 | 规则回退 |
-| 不遗漏 | 返回 ID 集合 == 输入单元集合 | 规则回退 |
-| 不重复 | 每个 ID 恰好出现一次 | 规则回退 |
-| 不越界 | 不得引用不存在的 ID | 规则回退 |
-| 标题一致 | 可靠标题及其范围内正文的类别必须与标题类别一致 | 规则回退 |
-| 无有效未知 | 非标题、非纯标点的 `unknown` 数量为 0 | 规则回退 |
+| 结构 | Pydantic/JSON Schema 通过，`category` 只允许四值 | 受控 `502` |
+| 不遗漏 | 返回 ID 集合 == 输入单元集合 | 受控 `502` |
+| 不重复 | 每个 ID 恰好出现一次 | 受控 `502` |
+| 不越界 | 不得引用不存在的 ID | 受控 `502` |
+| 标题一致 | 可靠标题及其范围内正文的类别必须与标题类别一致 | 受控 `502` |
+| 无有效未知 | 非标题、非纯标点的 `unknown` 数量为 0 | 受控 `502` |
 
 重复检测按 `unit_id`，不按文本去重。原文可能真实地重复同一句话，不能因此删除其中一处。
 
@@ -390,22 +392,20 @@ class MainWorkSplitAgent(StructuredAgent[MainWorkSplitRequest, MainWorkSplitPlan
 
 继续经过 `build_agent()` / `invoke_agent()`，使用 `ProviderStrategy(strict=True)`，不新增直接调用 SDK 的旁路，不使用工具、历史或 checkpointer。
 
-### 9.2 禁用运行时云端回退
+### 9.2 启用运行时云端回退
 
-当前 `build_agent()` 在 `models.fallback_enabled` 时自动加入 `ModelFallbackMiddleware`。本功能需要：
+当前 `build_agent()` 在 `models.fallback_enabled` 时自动加入 `ModelFallbackMiddleware`。本功能的策略是：
 
-1. 在 `build_agent()` 增加参数 `allow_model_fallback: bool = True`；
-2. 在 `BaseAgent` 增加类属性 `allow_model_fallback = True`；
-3. `BaseAgent._build()` 将其传入；
-4. `MainWorkSplitAgent` 覆盖为 `False`。
+1. 保留 `build_agent()` 的 `allow_model_fallback: bool = True` 参数和 `BaseAgent` 的类属性；
+2. `MainWorkSplitAgent` 保持 `allow_model_fallback = True`，与 `models.fallback_enabled` 共同决定是否启用回退。
 
 原因：
 
-- 一次模型尝试后转规则，符合已确认的成本与延迟策略；
-- 避免在调用方不知情时把 OCR 原文发送到云端回退模型；
-- 避免一次 Agent 调用产生两次模型请求。
+- 规则无法拆分时才调用模型，已经减少一次常规模型请求；
+- 本地模型不可达或超时时，配置了 `LLM_FALLBACK_API_KEY` 可提高识别成功率；
+- 云端回退意味着 `mainWork` OCR 原文会发送到云端，部署方需按数据合规要求决定是否配置密钥。
 
-该改动必须保持其他 Agent 行为不变，并补回归测试。
+回退只发生在连接失败、超时或上游 HTTP 错误等模型边界；已返回但未通过 Schema 校验的输出不会再次调用云端模型。其他 Agent 的既有回退行为保持不变，并保留回归测试。
 
 ### 9.3 超时与并发
 
@@ -538,7 +538,7 @@ data.fields.nextDayPlan
 | `app/ocr/journal/__init__.py` | 拆出同步 OCR 结果与结果组装；移除“整段复制”逻辑 |
 | `app/api/ocr.py` | 路由改 `async def`；OCR 进线程池；调用拆分；保持响应包装 |
 | `app/agents/base.py` | `allow_model_fallback` 类属性并传入构建 |
-| `app/agents/runtime.py` | `build_agent()` 支持禁用模型回退 |
+| `app/agents/runtime.py` | `build_agent()` 支持能力级模型回退开关 |
 | `app/main.py` | lifespan 初始化 `main_work_split_agent` |
 | `app/config.py` | 拆分超时与并发配置 |
 | `app/errors.py` | `MainWorkSplitError` |
@@ -605,7 +605,7 @@ data.fields.nextDayPlan
 8. **真实模型验收。**
    - 重启 API；
    - 用真实照片和本地模型调用一次；
-   - 记录拆分结果、耗时、是否回退；
+   - 记录拆分结果、耗时、是否调用模型；
    - 未执行的验收不得宣称通过。
 
 ## 13. 测试方案
@@ -639,19 +639,19 @@ data.fields.nextDayPlan
 需要覆盖：
 
 - 请求体包含预期的 `json_schema` 名称和单元结构；
-- 合法计划返回；
+- 规则无法拆分时才调用模型；合法计划返回；
 - 空输出、截断、非法 JSON、`finish_reason` 异常；
 - 模型连接失败、超时；
-- 配置了 `LLM_FALLBACK_API_KEY` 时，本 Agent 只发出一次请求，不调用云端回退；
-- 超时后规则回退；
+- 配置了 `LLM_FALLBACK_API_KEY` 时，主模型失败后允许一次云端回退；
+- 规则失败后模型超时返回受控 `502`；
 - 取消信号不被吞掉。
 
 ### 13.3 路由与契约
 
 - 空 `mainWork`：`200`，三字段 `null`，模型调用次数为 0；
-- LLM 成功：`200`，三字段为拆分后的原文；
-- LLM 失败 + 可靠标题：`200`，规则结果；
-- LLM 与规则均失败：`502`，`detail` 固定文案，不回显原文；
+- 存在可靠标题或单元开头强标记：`200`，规则结果，模型调用次数为 0；
+- 规则无法拆分、LLM 成功：`200`，三字段为拆分后的原文；
+- 规则与 LLM 均失败：`502`，`detail` 固定文案，不回显原文；
 - 其他字段与旧行为一致；
 - 成功响应字段集合严格等于 `JournalResponse`；
 - 并发请求之间原文、单元、分类计划不串用；
@@ -670,20 +670,22 @@ data.fields.nextDayPlan
 | 完整日志拆分正确率 | 单独报告，不用字符覆盖率代替 |
 | `unknown` 率、最终 `502` 率 | 必须报告，避免靠拒识刷高准确率 |
 | LLM 有效结果率 | 与 HTTP 调用成功率分开 |
-| 规则回退成功率 | 单独报告 |
-| 延迟 | OCR、排队、LLM、回退分别计时，报告 P50/P95 |
+| 规则直接拆分成功率 | 单独报告 |
+| 延迟 | OCR、规则、排队、LLM 分别计时，报告 P50/P95 |
 
 建议用 150–200 份有代表性的真实 OCR 文本分层标注，开发集与验收集分开。模型置信分数不能当作准确率。
 
 ## 14. 性能与成本
 
-- 每份非空、未超长的日志最多一次 LLM 调用；
-- 失败后不追加“请重新回答”的修复调用；
-- 不启用运行时云端回退，避免一次调用变两次；
+- 规则可以完整覆盖时不调用 LLM；
+- 规则失败后每份日志最多一次 LLM 调用；
+- 模型失败后不追加“请重新回答”的修复调用；
+- 配置了 `LLM_FALLBACK_API_KEY` 时，主模型失败可能追加一次云端调用；
+- 云端回退意味着 `mainWork` OCR 原文会发送到云端，需按数据合规要求决定是否启用；
 - 输出是指定 ID 的类别列表，通常小于重复输出全文；
 - 输入 Token 由单元 JSON、ID 和 Prompt 组成；切得越碎，输出条目越多，需要实测；
 - 本地模型默认并发 1；通过 `MAIN_WORK_SPLIT_CONCURRENCY` 调整；
-- 队列和调用共享 30 秒总预算；超时转规则；
+- 队列和调用共享 30 秒总预算；规则失败后模型超时返回受控 `502`；
 - OCR 本身已有资源锁，拆分并发不会绕过 OCR 的串行约束。
 
 ## 15. 风险与限制
@@ -731,12 +733,12 @@ docs/journal-mainwork-split.md，严格按已确认方案实施，不扩大范�
    原文单元 ID → construction/witness/patrol/unknown 的分类计划。
 3. 程序从 source_text 原样提取字段值；校验结构、ID 不遗漏、
    不重复、不越界、标题一致、无有效 unknown。
-4. LLM 为主；失败或不合格时整体改用标题规则；规则仍不能完成时
-   返回受控 502。不复制原文、不强塞 construction。
+4. 规则为主；标题/强标记规则无法完整覆盖时才整体改用 LLM；
+   模型失败或不合格时返回受控 502。不复制原文、不强塞 construction。
 5. 保留各节标题原文；缺失类别返回 null；不改其他 OCR 字段。
 6. 路由改 async；OCR 用 run_in_threadpool；不新增同步 SDK 旁路；
-   不修改共享 Agent；不启用 checkpointer；一次主模型尝试后转规则，
-   本 Agent 禁用运行时云端回退。
+   不修改共享 Agent；不启用 checkpointer；规则失败后一次主模型尝试，
+   本 Agent 允许配置的运行时云端回退。
 7. 按 TDD：先加失败测试，再实现。补 Agent 集成测试（只在模型
    HTTP 边界模拟）、规则/校验测试、并发隔离、取消、502 映射和
    成功响应严格兼容测试。

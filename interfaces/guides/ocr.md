@@ -7,8 +7,8 @@ OCR 模型和辅助脚本见 [文档加工与 OCR](../../docs/ocr.md)。
 ## 共同规则
 
 - 全部为同步请求；CPU 处理在线程池执行，同一应用的 OCR 推理串行加锁。
-  `/ocr/daily-logs-new` 在 OCR 之后还会同步调用一次模型拆分 `mainWork`，仍以单个
-  HTTP 响应返回，不产生服务端任务或轮询。
+  `/ocr/daily-logs-new` 在 OCR 之后先按标题和单元开头强标记拆分 `mainWork`，规则无法
+  完整覆盖时才同步调用一次模型；仍以单个 HTTP 响应返回，不产生服务端任务或轮询。
 - 没有服务端任务 ID、异步轮询、webhook、回调、分页或 multipart 上传；
   `/ocr/daily-logs` 的 `taskId` 仅原样回显调用方传入的值。
 - 没有鉴权。应由可信调用方在既有部署边界内使用。
@@ -96,9 +96,10 @@ ONNX Runtime 能否导入，`OCR_DEVICE` 与 onnxruntime provider 是否一致�
 4. 按固定栏目区域，用中心点优先、框内覆盖率兜底的方式归属文字框。
 5. 按栏目名近似剥离印刷字；日期归一为 `yyyy-mm-dd`；长文本栏保留拼接结果。
 6. 对歧义或漏框字段最多补充识别 3 次。
-7. 把 `mainWork` 原文切成文字单元，先做一次模型分类（不启用运行时云端回退）；
-   模型失败、结果不完整、标题不一致或仍有有效 `unknown` 时，整体改用标题规则。
-8. 校验模型与规则结果后，从原文按类别截取 `construction`、`witness`、`patrol`。
+7. 把 `mainWork` 原文切成文字单元，先按可靠标题或单元开头强标记做规则拆分；
+   规则无法完整覆盖时才做一次模型分类（配置 `LLM_FALLBACK_API_KEY` 时允许一次云端回退）。
+8. 规则成功或模型计划通过校验后，从原文按类别截取 `construction`、`witness`、
+   `patrol`；两者都失败时返回受控 `502`。
 9. 严格返回 `{"status":200,"message":"识别完成","data":...}`；`data` 直接包含
    `taskId`、`documentType`、`common`、`fields`，缺失值为 `null`。
 

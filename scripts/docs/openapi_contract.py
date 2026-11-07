@@ -1081,8 +1081,9 @@ OPERATIONS: dict[str, dict[str, dict[str, Any]]] = {
     "/ocr/daily-logs-new": {
         "post": _operation(
             description="新版监理日志识别：定位表格、整页 OCR 后匹配栏目；歧义或漏框字段"
-            "最多补充识别 3 次。mainWork 原文按可靠标题或模型分类拆分为 construction、"
-            "witness、patrol；字段值始终原样取自 OCR 文本，不生成、不纠错、不润色，"
+            "最多补充识别 3 次。mainWork 原文优先按可靠标题或单元开头强标记做规则拆分，"
+            "规则无法完整覆盖时才用模型分类拆分 construction、witness、patrol；"
+            "字段值始终原样取自 OCR 文本，不生成、不纠错、不润色，"
             "原文没有的类别为 null。成功响应严格遵守已确认的后端格式，顶层只有 status、"
             "message、data，业务字段直接位于 data，不返回内部识别详情。"
             "mainWork 无法可靠拆分时返回 502。",
@@ -1134,7 +1135,7 @@ OPERATIONS: dict[str, dict[str, dict[str, Any]]] = {
                 ),
                 "422": REQUEST_ERROR_RESPONSE,
                 "502": _error_response(
-                    "mainWork 无法可靠拆分：模型分类不合格，标题规则也无法完整覆盖原文。"
+                    "mainWork 无法可靠拆分：标题规则无法完整覆盖原文，模型分类也不合格。"
                 ),
                 "503": _error_response("OCR 模型不可用。"),
             },

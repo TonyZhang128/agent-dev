@@ -20,6 +20,12 @@ MAIN_WORK_PARTS = (
     ("旁站情况", "旁站路基碾压", 0.45, 0.58, 0.94),
     ("巡视情况", "巡视挡土墙砌筑", 0.75, 0.88, 0.93),
 )
+# 没有标题或开头强标记，标题规则无法完整拆分，只能调用模型。
+MIXED_MAIN_WORK_PARTS = (
+    ("K3+280段路基填筑", "", 0.15, 0.28, 0.95),
+    ("旁站路基碾压", "", 0.45, 0.58, 0.94),
+    ("巡视挡土墙砌筑", "", 0.75, 0.88, 0.93),
+)
 FIELD_VALUES = {
     "project": ("成乐高速公路扩容建设", 0.95),
     "number": ("JL-001", 0.96),
@@ -89,12 +95,11 @@ def units_of(request) -> list[dict]:
 def model_plan(units: list[dict]) -> str:
     """按标题范围和正文关键词返回合法计划；用于模拟真实模型的正确输出。"""
     assignments = []
-    category = None
+    heading_category = None
     for unit in units:
         if unit["kind"] == "heading":
-            category = unit["heading_category"]
-        elif category is None:
-            category = semantic_category(unit["text"])
+            heading_category = unit["heading_category"]
+        category = heading_category or semantic_category(unit["text"])
         assignments.append({"unit_id": unit["id"], "category": category or "unknown"})
     return json.dumps({"assignments": assignments}, ensure_ascii=False)
 
@@ -127,12 +132,34 @@ def post_journal(client, settings, **kwargs) -> httpx.Response:
     return client.post("/ocr/daily-logs-new", json={"path": "journal.png", **kwargs})
 
 
-def test_route_uses_the_model_plan_and_sends_only_public_unit_fields(tmp_path):
+def test_route_uses_the_model_plan_when_rules_cannot_split(tmp_path):
     calls = []
 
     def respond(request):
         calls.append(json.loads(request.content))
         return completion(model_plan(units_of(request)))
+
+    settings, client = client_for(tmp_path, respond)
+    with client:
+        response = post_journal(client, settings, engine=JournalEngine(parts=MIXED_MAIN_WORK_PARTS))
+
+    assert response.status_code == 200
+    assert response.json()["data"]["fields"]["mainWork"] == {
+        "construction": "K3+280段路基填筑",
+        "witness": "旁站路基碾压",
+        "patrol": "巡视挡土墙砌筑",
+    }
+    assert calls[0]["response_format"]["json_schema"]["name"] == "main_work_split"
+    units = json.loads(calls[0]["messages"][-1]["content"])["units"]
+    assert all(set(unit) == {"id", "text", "kind", "heading_category"} for unit in units)
+
+
+def test_route_uses_headings_without_calling_the_model(tmp_path):
+    calls = []
+
+    def respond(request):
+        calls.append(request)
+        raise httpx.ConnectError("offline", request=request)
 
     settings, client = client_for(tmp_path, respond)
     with client:
@@ -144,25 +171,7 @@ def test_route_uses_the_model_plan_and_sends_only_public_unit_fields(tmp_path):
         "witness": "旁站情况旁站路基碾压",
         "patrol": "巡视情况巡视挡土墙砌筑",
     }
-    assert calls[0]["response_format"]["json_schema"]["name"] == "main_work_split"
-    units = json.loads(calls[0]["messages"][-1]["content"])["units"]
-    assert all(set(unit) == {"id", "text", "kind", "heading_category"} for unit in units)
-
-
-def test_route_falls_back_to_headings_when_the_model_is_unavailable(tmp_path):
-    def unavailable(request):
-        raise httpx.ConnectError("offline", request=request)
-
-    settings, client = client_for(tmp_path, unavailable)
-    with client:
-        response = post_journal(client, settings)
-
-    assert response.status_code == 200
-    assert response.json()["data"]["fields"]["mainWork"] == {
-        "construction": "主要施工情况K3+280段路基填筑",
-        "witness": "旁站情况旁站路基碾压",
-        "patrol": "巡视情况巡视挡土墙砌筑",
-    }
+    assert calls == []
 
 
 @pytest.mark.parametrize(
@@ -174,18 +183,16 @@ def test_route_falls_back_to_headings_when_the_model_is_unavailable(tmp_path):
     ],
     ids=["invalid-json", "empty-plan", "truncated"],
 )
-def test_route_falls_back_to_rules_when_model_output_is_invalid(tmp_path, result, finish):
+def test_route_returns_502_when_rules_fail_and_model_output_is_invalid(tmp_path, result, finish):
     def respond(request):
         return completion(result, finish=finish)
 
     settings, client = client_for(tmp_path, respond)
     with client:
-        response = post_journal(client, settings)
+        response = post_journal(client, settings, engine=JournalEngine(parts=MIXED_MAIN_WORK_PARTS))
 
-    assert response.status_code == 200
-    assert response.json()["data"]["fields"]["mainWork"]["construction"] == (
-        "主要施工情况K3+280段路基填筑"
-    )
+    assert response.status_code == 502
+    assert response.json() == {"detail": "监理日志主要工作情况无法可靠拆分，请核对照片后重试"}
 
 
 def test_route_returns_a_controlled_502_when_model_and_rules_both_fail(tmp_path):
@@ -228,19 +235,26 @@ def test_route_never_calls_the_model_for_empty_main_work(tmp_path):
     assert calls == []
 
 
-def test_main_work_agent_disables_runtime_cloud_fallback(tmp_path):
+def test_main_work_agent_uses_the_configured_cloud_fallback(tmp_path):
     calls = []
 
-    def unavailable(request):
+    def respond(request):
         calls.append(request)
+        if request.url.host == "api.deepseek.com":
+            return completion(model_plan(units_of(request)), model="deepseek-flash")
         raise httpx.ConnectError("offline", request=request)
 
-    settings, client = client_for(tmp_path, unavailable, llm_fallback_api_key="secret")
+    settings, client = client_for(tmp_path, respond, llm_fallback_api_key="secret")
     with client:
-        response = post_journal(client, settings)
+        response = post_journal(client, settings, engine=JournalEngine(parts=MIXED_MAIN_WORK_PARTS))
 
     assert response.status_code == 200
-    assert len(calls) == 1
+    assert len(calls) == 2
+    assert response.json()["data"]["fields"]["mainWork"] == {
+        "construction": "K3+280段路基填筑",
+        "witness": "旁站路基碾压",
+        "patrol": "巡视挡土墙砌筑",
+    }
 
 
 def test_other_agents_keep_the_configured_cloud_fallback(tmp_path):
@@ -281,12 +295,12 @@ async def test_concurrent_splits_do_not_share_units_or_plans():
         )
 
     patrol, construction = await asyncio.gather(
-        split.split_main_work(readings("巡视情况巡视检查。"), planner),
-        split.split_main_work(readings("主要施工情况K3+280段路基填筑。"), planner),
+        split.split_main_work(readings("对K3+280段进行了旁站和巡视。"), planner),
+        split.split_main_work(readings("对路基进行了填筑。"), planner),
     )
 
     assert patrol.strategy == construction.strategy == "llm"
-    assert patrol.values.patrol == "巡视情况巡视检查。"
+    assert patrol.values.patrol == "对K3+280段进行了旁站和巡视。"
     assert patrol.values.construction is None
-    assert construction.values.construction == "主要施工情况K3+280段路基填筑。"
+    assert construction.values.construction == "对路基进行了填筑。"
     assert construction.values.patrol is None
