@@ -9,8 +9,9 @@ from fastapi.testclient import TestClient
 
 from app.llm import ModelService
 from app.main import create_app
-from app.ocr.journal import spec, split
-from app.ocr.journal.types import FieldReading
+from app.ocr.journal import main_work_split as split
+from app.ocr.journal.models import FieldReading
+from app.ocr.journal.template import load_template
 from app.schemas.ocr import MainWorkAssignment, MainWorkCategory, MainWorkSplitPlan
 from tests.ocr_helpers import make_ocr_settings, ocr_result
 from tests.test_ocr_journal import field_box, write_photo
@@ -42,14 +43,14 @@ FIELD_VALUES = {
 
 def page_items(shape, parts=MAIN_WORK_PARTS):
     items = []
-    for field in spec.FIELD_SPECS:
-        if field.key == "mainWork":
-            for label, text, label_at, value_at, conf in parts:
+    for field in load_template().field_layouts():
+        if field.key == "main_work":
+            for label, text, label_at, value_at, confidence in parts:
                 items.append((field_box(shape, field, at=label_at), label, 0.9))
-                items.append((field_box(shape, field, at=value_at), text, conf))
+                items.append((field_box(shape, field, at=value_at), text, confidence))
             continue
-        text, conf = FIELD_VALUES[field.key]
-        items.append((field_box(shape, field), text, conf))
+        text, confidence = FIELD_VALUES[field.key]
+        items.append((field_box(shape, field), text, confidence))
     return items
 
 
@@ -174,6 +175,32 @@ def test_route_uses_headings_without_calling_the_model(tmp_path):
     assert calls == []
 
 
+def test_route_classifies_damaged_heading_without_rewriting_source(tmp_path):
+    calls = []
+
+    def respond(request):
+        units = units_of(request)
+        calls.append(units)
+        category = None
+        assignments = []
+        for unit in units:
+            if unit["text"] == "《视情况":
+                assert unit["kind"] == "heading" and unit["heading_category"] is None
+                category = "patrol"
+            elif unit["kind"] == "heading":
+                category = unit["heading_category"]
+            assignments.append({"unit_id": unit["id"], "category": category})
+        return completion(json.dumps({"assignments": assignments}, ensure_ascii=False))
+
+    parts = (*MAIN_WORK_PARTS[:2], ("《视情况", "巡视挡土墙砌筑", 0.75, 0.88, 0.93))
+    settings, client = client_for(tmp_path, respond)
+    with client:
+        response = post_journal(client, settings, engine=JournalEngine(parts=parts))
+    assert response.status_code == 200
+    assert len(calls) == 1
+    assert response.json()["data"]["fields"]["mainWork"]["patrol"] == "《视情况巡视挡土墙砌筑"
+
+
 @pytest.mark.parametrize(
     "result,finish",
     [
@@ -279,7 +306,11 @@ def test_other_agents_keep_the_configured_cloud_fallback(tmp_path):
 
 
 def readings(value: str) -> list[FieldReading]:
-    return [FieldReading(spec=spec.FIELD_SPECS[8], boxes=(), value=value, conf=0.9)]
+    return [
+        FieldReading(
+            layout=load_template().field_layouts()[8], boxes=(), value=value, confidence=0.9
+        )
+    ]
 
 
 @pytest.mark.asyncio

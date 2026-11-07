@@ -14,17 +14,14 @@
 | 业务端意图识别 | `POST /agents/intent/business` | 当前消息、当前页面与可选上下文 → 最小功能 `page/action`、一级意图澄清、聊天或未知状态、判断分数、目录版本 |
 | 归档端意图识别 | `POST /agents/intent/archive` | 文字与历史消息 → `A`–`D` 占位分类或 `unknown`、判断分数、澄清标记 |
 | 自由对话 | `POST /agents/chat` | 当前消息、必填历史（首轮 `[]`）→ 回答和模型名称 |
-| 照片/简表/监理日志 OCR | `POST /ocr/recognize`、`POST /ocr/jianbiao`、`POST /ocr/daily-logs`、`POST /ocr/daily-logs-new` | 数据池照片或 base64 图片 → 识别字段；新版监理日志仅返回后端约定的业务结构，`mainWork` 按业务含义拆分为施工/旁站/巡视 |
-| 公式与填表 | `POST /ocr/fill` | 核对后的值 + 配置 → 公式/引用结果，可输出同源 PDF/Excel |
-| 表样预览与字段 | `GET /ocr/blank/{form}.png`、`GET /ocr/sheet/{form}` | 空白表 PNG、版面栏与格子字段 |
-| 施工图划分 | `POST /wbs/draft` | PDF/工可 → WBS 划分初稿 |
+| 监理日记 OCR | `POST /ocr/daily-logs-new` | 数据池照片或 base64 图片 → 识别字段；新版监理日志仅返回后端约定的业务结构，`mainWork` 按业务含义拆分为施工/旁站/巡视 |
 | 本地依赖诊断 | `GET /diagnostics` | 运行库、推理设备、OCR 模板/模型与数据池静态检查；`warnings` 记录非致命问题 |
 | 进程存活 | `GET /health` | `{"status":"ok"}`，不访问模型 |
 | 模型就绪 | `GET /ready` | 检查配置模型是否出现在上游模型列表，成功返回 `{"status":"ready"}`，不执行推理 |
 
 服务默认监听 `127.0.0.1:8309`，交互文档为 <http://127.0.0.1:8309/docs>。这些接口生成内容和计划，尚未连接审批、订单或消息发送等业务系统。
 
-`docsvc` 的全部运行代码和辅助脚本已合并到 `app/ocr/`、`scripts/ocr/`，共用当前应用入口、Python 3.12、依赖锁和 CI。配置、接口与验收见 [文档加工与 OCR](docs/ocr.md)。工作区原先未跟踪的 `ocr/` 是另一个表单匹配项目，仍保持独立；本次迁移来源为 `../docsvc`。
+`docsvc` 的全部运行代码和辅助脚本已合并到 `app/ocr/`、`scripts/ocr/`，共用当前应用入口、Python 3.12、依赖锁和 CI。配置、接口与验收见 [文档加工与 OCR](docs/ocr.md)。新版监理日记通过 PDF 模板对齐完整照片，表内外字段共用一次 OCR；模板构建与本地检查见 [监理日记模板识别](docs/journal-template-recognition.md)。工作区原先未跟踪的 `ocr/` 是另一个表单匹配项目，仍保持独立；本次迁移来源为 `../docsvc`。
 
 ## 环境与安装
 
@@ -217,7 +214,7 @@ pyright 以 `basic` 模式检查整个 `app/`，包含 Agent 和 OCR；Ruff 格�
 
 ### 接口契约、Swagger 与 API-First
 
-[interfaces/](interfaces/README.md) 是对外接口文档的唯一入口，包含正式契约、待确认草案、业务指南和变更记录。当前 14 个 HTTP 操作全部有文档，其中 `/agents/*`、`/health`、`/ready` 标记为 `confirmed`；`/diagnostics`、`/ocr/*`、`/wbs/draft` 的完整响应/错误契约标记为 `pending-review`，见 [待确认草案](interfaces/drafts/README.md)。
+[interfaces/](interfaces/README.md) 是对外接口文档的唯一入口，包含正式契约、待确认草案、业务指南和变更记录。当前 8 个 HTTP 操作全部有文档，其中 `/agents/*`、`/health`、`/ready` 标记为 `confirmed`；`/diagnostics`、`/ocr/daily-logs-new` 的完整响应/错误契约标记为 `pending-review`，见 [待确认草案](interfaces/drafts/README.md)。
 
 - Swagger UI：启动 API 后访问 <http://127.0.0.1:8309/docs>；ReDoc 为 `/redoc`，运行时 OpenAPI 为 `/openapi.json`。这些是当前实现的投影，不是正式契约。
 - 完整 OpenAPI 草案：[interfaces/drafts/fastapi.openapi.json](interfaces/drafts/fastapi.openapi.json)，覆盖请求、成功响应、400/404/422/502/503/504 错误以及每个操作的副作用和幂等说明。
@@ -238,9 +235,8 @@ app/
     router.py             # 聚合 Router，由主应用统一 include_router
     agents.py             # /agents：日志总结、意图识别、聊天
     system.py             # /health、/ready、/diagnostics：存活、模型就绪与本地诊断
-    ocr.py                # /ocr：识别、监理日志、简表、填表与表样
-    wbs.py                # /wbs/draft：施工图划分初稿
-  ocr/                    # 文档加工业务（core 原语与资源 / form 照片模板对齐识别 / sheets 表样格子与 Excel / jianbiao 简表识别与公式填表 / daily_logs 旧监理日志 / journal 新版监理日志与 mainWork 拆分 / wbs_draft 划分初稿）
+    ocr.py                # /ocr/daily-logs-new：监理日记table模板识别
+  ocr/                    # core共享引擎/资源/诊断；journal：table模板、匹配和mainWork拆分
   http_errors.py          # 输入与模型异常的统一 HTTP 映射、校验详情脱敏
   config.py               # .env 配置与默认值
   schemas/                # 请求、响应的 Pydantic 模型和校验

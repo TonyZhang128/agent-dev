@@ -2,6 +2,26 @@
 
 只记录对外接口契约的变化。运行时行为、提示词和内部重构不在此记录。
 
+## 2026-11-07 — 监理日记无可靠表格时终止（用户已确认）
+
+- 用户明确回复“同意，按上述 400 语义执行”。`POST /ocr/daily-logs-new` 无通过模板结构核验的 table，或无法消解多个候选时，在 OCR 和 mainWork 分类之前终止。
+- 返回 HTTP `400` 和 `{"detail":"未检测到监理日志表格，请重新拍摄"}`，正式响应子契约为 `journal/table-not-found.schema.json`。
+- 删除纸张/整图回退以及定位失败后的空字段200；真实合法空白表格仍可成功返回空字段。
+- 成功 Schema、请求、taskId 和既有 mainWork 拆分失败502不变；调用方需对新增400条件提示重新拍摄。本确认不提升无关接口或整包OpenAPI。
+
+## 2026-11-07 — 草案移除未启用的 OCR/WBS 接口（用户已确认）
+
+- 从待确认草案中移除 `POST /ocr/recognize`、`POST /ocr/daily-logs`、
+  `POST /ocr/jianbiao`、`POST /ocr/fill`、`GET /ocr/blank/{form}.png`、
+  `GET /ocr/sheet/{form}` 与 `POST /wbs/draft`；实现代码已删除，对应入口在
+  `app/api/ocr.py` 中保留为注释，`app/api/wbs.py` 已移除。
+- 保留 `POST /ocr/daily-logs-new`、`/diagnostics` 及智能体接口，行为与状态不变。
+- 这些接口此前均为 `pending-review`，从未提升为正式契约；本次只同步草案、实现与
+  测试，不涉及已确认契约的破坏性变更。
+- 调用方影响：仍调用上述已移除接口的客户端会收到 404；需要这些能力时应重新提交
+  接口草案并完成审批，不能直接恢复路由。
+- 同时移除了仅被这些接口引用的组件 Schema，避免草案保留不可达模型。
+
 ## 2026-11-07 — 新版监理日志 mainWork 字段拆分（待确认）
 
 - `POST /ocr/daily-logs-new` 的 `data.fields.mainWork.construction`、`witness`、

@@ -7,10 +7,10 @@
 
 截至 2026-11-04：
 
-- 已实现的 14 个 HTTP 操作全部有文档，没有凭空描述尚未实现的接口。
+- 已实现的 8 个 HTTP 操作全部有文档，没有凭空描述尚未实现的接口。
 - `/agents/*`、`/health`、`/ready` 的既有契约由 `AGENTS.md`、`docs/agents-api.md`、
   `docs/sessions.md` 和自动化测试共同保护，标记为 `confirmed`。
-- `/diagnostics`、`/ocr/*`、`/wbs/draft` 已有实现和专题文档，但此前没有机器可读的完整
+- `/diagnostics`、`/ocr/daily-logs-new` 已有实现和专题文档，但此前没有机器可读的完整
   响应/错误契约；本次归纳为 **待确认草案**，标记为 `pending-review`。
   `/diagnostics` 由原 `/health/deps` 更名并提升为一级路由。
 - 完整 OpenAPI 草案位于 [drafts/fastapi.openapi.json](drafts/fastapi.openapi.json)。
@@ -80,14 +80,7 @@ interfaces/
 | 归档端意图识别 | `POST /agents/intent/archive` | confirmed | [归档接口](intent/archive/README.md) |
 | 自由对话 | `POST /agents/chat` | confirmed | [智能体指南](guides/agents.md) |
 | 本地依赖诊断 | `GET /diagnostics` | pending-review | [OCR 指南](guides/ocr.md) |
-| 普通照片/简表识别 | `POST /ocr/recognize` | pending-review | [OCR 指南](guides/ocr.md) |
-| 监理日志识别 | `POST /ocr/daily-logs` | pending-review | [OCR 指南](guides/ocr.md) |
 | 监理日志识别（新版链路） | `POST /ocr/daily-logs-new` | pending-review | [OCR 指南](guides/ocr.md) |
-| 简表识别与填表 | `POST /ocr/jianbiao` | pending-review | [OCR 指南](guides/ocr.md) |
-| 公式与填表 | `POST /ocr/fill` | pending-review | [OCR 指南](guides/ocr.md) |
-| 表样预览 | `GET /ocr/blank/{form}.png` | pending-review | [OCR 指南](guides/ocr.md) |
-| 表样栏目 | `GET /ocr/sheet/{form}` | pending-review | [OCR 指南](guides/ocr.md) |
-| 施工图划分 | `POST /wbs/draft` | pending-review | [OCR 指南](guides/ocr.md) |
 
 完整字段以 OpenAPI 草案的 `components/schemas` 为准；本目录的 Markdown 只说明业务流程、
 状态转换、超时、重试、路径限制等 OpenAPI 不易表达的内容，不重复维护字段表。
@@ -100,15 +93,13 @@ interfaces/
 - 响应包装：
   - `/agents/*` 直接返回业务对象，没有 `data` 包装。
   - `/health`、`/ready` 返回 `{"status":"ok"}` / `{"status":"ready"}`。
-  - `/diagnostics`、`/ocr/*`（PNG 除外）、`/wbs/draft` 返回
+  - `/diagnostics` 返回
     `{"status":200,"data":...}`；其中 `/ocr/daily-logs-new` 严格返回
     `{"status":200,"message":"识别完成","data":...}`，`data` 为业务字段对象。
     `status` 是业务成功标记，不是 HTTP 状态码替代品。
-  - `GET /ocr/blank/{form}.png` 返回原始 `image/png`。
 - 错误：统一为 `{"detail": ...}`。请求校验失败时 `detail` 是错误数组；上下文超限和
   其余业务/模型错误是字符串。错误响应不回显原始输入、身份、历史、密钥或上游正文。
-- 文件：没有 multipart 上传接口。`/ocr/recognize`、`/ocr/daily-logs`、
-  `/ocr/daily-logs-new` 接受数据池相对路径或 base64；`/ocr/jianbiao` 只接受数据池路径。
+- 文件：没有 multipart 上传接口。`/ocr/daily-logs-new` 接受数据池相对路径或 base64。
   输入输出不得越过 `PROJECTS_ROOT`。
 - 分页：当前没有列表分页接口。
 - 异步任务：当前没有任务提交、任务状态、轮询、webhook 或取消接口。所有请求同步完成。

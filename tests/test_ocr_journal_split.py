@@ -4,9 +4,9 @@ import asyncio
 
 import pytest
 
-from app.ocr.journal import split
-from app.ocr.journal.spec import FIELD_SPECS
-from app.ocr.journal.types import FieldReading, TextSegment
+from app.ocr.journal import main_work_split as split
+from app.ocr.journal.models import FieldReading, ValueSegment
+from app.ocr.journal.template import load_template
 from app.schemas.ocr import (
     MainWorkAssignment,
     MainWorkCategory,
@@ -20,9 +20,9 @@ def units_for(*texts: str):
     segments = []
     offset = 0
     for text in texts:
-        segments.append(TextSegment(text=text, start=offset, end=offset + len(text)))
+        segments.append(ValueSegment(text=text, start=offset, end=offset + len(text)))
         offset += len(text)
-    return source, split.build_units(source, tuple(segments))
+    return source, split.split_into_units(source, tuple(segments))
 
 
 def plan_for(units, mapping: dict[str, str]) -> MainWorkSplitPlan:
@@ -36,13 +36,13 @@ def plan_for(units, mapping: dict[str, str]) -> MainWorkSplitPlan:
     )
 
 
-def readings(value: str, segments: tuple[TextSegment, ...] = ()) -> list[FieldReading]:
+def readings(value: str, segments: tuple[ValueSegment, ...] = ()) -> list[FieldReading]:
     return [
         FieldReading(
-            spec=FIELD_SPECS[8],
+            layout=load_template().field_layouts()[8],
             boxes=(),
             value=value,
-            conf=0.9,
+            confidence=0.9,
             segments=segments,
         )
     ]
@@ -58,22 +58,49 @@ def test_standard_headings_split_into_three_original_values():
         "巡视挡土墙砌筑。",
     )
 
-    assignments = split.rule_assignments(units)
+    assignments = split.assign_by_headings(units)
 
     assert assignments is not None
-    values = split.assemble(units, assignments)
+    values = split.assemble_values(units, assignments)
     assert values.construction == "主要施工情况K3+280段路基填筑。"
     assert values.witness == "旁站情况旁站路基碾压。"
     assert values.patrol == "巡视情况巡视挡土墙砌筑。"
 
 
+@pytest.mark.parametrize("damaged_heading", ["《视情况", "巡祝情况", "祝情况", "《视惰光"])
+def test_unreadable_short_heading_does_not_inherit_previous_section(damaged_heading):
+    _source, units = units_for(
+        "主要施工情况",
+        "路基填筑。",
+        "旁站情况",
+        "旁站碾压。",
+        damaged_heading,
+        "挡土墙错缝砌筑，砂浆饱满。",
+    )
+    assert split.assign_by_headings(units) is None
+    uncertain = next(unit for unit in units if unit.text == damaged_heading)
+    assert uncertain.is_heading and uncertain.heading_category is None
+    mapping = {}
+    for unit in units:
+        if unit.start < uncertain.start:
+            mapping[unit.unit_id] = "witness" if "旁站" in unit.text else "construction"
+        else:
+            mapping[unit.unit_id] = "patrol"
+    assignments = split.validate_model_plan(units, plan_for(units, mapping))
+    assert assignments is not None
+    assert (
+        split.assemble_values(units, assignments).patrol
+        == damaged_heading + "挡土墙错缝砌筑，砂浆饱满。"
+    )
+
+
 def test_missing_categories_are_null_and_heading_only_sections_are_null():
     _source, units = units_for("主要施工情况", "K3+280段路基填筑。", "旁站情况")
 
-    assignments = split.rule_assignments(units)
+    assignments = split.assign_by_headings(units)
 
     assert assignments is not None
-    values = split.assemble(units, assignments)
+    values = split.assemble_values(units, assignments)
     assert values.construction == "主要施工情况K3+280段路基填筑。"
     assert values.witness is None
     assert values.patrol is None
@@ -87,8 +114,8 @@ def test_headings_may_appear_out_of_order():
         "K3+280段路基填筑。",
     )
 
-    assignments = split.rule_assignments(units)
-    values = split.assemble(units, assignments)
+    assignments = split.assign_by_headings(units)
+    values = split.assemble_values(units, assignments)
 
     assert values.patrol == "巡视情况巡视挡土墙砌筑。"
     assert values.construction == "主要施工情况K3+280段路基填筑。"
@@ -105,8 +132,8 @@ def test_repeated_heading_keeps_original_order():
         "第二段填筑。",
     )
 
-    assignments = split.rule_assignments(units)
-    values = split.assemble(units, assignments)
+    assignments = split.assign_by_headings(units)
+    values = split.assemble_values(units, assignments)
 
     assert values.construction == "主要施工情况第一段填筑。主要施工情况第二段填筑。"
     assert values.witness == "旁站情况旁站碾压。"
@@ -119,7 +146,7 @@ def test_repeated_heading_keeps_original_order():
 def test_numbered_and_punctuated_headings_are_recognised(heading):
     _source, units = units_for(heading, "原文正文。")
 
-    assignments = split.rule_assignments(units)
+    assignments = split.assign_by_headings(units)
 
     assert assignments is not None
     assert len(assignments) == len(units)
@@ -130,7 +157,7 @@ def test_heading_glued_to_body_with_colon_is_split_from_body():
 
     assert [unit.is_heading for unit in units] == [True, False]
     assert units[0].text == "旁站情况："
-    values = split.assemble(units, split.rule_assignments(units))
+    values = split.assemble_values(units, split.assign_by_headings(units))
     assert values.witness == "旁站情况：旁站路基碾压。"
 
 
@@ -141,10 +168,10 @@ def test_markers_are_used_when_no_reliable_heading_exists():
         "巡视检查挡土墙。",
     )
 
-    assignments = split.rule_assignments(units)
+    assignments = split.assign_by_headings(units)
 
     assert assignments is not None
-    values = split.assemble(units, assignments)
+    values = split.assemble_values(units, assignments)
     assert values.construction == "主要施工情况K3+280段路基填筑。"
     assert values.witness == "旁站记录路基碾压。"
     assert values.patrol == "巡视检查挡土墙。"
@@ -153,19 +180,19 @@ def test_markers_are_used_when_no_reliable_heading_exists():
 def test_heading_alias_inside_a_sentence_is_not_a_heading():
     _source, units = units_for("记录旁站情况后继续检查。")
 
-    assert split.rule_assignments(units) is None
+    assert split.assign_by_headings(units) is None
 
 
 def test_mixed_sentence_without_heading_or_marker_cannot_be_rule_split():
     _source, units = units_for("对K3+280段进行了旁站和巡视。")
 
-    assert split.rule_assignments(units) is None
+    assert split.assign_by_headings(units) is None
 
 
 def test_leading_body_before_first_heading_is_not_silently_dropped():
     _source, units = units_for("K3+280段路基填筑。", "主要施工情况", "第二段填筑。")
 
-    assert split.rule_assignments(units) is None
+    assert split.assign_by_headings(units) is None
 
 
 def test_container_label_is_structural_and_not_written_to_fields():
@@ -175,18 +202,18 @@ def test_container_label_is_structural_and_not_written_to_fields():
         "K3+280段路基填筑。",
     )
 
-    assignments = split.rule_assignments(units)
+    assignments = split.assign_by_headings(units)
 
     assert assignments is not None
-    values = split.assemble(units, assignments)
+    values = split.assemble_values(units, assignments)
     assert values.construction == "主要施工情况K3+280段路基填筑。"
 
 
 def test_negation_and_duplicate_records_are_preserved():
     source, units = units_for("旁站情况", "未进行旁站。", "巡视情况", "巡视检查。", "巡视检查。")
 
-    assignments = split.rule_assignments(units)
-    values = split.assemble(units, assignments)
+    assignments = split.assign_by_headings(units)
+    values = split.assemble_values(units, assignments)
 
     assert values.witness == "旁站情况未进行旁站。"
     assert values.patrol == "巡视情况巡视检查。巡视检查。"
@@ -198,14 +225,14 @@ def test_numbers_units_chainage_and_time_ranges_are_not_split():
 
     body_units = [unit for unit in units if not unit.is_heading]
     assert len(body_units) == 1
-    values = split.assemble(units, split.rule_assignments(units))
+    values = split.assemble_values(units, split.assign_by_headings(units))
     assert values.construction == source
 
 
 def test_punctuation_only_units_are_merged_into_their_neighbour():
     _source, units = units_for("主要施工情况", "。", "K3+280段路基填筑。")
 
-    assert all(split.is_meaningful(unit.text) for unit in units)
+    assert all(split.has_business_content(unit.text) for unit in units)
     assert "".join(unit.text for unit in units) == "主要施工情况。K3+280段路基填筑。"
 
 
@@ -217,7 +244,7 @@ def test_units_always_reconstruct_source_text():
 
 
 def test_missing_segments_fall_back_to_the_whole_source_text():
-    units = split.build_units("主要施工情况K3+280段路基填筑。", ())
+    units = split.split_into_units("主要施工情况K3+280段路基填筑。", ())
 
     assert len(units) == 1
     assert units[0].text == "主要施工情况K3+280段路基填筑。"
@@ -227,7 +254,7 @@ def test_validate_plan_accepts_a_complete_consistent_plan():
     _source, units = units_for("主要施工情况", "K3+280段路基填筑。")
     mapping = {unit.unit_id: "construction" for unit in units}
 
-    assert split.validate_plan(units, plan_for(units, mapping)) is not None
+    assert split.validate_model_plan(units, plan_for(units, mapping)) is not None
 
 
 @pytest.mark.parametrize("mutation", ["missing", "duplicate", "invented"])
@@ -246,7 +273,7 @@ def test_validate_plan_rejects_incomplete_or_invented_ids(mutation):
             MainWorkAssignment(unit_id="u99", category=MainWorkCategory.construction)
         )
 
-    assert split.validate_plan(units, MainWorkSplitPlan(assignments=assignments)) is None
+    assert split.validate_model_plan(units, MainWorkSplitPlan(assignments=assignments)) is None
 
 
 def test_heading_range_must_match_the_heading_category():
@@ -258,23 +285,25 @@ def test_heading_range_must_match_the_heading_category():
         ]
     )
 
-    assert split.validate_plan(units, plan) is None
+    assert split.validate_model_plan(units, plan) is None
 
 
 def test_effective_unknown_rejects_the_whole_plan_but_container_labels_do_not():
     _source, units = units_for("主要施工情况", "未说明对象。")
     unknown_plan = plan_for(units, {"u1": "construction", "u2": "unknown"})
-    assert split.validate_plan(units, unknown_plan) is None
+    assert split.validate_model_plan(units, unknown_plan) is None
 
     _source, units = units_for("当日主要监理工作情况", "主要施工情况", "K3+280段路基填筑。")
     container_plan = plan_for(units, {"u1": "unknown", "u2": "construction", "u3": "construction"})
-    assert split.validate_plan(units, container_plan) is not None
+    assert split.validate_model_plan(units, container_plan) is not None
 
 
 def test_unknown_categories_never_reach_the_values():
     _source, units = units_for("主要施工情况", "K3+280段路基填筑。")
 
-    values = split.assemble(units, {unit.unit_id: MainWorkCategory.unknown for unit in units})
+    values = split.assemble_values(
+        units, {unit.unit_id: MainWorkCategory.unknown for unit in units}
+    )
 
     assert values.construction is None
     assert values.witness is None

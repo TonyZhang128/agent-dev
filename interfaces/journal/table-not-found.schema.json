@@ -1,0 +1,10 @@
+{
+  "title": "JournalTableNotFound",
+  "description": "用户明确批准的 POST /ocr/daily-logs-new 表格定位失败响应：HTTP 400；无通过模板结构核验的table或候选歧义时，在OCR前停止。仅确认此失败场景，不提升整包OpenAPI。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["detail"],
+  "properties": {
+    "detail": {"type": "string", "const": "未检测到监理日志表格，请重新拍摄"}
+  }
+}

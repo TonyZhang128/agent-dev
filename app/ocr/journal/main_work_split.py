@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from app.errors import MainWorkSplitError
-from app.ocr.journal.types import FieldReading, TextSegment
+from app.ocr.journal.models import FieldReading, ValueSegment
 from app.schemas.ocr import (
     MainWorkCategory,
     MainWorkSplitPlan,
@@ -26,6 +26,9 @@ logger = logging.getLogger(__name__)
 
 # 初始值；超过上限不截断，直接跳过模型。规则已优先尝试，规则失败且超长时返回受控 502。
 MAX_SPLIT_CHARACTERS = 4000
+# 独立OCR短行可能是损坏的节标题；只标不确定，不把错字直接映射成某个类别。
+UNCERTAIN_HEADING_MIN_LENGTH = 3
+UNCERTAIN_HEADING_MAX_LENGTH = 6
 
 STRONG_BOUNDARIES = "。；;！？!?"
 HEADING_SEPARATORS = "：:、，,"
@@ -56,9 +59,9 @@ _FIELD_CATEGORIES = (
 _NUMBERING = re.compile(r"^(?:\d+[.、)）]|[一二三四五六七八九十]+[、.]|[（(]\d+[)）])")
 _TRAILING_PUNCTUATION = "：:、，,。；;！？!?"
 
-Planner = Callable[[MainWorkSplitRequest], Awaitable[MainWorkSplitPlan]]
+SplitPlanner = Callable[[MainWorkSplitRequest], Awaitable[MainWorkSplitPlan]]
 
-Piece = tuple[str, int, bool, MainWorkCategory | None]
+TextPiece = tuple[str, int, bool, MainWorkCategory | None]
 
 
 @dataclass(frozen=True)
@@ -72,20 +75,22 @@ class SplitOutcome:
     unknown_count: int
 
 
-def is_meaningful(text: str) -> bool:
+def has_business_content(text: str) -> bool:
     """纯标点/空白单元没有业务含义，不应单独产生 unknown。"""
     return any(char.isalnum() for char in text)
 
 
-def build_units(source_text: str, segments: Sequence[TextSegment] = ()) -> tuple[MainWorkUnit, ...]:
+def split_into_units(
+    source_text: str, segments: Sequence[ValueSegment] = ()
+) -> tuple[MainWorkUnit, ...]:
     """把 source_text 切成单元；拼接后必须能完整还原 source_text。"""
     if not source_text:
         return ()
-    pieces = _pieces(source_text, tuple(segments))
+    pieces = _text_pieces(source_text, tuple(segments))
     if "".join(piece[0] for piece in pieces) != source_text:
         # 位置片段不可信时退化为整段，避免丢弃或重复原文。
-        pieces = _pieces(source_text, ())
-    merged = _merge_punctuation(pieces)
+        pieces = _text_pieces(source_text, ())
+    merged = _merge_punctuation_pieces(pieces)
     return tuple(
         MainWorkUnit(
             unit_id=f"u{index}",
@@ -99,20 +104,22 @@ def build_units(source_text: str, segments: Sequence[TextSegment] = ()) -> tuple
     )
 
 
-def rule_assignments(
+def assign_by_headings(
     units: Sequence[MainWorkUnit],
 ) -> dict[str, MainWorkCategory] | None:
     """按可靠标题或单元开头强标记分配；无法完整覆盖时返回 None。"""
+    if any(unit.is_heading and unit.heading_category is None for unit in units):
+        return None
     headings = [
         (index, unit)
         for index, unit in enumerate(units)
         if unit.is_heading and unit.heading_category is not None
     ]
     if not headings:
-        return _marker_assignments(units)
+        return _assign_by_markers(units)
 
     for unit in units[: headings[0][0]]:
-        if not _is_container(unit.text):
+        if not _is_container_label(unit.text):
             # 首个可靠标题前的有效正文无法确定归属；不静默塞进 construction。
             return None
 
@@ -127,7 +134,7 @@ def rule_assignments(
     return assignments
 
 
-def validate_plan(
+def validate_model_plan(
     units: Sequence[MainWorkUnit], plan: MainWorkSplitPlan
 ) -> dict[str, MainWorkCategory] | None:
     """校验模型计划；任何不完整、越界、标题不一致或有效 unknown 都整体拒绝。"""
@@ -143,19 +150,22 @@ def validate_plan(
     heading_category: MainWorkCategory | None = None
     for unit in units:
         category = assignments[unit.unit_id]
-        if unit.is_heading and unit.heading_category is not None:
+        if unit.is_heading and unit.heading_category is None:
+            # 不确定的边界终止前一节的强约束，由模型判断后续单元的业务类别。
+            heading_category = None
+        elif unit.is_heading and unit.heading_category is not None:
             if category != unit.heading_category:
                 return None
             heading_category = unit.heading_category
         elif heading_category is not None and category != heading_category:
             return None
 
-    if any(_is_effective_unknown(unit, assignments[unit.unit_id]) for unit in units):
+    if any(_is_meaningful_unknown(unit, assignments[unit.unit_id]) for unit in units):
         return None
     return assignments
 
 
-def assemble(
+def assemble_values(
     units: Sequence[MainWorkUnit], assignments: dict[str, MainWorkCategory]
 ) -> MainWorkValues:
     """按原文顺序拼接同类单元；只有标题的类别返回 null。"""
@@ -169,7 +179,7 @@ def assemble(
 
     def value(category: MainWorkCategory) -> str | None:
         items = grouped[category]
-        if not any(not item.is_heading for item in items):
+        if not any(not item.is_heading or item.heading_category is None for item in items):
             return None
         return "".join(item.text for item in items)
 
@@ -181,21 +191,21 @@ def assemble(
 
 
 async def split_main_work(
-    readings: Sequence[FieldReading], planner: Planner | None = None
+    readings: Sequence[FieldReading], planner: SplitPlanner | None = None
 ) -> SplitOutcome:
     """规则为主、模型兜底；规则与模型都无法可靠完成时抛出 MainWorkSplitError。"""
-    reading = next((item for item in readings if item.spec.key == "mainWork"), None)
+    reading = next((item for item in readings if item.layout.key == "main_work"), None)
     source_text = reading.value if reading is not None else ""
     if not source_text.strip():
         return SplitOutcome(MainWorkValues(), "empty", source_text, (), 0)
 
     segments = reading.segments if reading is not None else ()
-    units = build_units(source_text, segments)
+    units = split_into_units(source_text, segments)
 
-    assignments = rule_assignments(units)
+    assignments = assign_by_headings(units)
     if assignments is not None:
-        return _outcome(
-            values=assemble(units, assignments),
+        return _make_outcome(
+            values=assemble_values(units, assignments),
             units=units,
             assignments=assignments,
             strategy="rules",
@@ -203,12 +213,12 @@ async def split_main_work(
         )
 
     if planner is not None and len(source_text) <= MAX_SPLIT_CHARACTERS:
-        plan = await _plan(planner, units)
+        plan = await _request_model_plan(planner, units)
         if plan is not None:
-            assignments = validate_plan(units, plan)
+            assignments = validate_model_plan(units, plan)
             if assignments is not None:
-                return _outcome(
-                    values=assemble(units, assignments),
+                return _make_outcome(
+                    values=assemble_values(units, assignments),
                     units=units,
                     assignments=assignments,
                     strategy="llm",
@@ -219,7 +229,9 @@ async def split_main_work(
     raise MainWorkSplitError("mainWork cannot be split reliably")
 
 
-async def _plan(planner: Planner, units: tuple[MainWorkUnit, ...]) -> MainWorkSplitPlan | None:
+async def _request_model_plan(
+    planner: SplitPlanner, units: tuple[MainWorkUnit, ...]
+) -> MainWorkSplitPlan | None:
     try:
         return await planner(MainWorkSplitRequest(units=units))
     except Exception as exc:  # noqa: BLE001 —— 模型边界；失败后无其他兜底
@@ -228,7 +240,7 @@ async def _plan(planner: Planner, units: tuple[MainWorkUnit, ...]) -> MainWorkSp
         return None
 
 
-def _outcome(
+def _make_outcome(
     *,
     values: MainWorkValues,
     units: tuple[MainWorkUnit, ...],
@@ -242,30 +254,38 @@ def _outcome(
     return SplitOutcome(values, strategy, source_text, units, unknown_count)
 
 
-def _pieces(source_text: str, segments: Sequence[TextSegment]) -> list[Piece]:
+def _text_pieces(source_text: str, segments: Sequence[ValueSegment]) -> list[TextPiece]:
     candidates = tuple(segment for segment in segments if segment.text and segment.start >= 0)
     if not candidates or any(
         source_text[segment.start : segment.start + len(segment.text)] != segment.text
         for segment in candidates
     ):
-        candidates = (TextSegment(text=source_text, start=0, end=len(source_text)),)
+        candidates = (ValueSegment(text=source_text, start=0, end=len(source_text)),)
 
-    pieces: list[Piece] = []
+    pieces: list[TextPiece] = []
     for segment in candidates:
         text = segment.text
-        heading = _heading(text)
+        heading = _detect_heading(text)
         if heading is None:
-            pieces.extend(_sentences(text, segment.start))
+            compact, _ = _normalize_for_matching(text)
+            if (
+                UNCERTAIN_HEADING_MIN_LENGTH <= len(compact) <= UNCERTAIN_HEADING_MAX_LENGTH
+                and not any(char.isdigit() or char in STRONG_BOUNDARIES for char in compact)
+                and _category_from_marker(text) is None
+            ):
+                pieces.append((text, segment.start, True, None))
+                continue
+            pieces.extend(_split_sentences(text, segment.start))
             continue
         category, length = heading
         pieces.append((text[:length], segment.start, True, category))
-        pieces.extend(_sentences(text[length:], segment.start + length))
+        pieces.extend(_split_sentences(text[length:], segment.start + length))
     return pieces
 
 
-def _sentences(text: str, start: int) -> list[Piece]:
+def _split_sentences(text: str, start: int) -> list[TextPiece]:
     """按强语句边界切分；分隔符归入前一个单元，不动逗号、小数点和时间。"""
-    pieces: list[Piece] = []
+    pieces: list[TextPiece] = []
     cursor = 0
     for index, char in enumerate(text):
         if char in STRONG_BOUNDARIES:
@@ -276,12 +296,12 @@ def _sentences(text: str, start: int) -> list[Piece]:
     return pieces
 
 
-def _merge_punctuation(pieces: Sequence[Piece]) -> list[Piece]:
-    merged: list[Piece] = []
-    pending: Piece | None = None
+def _merge_punctuation_pieces(pieces: Sequence[TextPiece]) -> list[TextPiece]:
+    merged: list[TextPiece] = []
+    pending: TextPiece | None = None
     for piece in pieces:
         text, start, heading, category = piece
-        if not heading and not is_meaningful(text):
+        if not heading and not has_business_content(text):
             if merged:
                 previous = merged[-1]
                 merged[-1] = (previous[0] + text, previous[1], previous[2], previous[3])
@@ -310,9 +330,9 @@ def _merge_punctuation(pieces: Sequence[Piece]) -> list[Piece]:
     return merged
 
 
-def _heading(text: str) -> tuple[MainWorkCategory, int] | None:
+def _detect_heading(text: str) -> tuple[MainWorkCategory, int] | None:
     """识别单元开头的可靠标题；返回类别与标题在原文中的结束位置。"""
-    normalised, indices = _normalise(text)
+    normalised, indices = _normalize_for_matching(text)
     for alias, category in HEADING_ALIASES:
         if not normalised.startswith(alias):
             continue
@@ -327,22 +347,22 @@ def _heading(text: str) -> tuple[MainWorkCategory, int] | None:
     return None
 
 
-def _marker_assignments(
+def _assign_by_markers(
     units: Sequence[MainWorkUnit],
 ) -> dict[str, MainWorkCategory] | None:
     assignments: dict[str, MainWorkCategory] = {}
     for unit in units:
-        category = _marker_category(unit.text)
+        category = _category_from_marker(unit.text)
         if category is None:
-            if is_meaningful(unit.text) and not _is_container(unit.text):
+            if has_business_content(unit.text) and not _is_container_label(unit.text):
                 return None
             category = MainWorkCategory.unknown
         assignments[unit.unit_id] = category
     return assignments
 
 
-def _marker_category(text: str) -> MainWorkCategory | None:
-    normalised, _ = _normalise(text)
+def _category_from_marker(text: str) -> MainWorkCategory | None:
+    normalised, _ = _normalize_for_matching(text)
     for prefix, category in (
         ("旁站", MainWorkCategory.witness),
         ("巡视", MainWorkCategory.patrol),
@@ -354,17 +374,17 @@ def _marker_category(text: str) -> MainWorkCategory | None:
     return None
 
 
-def _is_effective_unknown(unit: MainWorkUnit, category: MainWorkCategory) -> bool:
+def _is_meaningful_unknown(unit: MainWorkUnit, category: MainWorkCategory) -> bool:
     return (
         category is MainWorkCategory.unknown
-        and not unit.is_heading
-        and is_meaningful(unit.text)
-        and not _is_container(unit.text)
+        and (not unit.is_heading or unit.heading_category is None)
+        and has_business_content(unit.text)
+        and not _is_container_label(unit.text)
     )
 
 
-def _is_container(text: str) -> bool:
-    normalised, _ = _normalise(text)
+def _is_container_label(text: str) -> bool:
+    normalised, _ = _normalize_for_matching(text)
     return normalised.rstrip(_TRAILING_PUNCTUATION) in CONTAINER_LABELS
 
 
@@ -372,7 +392,7 @@ def _is_punctuation(char: str) -> bool:
     return unicodedata.category(char).startswith("P")
 
 
-def _normalise(text: str) -> tuple[str, list[int]]:
+def _normalize_for_matching(text: str) -> tuple[str, list[int]]:
     """NFKC、去空白、去编号；同时记录归一字符到原文的下标。"""
     characters: list[str] = []
     indices: list[int] = []

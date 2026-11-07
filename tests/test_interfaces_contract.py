@@ -55,7 +55,7 @@ def test_contract_covers_exactly_the_registered_operations():
         for method in operations
     }
     assert documented == registered_operations()
-    assert len(documented) == 15
+    assert len(documented) == 8
 
 
 def test_operation_ids_are_unique():
@@ -87,14 +87,7 @@ def test_draft_and_review_states_are_explicit():
             if any(op["x-contract-status"] == "pending-review" for op in operations.values())
         } == {
             "/diagnostics",
-            "/ocr/recognize",
-            "/ocr/daily-logs",
             "/ocr/daily-logs-new",
-            "/ocr/jianbiao",
-            "/ocr/fill",
-            "/ocr/blank/{form}.png",
-            "/ocr/sheet/{form}",
-            "/wbs/draft",
         }
 
 
@@ -124,22 +117,13 @@ def test_post_operations_have_request_examples():
 def test_document_endpoints_declare_envelope_and_errors():
     paths = read_contract()["paths"]
     for path in (
-        "/ocr/recognize",
-        "/ocr/daily-logs",
         "/ocr/daily-logs-new",
-        "/ocr/jianbiao",
-        "/ocr/fill",
-        "/ocr/sheet/{form}",
-        "/wbs/draft",
         "/diagnostics",
     ):
-        method = "get" if path in {"/ocr/sheet/{form}", "/diagnostics"} else "post"
+        method = "get" if path == "/diagnostics" else "post"
         schema = paths[path][method]["responses"]["200"]["content"]["application/json"]["schema"]
         assert schema["$ref"].startswith("#/components/schemas/")
         assert schema["$ref"].endswith("Response")
-    blank = paths["/ocr/blank/{form}.png"]["get"]["responses"]["200"]
-    assert "image/png" in blank["content"]
-    assert "application/json" not in blank["content"]
 
 
 def test_journal_documents_the_main_work_split_failure():

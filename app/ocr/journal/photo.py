@@ -12,11 +12,13 @@ import cv2
 import numpy as np
 from PIL import Image, ImageOps
 
-from app.ocr.journal.spec import INPUT_MAX_SIDE
-from app.ocr.journal.types import Photo
+from app.ocr.journal.models import LoadedPhoto
+
+# 超大输入先等比缩小，保留反向定位比例。
+INPUT_MAX_SIDE = 6000
 
 
-def load_photo(path: Path | None, img: str = "") -> Photo:
+def load_photo(path: Path | None, img: str = "") -> LoadedPhoto:
     """读取照片；img 与 path 同时提供时优先 img。"""
     data = _source_bytes(path, img)
     try:
@@ -31,17 +33,19 @@ def load_photo(path: Path | None, img: str = "") -> Photo:
     bgr = cv2.cvtColor(pixels, cv2.COLOR_RGB2BGR)
 
     height, width = bgr.shape[:2]
-    scale = 1.0
+    downscale_ratio = 1.0
     longest = max(width, height)
     if longest > INPUT_MAX_SIDE:
-        scale = INPUT_MAX_SIDE / longest
+        downscale_ratio = INPUT_MAX_SIDE / longest
         bgr = cv2.resize(
             bgr,
-            (max(1, round(width * scale)), max(1, round(height * scale))),
+            (max(1, round(width * downscale_ratio)), max(1, round(height * downscale_ratio))),
             interpolation=cv2.INTER_AREA,
         )
     gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
-    return Photo(bgr=bgr, gray=gray, width=width, height=height, scale=scale)
+    return LoadedPhoto(
+        bgr=bgr, gray=gray, width=width, height=height, downscale_ratio=downscale_ratio
+    )
 
 
 def _source_bytes(path: Path | None, img: str) -> bytes:

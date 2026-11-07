@@ -17,8 +17,11 @@ from PIL import Image
 
 from app.llm import ModelService
 from app.main import create_app
-from app.ocr.journal import fields, frame, image, spec
-from app.ocr.journal.types import Photo
+from app.ocr.journal import alignment as frame
+from app.ocr.journal import field_matching as fields
+from app.ocr.journal import photo as image
+from app.ocr.journal.models import FieldLayout, LoadedPhoto
+from app.ocr.journal.template import load_template
 from tests.ocr_helpers import make_ocr_settings, ocr_result
 
 
@@ -27,16 +30,18 @@ def table_photo(width: int = 900, height: int = 1273) -> np.ndarray:
     picture = np.full((height, width, 3), 255, np.uint8)
     x0, y0, x1, y1 = 100, 250, 800, 1150
     cv2.rectangle(picture, (x0, y0), (x1, y1), (0, 0, 0), 2)
-    for y in (250, 290, 340, 390, 450, 560, 700, 800, 1000, 1150):
+    # 独立按标准表人工标注六行；旧夹具是九行通栏表，不能冒充本模板。
+    for y in (250, 329, 400, 483, 790, 991, 1150):
         cv2.line(picture, (x0, y), (x1, y), (0, 0, 0), 2)
-    for x in (100, 250, 600, 800):
-        cv2.line(picture, (x, y0), (x, y1), (0, 0, 0), 2)
+    cv2.line(picture, (221, y0), (221, y1), (0, 0, 0), 2)
+    for x in (519, 662):
+        cv2.line(picture, (x, 329), (x, 483), (0, 0, 0), 2)
     return picture
 
 
 def field_box(
     shape: tuple[int, ...],
-    field: spec.FieldSpec,
+    field: FieldLayout,
     text: str = "",
     *,
     at: float = 0.5,
@@ -44,10 +49,12 @@ def field_box(
 ) -> list[list[float]]:
     """在栏目内部生成一个 OCR 框；at 是框中心在栏目高度中的相对位置。"""
     canvas_height, canvas_width = shape[:2]
-    x, y, width, height_ratio = field.rect
-    center_x = (x + width / 2) * canvas_width
-    center_y = (y + height_ratio * at) * canvas_height
-    box_width = max(60.0, min(width * canvas_width * 0.7, 360.0))
+    x0, y0, x1, y1 = fields.field_bounds_on_canvas(
+        field, (canvas_width, canvas_height), frame.table_rect_on_canvas(load_template())
+    )
+    center_x = (x0 + x1) / 2
+    center_y = y0 + (y1 - y0) * at
+    box_width = max(60.0, min((x1 - x0) * 0.7, 360.0))
     return [
         [center_x - box_width / 2, center_y - height / 2],
         [center_x + box_width / 2, center_y - height / 2],
@@ -57,7 +64,8 @@ def field_box(
 
 
 MAIN_WORK_CONSTRUCTION = "主要施工情况K3+280段路基填筑"
-MAIN_WORK_WITNESS = "旁站情况旁站路基碾压《视情况挡土墙错缝砌筑"
+MAIN_WORK_WITNESS = "旁站情况旁站路基碾压"
+MAIN_WORK_PATROL = "巡视情况挡土墙错缝砌筑"
 
 
 def full_page_items(shape: tuple[int, ...], *, skip: str = "") -> list[tuple]:
@@ -77,19 +85,19 @@ def full_page_items(shape: tuple[int, ...], *, skip: str = "") -> list[tuple]:
     parts = (
         ("主要施工情况", "K3+280段路基填筑", 0.15, 0.28, 0.95),
         ("旁站情况", "旁站路基碾压", 0.45, 0.58, 0.94),
-        ("《视情况", "挡土墙错缝砌筑", 0.75, 0.88, 0.93),
+        ("巡视情况", "挡土墙错缝砌筑", 0.75, 0.88, 0.93),
     )
     items = []
-    for field in spec.FIELD_SPECS:
+    for field in load_template().field_layouts():
         if field.key == skip:
             continue
-        if field.key == "mainWork":
-            for label, text, label_at, value_at, conf in parts:
+        if field.key == "main_work":
+            for label, text, label_at, value_at, confidence in parts:
                 items.append((field_box(shape, field, at=label_at), label, 0.9))
-                items.append((field_box(shape, field, at=value_at), text, conf))
+                items.append((field_box(shape, field, at=value_at), text, confidence))
             continue
-        text, conf = values[field.key]
-        items.append((field_box(shape, field), text, conf))
+        text, confidence = values[field.key]
+        items.append((field_box(shape, field), text, confidence))
     return items
 
 
@@ -174,7 +182,7 @@ def test_new_route_reads_one_page_and_maps_fields(client, settings):
                 "mainWork": {
                     "construction": MAIN_WORK_CONSTRUCTION,
                     "witness": MAIN_WORK_WITNESS,
-                    "patrol": None,
+                    "patrol": MAIN_WORK_PATROL,
                 },
                 "issues": "挡土墙墙背回填局部压实不足",
                 "nextDayPlan": "见证水稳基层检测",
@@ -228,7 +236,7 @@ def test_new_route_keeps_null_fields_and_matches_backend_contract(client, settin
     assert_keys(payload, contract)
 
 
-def test_missing_field_uses_one_targeted_crop(client, settings):
+def test_empty_field_does_not_repeat_ocr(client, settings):
     write_photo(settings)
     engine = PageEngine(skip="reviewer", fallback="审核人：王梦瑶")
     client.app.state.ocr_resources.engine = engine
@@ -237,44 +245,145 @@ def test_missing_field_uses_one_targeted_crop(client, settings):
 
     data = response.json()["data"]
     assert response.status_code == 200
-    assert engine.calls == 2
-    assert data["common"]["reviewerName"] == "王梦瑶"
+    assert engine.calls == 1
+    assert data["common"]["reviewerName"] is None
+
+
+def test_date_keeps_invalid_calendar_value():
+    assert fields._normalize_date("2026年2月31日") == "2026年2月31日"
+
+
+@pytest.mark.parametrize("left", [39.9, 40, 40.1])
+def test_unresolved_cross_field_box_is_not_assigned(left):
+    specs = (
+        fields.FieldLayout("first", "左栏", (0, 0, 0.5, 1)),
+        fields.FieldLayout("second", "右栏", (0.5, 0, 0.5, 1)),
+    )
+    box = fields.OcrTextBox("无法判定归属", left, 10, 60, 30, 0.99)
+    groups, ambiguous = fields._assign_boxes_to_fields([box], specs, (100, 100), (0, 0, 1, 1))
+    assert not groups["first"] and not groups["second"]
+    assert ambiguous == {"first", "second"}
+
+
+def test_inline_reviewer_label_and_value_in_one_box():
+    canvas = np.full((1400, 1000, 3), 255, np.uint8)
+    # 独立标注：标签和值跨越模板值区左边界，但属于同一个表外字段。
+    readings = fields.extract_fields(
+        canvas,
+        load_template().field_layouts(),
+        (0.1, 0.2, 0.9, 0.9),
+        lambda picture: [fields.OcrTextBox("审核人：王梦瑶", 680, 1253, 840, 1295, 0.95)],
+    )
+    assert (
+        next(reading.value for reading in readings if reading.layout.key == "reviewer") == "王梦瑶"
+    )
+
+
+def test_geometry_reads_name_without_its_printed_label():
+    readings = fields.extract_fields(
+        np.full((1000, 1000, 3), 255, np.uint8),
+        load_template().field_layouts(),
+        (0.1, 0.2, 0.9, 0.9),
+        lambda picture: [fields.OcrTextBox("王璐瑶", 300, 275, 400, 305, 0.95)],
+    )
+    assert (
+        next(reading.value for reading in readings if reading.layout.key == "recorder") == "王璐瑶"
+    )
+
+
+def test_unphotographed_reviewer_is_not_mistaken_for_empty_paper():
+    canvas = np.full((842, 595, 3), 255, np.uint8)
+    mask = np.full((842, 595), 255, np.uint8)
+    mask[674:] = 0
+    readings = fields.extract_fields(
+        canvas,
+        load_template().field_layouts(),
+        (0.1, 0.1, 0.9, 0.8),
+        lambda picture: [],
+        valid_mask=mask,
+    )
+    reviewer = next(reading for reading in readings if reading.layout.key == "reviewer")
+    assert reviewer.value == ""
+    assert reviewer.visible_fraction == 0
+    assert reviewer.ambiguous
+
+
+@pytest.mark.parametrize("angle,padding", [(3, 0), (0, 700)])
+def test_complete_table_alignment_handles_rotation_and_background(angle, padding):
+    picture = table_photo()
+    source_corners = np.float32([[100, 250], [800, 250], [800, 1150], [100, 1150]])
+    rotation = cv2.getRotationMatrix2D((450, 636), angle, 1)
+    rotated = cv2.warpAffine(picture, rotation, (900, 1273), borderValue=(255, 255, 255))
+    expected = cv2.transform(source_corners[None], rotation)[0] + padding
+    padded = cv2.copyMakeBorder(
+        rotated, padding, padding, padding, padding, cv2.BORDER_CONSTANT, value=(255, 255, 255)
+    )
+    location = frame.align_canvas(
+        LoadedPhoto(
+            padded, cv2.cvtColor(padded, cv2.COLOR_BGR2GRAY), padded.shape[1], padded.shape[0]
+        )
+    )
+    assert min(location.line_support) >= 0.55
+    assert location.table_quad_in_photo == pytest.approx(expected, abs=8)
+
+
+def test_alignment_keeps_outside_geometry_and_source_coverage():
+
+    picture = table_photo()
+    photo = LoadedPhoto(picture, cv2.cvtColor(picture, cv2.COLOR_BGR2GRAY), 900, 1273)
+    location = frame.align_canvas(photo)
+    table = location.table_rect_on_canvas
+    expected = np.array(
+        [[[table[0], table[1]], [table[2], table[1]], [table[2], table[3]], [table[0], table[3]]]],
+        dtype=np.float32,
+    )
+    expected *= np.array([location.canvas_width, location.canvas_height])
+    actual = cv2.perspectiveTransform(
+        location.table_quad_in_photo[None], location.work_image_to_canvas
+    )
+    assert actual == pytest.approx(expected, abs=0.1)
+    assert location.source_coverage_mask.shape == location.canvas.shape[:2]
+    assert np.count_nonzero(location.source_coverage_mask) > 0
 
 
 def test_cleaning_strips_printed_labels_and_normalizes_dates():
-    field = spec.FIELD_SPECS[6]  # date
+    field = load_template().field_layouts()[6]  # date
     boxes = [
-        fields.TextBox("记录时间：2026年11月11日", 0, 0, 200, 30, 0.9),
+        fields.OcrTextBox("记录时间：2026年11月11日", 0, 0, 200, 30, 0.9),
     ]
-    assert fields._clean(field, boxes) == ("2026-11-11", 0.9)
+    cleaned = fields._extract_field_value(field, boxes)
+    assert cleaned.text == "2026-11-11"
+    assert cleaned.confidence == 0.9
 
-    main_work = spec.FIELD_SPECS[8]
+    main_work = load_template().field_layouts()[8]
     boxes = [
-        fields.TextBox("主要施土情况", 0, 0, 200, 30, 0.8),
-        fields.TextBox("K3+280段路基填筑", 0, 40, 400, 70, 0.95),
-        fields.TextBox("旁站情况", 0, 80, 200, 110, 0.8),
-        fields.TextBox("旁站路基碾压", 0, 120, 400, 150, 0.94),
-        fields.TextBox("《视情况", 0, 160, 200, 190, 0.8),
-        fields.TextBox("挡土墙错缝砌筑", 0, 200, 400, 230, 0.93),
+        fields.OcrTextBox("主要施土情况", 0, 0, 200, 30, 0.8),
+        fields.OcrTextBox("K3+280段路基填筑", 0, 40, 400, 70, 0.95),
+        fields.OcrTextBox("旁站情况", 0, 80, 200, 110, 0.8),
+        fields.OcrTextBox("旁站路基碾压", 0, 120, 400, 150, 0.94),
+        fields.OcrTextBox("《视情况", 0, 160, 200, 190, 0.8),
+        fields.OcrTextBox("挡土墙错缝砌筑", 0, 200, 400, 230, 0.93),
     ]
     # mainWork 保留印刷小标题；拆分发生在识别之后的独立阶段，_clean 不改文本内容。
-    assert fields._clean(main_work, boxes)[0] == (
+    assert fields._extract_field_value(main_work, boxes).text == (
         "主要施土情况K3+280段路基填筑旁站情况旁站路基碾压《视情况挡土墙错缝砌筑"
     )
 
-    reviewer = spec.FIELD_SPECS[7]
+    reviewer = load_template().field_layouts()[7]
     assert (
-        fields._clean(reviewer, [fields.TextBox("审核人：王梦瑶", 0, 0, 200, 30, 0.9)])[0]
+        fields._extract_field_value(
+            reviewer, [fields.OcrTextBox("审核人：王梦瑶", 0, 0, 200, 30, 0.9)]
+        ).text
         == "王梦瑶"
     )
 
 
 def test_boundary_box_is_assigned_to_the_best_field():
-    main_work = spec.FIELD_SPECS[8]
-    issues = spec.FIELD_SPECS[9]
+    main_work = load_template().field_layouts()[8]
+    issues = load_template().field_layouts()[9]
     width, height = 1000, 1414
-    border = main_work.rect[1] + main_work.rect[3]
-    box = fields.TextBox(
+    border = main_work.rect_in_table[1] + main_work.rect_in_table[3]
+    box = fields.OcrTextBox(
         "跨格文字",
         300,
         (border - 0.012) * height,
@@ -282,42 +391,52 @@ def test_boundary_box_is_assigned_to_the_best_field():
         (border + 0.008) * height,
         0.9,
     )
-    groups, _ = fields._assign([box], spec.FIELD_SPECS, width, height)
+    groups, _ = fields._assign_boxes_to_fields(
+        [box], load_template().field_layouts(), (width, height), (0, 0, 1, 1)
+    )
     assert box in groups[main_work.key]
     assert box not in groups[issues.key]
 
 
 def test_duplicate_boxes_are_removed():
     boxes = [
-        fields.TextBox("97.1", 0, 0, 100, 30, 0.9),
-        fields.TextBox("1", 20, 5, 40, 30, 0.8),
+        fields.OcrTextBox("97.1", 0, 0, 100, 30, 0.9),
+        fields.OcrTextBox("1", 20, 5, 40, 30, 0.8),
     ]
-    assert len(fields._dedup(boxes)) == 1
+    assert len(fields._deduplicate_boxes(boxes)) == 1
 
 
-def test_locate_finds_table_and_falls_back_to_whole_page():
+def test_short_heading_is_not_sorted_after_overlapping_next_line():
+    boxes = [
+        fields.OcrTextBox("下一行正文", 207, 846, 1044, 912, 0.9),
+        fields.OcrTextBox("短标题", 211, 823, 368, 867, 0.9),
+    ]
+    assert [box.text for box in fields._sort_reading_order(boxes)] == ["短标题", "下一行正文"]
+
+
+def test_alignment_finds_table_and_rejects_blank_photo():
     picture = table_photo()
-    photo = Photo(
+    photo = LoadedPhoto(
         bgr=picture,
         gray=cv2.cvtColor(picture, cv2.COLOR_BGR2GRAY),
         width=picture.shape[1],
         height=picture.shape[0],
     )
-    located = frame.locate(photo)
-    assert located.kind == "table"
-    assert located.how == "contour+table"
-    assert located.sheet.shape == (located.height, located.width, 3)
+    located = frame.align_canvas(photo)
+    assert min(located.line_support) >= 0.55
+    assert located.canvas.shape == (located.canvas_height, located.canvas_width, 3)
 
     blank = np.full((400, 300, 3), 255, np.uint8)
-    empty = Photo(
+    empty = LoadedPhoto(
         bgr=blank,
         gray=cv2.cvtColor(blank, cv2.COLOR_BGR2GRAY),
         width=300,
         height=400,
     )
-    fallback = frame.locate(empty)
-    assert fallback.kind == "whole"
-    assert fallback.how == "whole"
+    from app.errors import JournalFrameNotFound
+
+    with pytest.raises(JournalFrameNotFound):
+        frame.align_canvas(empty)
 
 
 def test_exif_orientation_is_applied():

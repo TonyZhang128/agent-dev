@@ -7,13 +7,22 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from openai import APIConnectionError, APIStatusError, APITimeoutError
 
-from app.errors import ConversationInputTooLarge, InvalidModelOutput, MainWorkSplitError
+from app.errors import (
+    ConversationInputTooLarge,
+    InvalidModelOutput,
+    JournalFrameNotFound,
+    MainWorkSplitError,
+)
 
 # 保留既有日志通道，兼容按 HTTP 错误日志过滤的部署。
 logger = logging.getLogger("app.main")
 
 
 def register_exception_handlers(app: FastAPI) -> None:
+    @app.exception_handler(JournalFrameNotFound)
+    async def journal_frame_not_found(request: Request, exc: JournalFrameNotFound) -> JSONResponse:
+        return JSONResponse(status_code=400, content={"detail": "未检测到监理日志表格，请重新拍摄"})
+
     @app.exception_handler(RequestValidationError)
     async def invalid_request(request: Request, exc: RequestValidationError) -> JSONResponse:
         # Pydantic 的 input/ctx 可能包含完整对话和身份信息。

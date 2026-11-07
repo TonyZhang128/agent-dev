@@ -1,6 +1,6 @@
 # 监理日志 mainWork 字段拆分开发方案
 
-> 状态：方案已确认，待实现。本文是开发依据，不代表功能已实现。
+> 状态：方案已确认并已有实现。本文保留设计决策；2026-11-07 OCR 前置链已改为 PDF 模板识别，当前模块对应见 [模板识别维护](journal-template-recognition.md)，下文实施步骤保留为历史设计依据。
 > 适用接口：`POST /ocr/daily-logs-new`
 > 确认日期：2026-11-07
 > 方案确认方式：用户指示“按照你的推荐来”，下列推荐决策视为已确认。
@@ -63,8 +63,8 @@
 | 位置 | 当前职责 |
 | --- | --- |
 | `app/ocr/journal/__init__.py:read_photo()` | 同步 OCR 编排入口 |
-| `app/ocr/journal/fields.py:read_fields()` | 返回 `FieldReading` 列表 |
-| `app/ocr/journal/types.py:FieldReading` | 保存栏目、文字框、文本、置信度 |
+| `app/ocr/journal/field_matching.py:read_fields()` | 返回 `FieldReading` 列表 |
+| `app/ocr/journal/models.py:FieldReading` | 保存栏目、文字框、文本、置信度 |
 | `app/ocr/journal/__init__.py:_recognized()` | 把 `mainWork.value` 复制成三个字段 |
 | `app/ocr/journal/__init__.py:_processed()` | 生成最终业务结构 |
 | `app/api/ocr.py:journal_recognize()` | 同步路由，返回约定响应 |
@@ -118,7 +118,7 @@ mainWork 非空
 | --- | --- |
 | `app/agents/main_work.py` | `MainWorkSplitAgent`，只负责语义分类 |
 | `app/prompts/main_work.md` | 分类边界、原文约束、`unknown` 规则、注入防护、示例 |
-| `app/ocr/journal/split.py` | 文本单元、标题识别、规则拆分、校验、字段组装 |
+| `app/ocr/journal/main_work_split.py` | 文本单元、标题识别、规则拆分、校验、字段组装 |
 | `app/schemas/ocr.py` | 内部输入、分类计划、结果模型 |
 | `app/main.py` | lifespan 中初始化共享拆分 Agent |
 | `app/api/ocr.py` | 编排 OCR 与拆分，保持 HTTP 响应包装 |
@@ -431,7 +431,7 @@ async def plan(self, request: MainWorkSplitRequest) -> MainWorkSplitPlan:
 
 ### 9.4 输入长度
 
-在 `app/ocr/journal/split.py` 定义具名常量：
+在 `app/ocr/journal/main_work_split.py` 定义具名常量：
 
 ```python
 MAX_SPLIT_CHARACTERS = 4000  # 初始值；按真实 mainWork 长度和模型上下文评测后调整
@@ -524,7 +524,7 @@ data.fields.nextDayPlan
 | --- | --- |
 | `app/agents/main_work.py` | `MainWorkSplitAgent` |
 | `app/prompts/main_work.md` | 分类提示词 |
-| `app/ocr/journal/split.py` | 单元、标题、规则、校验、组装 |
+| `app/ocr/journal/main_work_split.py` | 单元、标题、规则、校验、组装 |
 | `tests/test_ocr_journal_split.py` | 纯规则与校验测试 |
 | `tests/test_agents_main_work.py` | Agent 集成、回退、失败映射 |
 
@@ -533,8 +533,8 @@ data.fields.nextDayPlan
 | 文件 | 改动 |
 | --- | --- |
 | `app/schemas/ocr.py` | 内部 `MainWork*` 模型 |
-| `app/ocr/journal/types.py` | `TextSegment`、`FieldReading.segments` |
-| `app/ocr/journal/fields.py` | `_clean()` 产出位置片段；不改 `value` 内容 |
+| `app/ocr/journal/models.py` | `TextSegment`、`FieldReading.segments` |
+| `app/ocr/journal/field_matching.py` | `_clean()` 产出位置片段；不改 `value` 内容 |
 | `app/ocr/journal/__init__.py` | 拆出同步 OCR 结果与结果组装；移除“整段复制”逻辑 |
 | `app/api/ocr.py` | 路由改 `async def`；OCR 进线程池；调用拆分；保持响应包装 |
 | `app/agents/base.py` | `allow_model_fallback` 类属性并传入构建 |
