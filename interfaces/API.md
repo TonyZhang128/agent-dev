@@ -727,11 +727,11 @@ Schema：`DailyLogsResponse`
 | --- | --- |
 | 摘要 | 识别监理日记（新版链路） |
 | 契约状态 | `pending-review` |
-| 来源 | interfaces/journal/response.schema.json（成功响应已确认）；app/ocr/resources/daily-logs-output.json；tests/test_ocr_journal.py |
+| 来源 | interfaces/journal/response.schema.json（成功响应已确认）；docs/journal-mainwork-split.md；app/ocr/resources/daily-logs-output.json；tests/test_ocr_journal.py；tests/test_agents_main_work.py |
 | 副作用 | 只读取数据池照片，不写 PDF/Excel。 |
 | 幂等/重试 | 识别结果可能因模型和照片变化而不同；只读调用可重试。 |
 
-新版监理日志识别：定位表格、整页 OCR 后匹配栏目；歧义或漏框字段最多补充识别 3 次。成功响应严格遵守已确认的后端格式，顶层只有 status、message、data，业务字段直接位于 data，不返回内部识别详情。construction / witness / patrol 同属 mainWork 单元格，当前暂时回填同一整段值。
+新版监理日志识别：定位表格、整页 OCR 后匹配栏目；歧义或漏框字段最多补充识别 3 次。mainWork 原文按可靠标题或模型分类拆分为 construction、witness、patrol；字段值始终原样取自 OCR 文本，不生成、不纠错、不润色，原文没有的类别为 null。成功响应严格遵守已确认的后端格式，顶层只有 status、message、data，业务字段直接位于 data，不返回内部识别详情。mainWork 无法可靠拆分时返回 502。
 
 **请求体**
 
@@ -757,6 +757,7 @@ Schema：`JournalReq`
 - `200`：监理日志业务字段；成功响应结构已由用户确认，不含额外信息。
 - `400`：路径越界、文件不存在/不是文件、图片无法解码或文档处理失败。
 - `422`：请求校验失败，或输入与上下文超过预算。校验失败时 detail 为错误数组；输入超限时为字符串。
+- `502`：mainWork 无法可靠拆分：模型分类不合格，标题规则也无法完整覆盖原文。
 - `503`：OCR 模型不可用。
 
 **200 响应体**
@@ -780,9 +781,9 @@ Schema：`JournalReq`
     },
     "fields": {
       "mainWork": {
-        "construction": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
-        "witness": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
-        "patrol": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查"
+        "construction": "主要施工情况K3+280段路基填筑",
+        "witness": "旁站情况旁站路基碾压",
+        "patrol": "巡视情况巡视挡土墙砌筑"
       },
       "issues": null,
       "nextDayPlan": null

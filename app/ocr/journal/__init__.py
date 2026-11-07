@@ -1,8 +1,10 @@
 """监理日志照片识别：定位表格 → 单次整页 OCR → 栏目匹配 → 业务结构。
 
-这条链路独立于旧的逐格识别实现；对外只暴露 read_photo()。
+这条链路独立于旧的逐格识别实现。同步阶段只做 OCR 并返回 JournalSheet；
+mainWork 拆分由 Agent 在异步层完成，最终由 build_result() 组装业务结构。
 """
 
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -11,88 +13,81 @@ from app.ocr.journal.fields import read_fields
 from app.ocr.journal.frame import locate
 from app.ocr.journal.image import load_photo
 from app.ocr.journal.reading import read_boxes
-from app.ocr.journal.spec import (
-    DOCUMENT_TYPE,
-    FIELD_SPECS,
-    FORM_CODE,
-    FORM_NAME,
-    MAIN_WORK_PARTS,
-)
+from app.ocr.journal.spec import DOCUMENT_TYPE, FIELD_SPECS, FORM_CODE, FORM_NAME
+from app.ocr.journal.split import MAX_SPLIT_CHARACTERS, split_main_work
 from app.ocr.journal.types import FieldReading, FieldSpec, PageLocation, Photo
+from app.schemas.ocr import MainWorkValues
 
 WARNING_NO_FRAME = "未检测到表格外框，按整张照片校正，请核对定位"
 
+__all__ = [
+    "MAX_SPLIT_CHARACTERS",
+    "JournalSheet",
+    "build_result",
+    "read_sheet",
+    "split_main_work",
+]
 
-def read_photo(photo: Path | None, img: str = "", task_id: str = "") -> dict:
-    """识别监理日志照片；照片路径与 base64 图片至少提供一个，同时提供时优先 base64。"""
+
+@dataclass(frozen=True)
+class JournalSheet:
+    """同步 OCR 阶段的完整结果；不包含任何业务字段分配。"""
+
+    source: Photo
+    location: PageLocation
+    readings: tuple[FieldReading, ...]
+    task_id: str = ""
+
+
+def read_sheet(photo: Path | None, img: str = "", task_id: str = "") -> JournalSheet:
+    """同步 OCR：照片路径与 base64 图片至少提供一个，同时提供时优先 base64。
+
+    返回的 FieldReading 保留 mainWork 原文与文字框位置片段；本函数不调用模型。
+    """
     source = load_photo(photo, img)
     location = locate(source)
     readings = read_fields(location.sheet, FIELD_SPECS, read_boxes)
-    return _result(source, location, readings, task_id)
+    return JournalSheet(source, location, tuple(readings), task_id)
 
 
-def _result(
-    source: Photo,
-    location: PageLocation,
-    readings: list[FieldReading],
-    task_id: str,
-) -> dict:
-    recognized = _recognized(readings)
+def build_result(sheet: JournalSheet, values: MainWorkValues) -> dict:
+    """组装内部结果；HTTP 层只取 processed。"""
+    recognized = _recognized(sheet.readings)
     return {
         "form": FORM_CODE,
         "formName": FORM_NAME,
         "frame": {
-            "how": location.how,
-            "quad": np.rint(location.quad).astype(int).tolist(),
+            "how": sheet.location.how,
+            "quad": np.rint(sheet.location.quad).astype(int).tolist(),
         },
         "recognized": recognized,
-        "detail": _detail(readings, location),
-        "processed": _processed(recognized, task_id),
-        "warning": WARNING_NO_FRAME if location.kind == "whole" else "",
-        "image": {"width": source.width, "height": source.height},
+        "detail": _detail(sheet.readings, sheet.location),
+        "processed": _processed(recognized, values, sheet.task_id),
+        "warning": WARNING_NO_FRAME if sheet.location.kind == "whole" else "",
+        "image": {"width": sheet.source.width, "height": sheet.source.height},
     }
 
 
-def _recognized(readings: list[FieldReading]) -> dict[str, str]:
-    """mainWork 整格结果暂时同时回填到 construction/witness/patrol。"""
+def _recognized(readings: tuple[FieldReading, ...]) -> dict[str, str]:
+    """原始栏目值；mainWork 必须先拆分，不能再整段复制到三个子栏。"""
     values: dict[str, str] = {}
     for reading in readings:
-        if not reading.value:
-            continue
-        if reading.spec.key == "mainWork":
-            for key, _label in MAIN_WORK_PARTS:
-                values[key] = reading.value
-        else:
+        if reading.value and reading.spec.key != "mainWork":
             values[reading.spec.key] = reading.value
     return values
 
 
-def _detail(readings: list[FieldReading], location: PageLocation) -> list[dict]:
-    items: list[dict] = []
-    for reading in readings:
-        rect = _detail_rect(reading.spec, location)
-        if reading.spec.key == "mainWork":
-            for field, label in MAIN_WORK_PARTS:
-                items.append(
-                    {
-                        "field": field,
-                        "label": label,
-                        "value": reading.value,
-                        "conf": reading.conf,
-                        "rect": rect,
-                    }
-                )
-        else:
-            items.append(
-                {
-                    "field": reading.spec.key,
-                    "label": reading.spec.label,
-                    "value": reading.value,
-                    "conf": reading.conf,
-                    "rect": rect,
-                }
-            )
-    return items
+def _detail(readings: tuple[FieldReading, ...], location: PageLocation) -> list[dict]:
+    return [
+        {
+            "field": reading.spec.key,
+            "label": reading.spec.label,
+            "value": reading.value,
+            "conf": reading.conf,
+            "rect": _detail_rect(reading.spec, location),
+        }
+        for reading in readings
+    ]
 
 
 def _detail_rect(spec: FieldSpec, location: PageLocation) -> list[int]:
@@ -106,7 +101,7 @@ def _detail_rect(spec: FieldSpec, location: PageLocation) -> list[int]:
     ]
 
 
-def _processed(recognized: dict, task_id: str) -> dict:
+def _processed(recognized: dict, values: MainWorkValues, task_id: str) -> dict:
     def text(key: str) -> str | None:
         value = (recognized.get(key) or "").strip()
         return value or None
@@ -126,9 +121,9 @@ def _processed(recognized: dict, task_id: str) -> dict:
         },
         "fields": {
             "mainWork": {
-                "construction": text("construction"),
-                "witness": text("witness"),
-                "patrol": text("patrol"),
+                "construction": values.construction,
+                "witness": values.witness,
+                "patrol": values.patrol,
             },
             "issues": text("issues"),
             "nextDayPlan": text("next_day_plan"),

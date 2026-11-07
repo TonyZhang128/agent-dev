@@ -142,6 +142,14 @@ def test_document_endpoints_declare_envelope_and_errors():
     assert "application/json" not in blank["content"]
 
 
+def test_journal_documents_the_main_work_split_failure():
+    responses = read_contract()["paths"]["/ocr/daily-logs-new"]["post"]["responses"]
+    assert {"200", "400", "422", "502", "503"} <= set(responses)
+    assert responses["502"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/ErrorDetail"
+    }
+
+
 def test_fixed_output_schemas_are_still_the_published_contracts():
     schemas = read_contract()["components"]["schemas"]
     log_summary = json.loads(

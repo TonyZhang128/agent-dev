@@ -4,8 +4,8 @@
     uv run --locked python -m scripts.ocr.bench_journal ./photos
     uv run --locked python -m scripts.ocr.bench_journal app/ocr/resources/jl1.jpg --output /tmp/result.json
 
-脚本只做批量调用和结果归档，不读取模板、不修改数据池；真实识别需要可用的
-OCR 模型目录和 OCR_DEVICE 配置。
+脚本只做批量 OCR 和结果归档，不调用 mainWork 拆分模型、不读取模板、不修改数据池；
+真实识别需要可用的 OCR 模型目录和 OCR_DEVICE 配置。
 """
 
 from __future__ import annotations
@@ -49,17 +49,21 @@ def main(argv: list[str] | None = None) -> int:
     for path in paths:
         started = time.perf_counter()
         try:
-            data = journal.read_photo(path)
+            sheet = journal.read_sheet(path)
         except Exception as exc:  # noqa: BLE001 —— 批处理逐张记录失败，不中断其余照片
             results.append({"path": path.name, "error": type(exc).__name__})
             continue
+        main_work = next(
+            (reading.value for reading in sheet.readings if reading.spec.key == "mainWork"),
+            "",
+        )
         results.append(
             {
                 "path": path.name,
                 "ms": round((time.perf_counter() - started) * 1000),
-                "frame": data["frame"]["how"],
-                "warning": data["warning"],
-                "recognized": data["recognized"],
+                "frame": sheet.location.how,
+                "warning": (journal.WARNING_NO_FRAME if sheet.location.kind == "whole" else ""),
+                "mainWork": main_work,
             }
         )
 

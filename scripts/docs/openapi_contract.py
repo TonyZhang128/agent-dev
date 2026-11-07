@@ -1081,13 +1081,16 @@ OPERATIONS: dict[str, dict[str, dict[str, Any]]] = {
     "/ocr/daily-logs-new": {
         "post": _operation(
             description="新版监理日志识别：定位表格、整页 OCR 后匹配栏目；歧义或漏框字段"
-            "最多补充识别 3 次。成功响应严格遵守已确认的后端格式，顶层只有 status、"
+            "最多补充识别 3 次。mainWork 原文按可靠标题或模型分类拆分为 construction、"
+            "witness、patrol；字段值始终原样取自 OCR 文本，不生成、不纠错、不润色，"
+            "原文没有的类别为 null。成功响应严格遵守已确认的后端格式，顶层只有 status、"
             "message、data，业务字段直接位于 data，不返回内部识别详情。"
-            "construction / witness / patrol 同属 mainWork 单元格，当前暂时回填同一整段值。",
+            "mainWork 无法可靠拆分时返回 502。",
             summary="识别监理日记（新版链路）",
             status="pending-review",
             source="interfaces/journal/response.schema.json（成功响应已确认）；"
-            "app/ocr/resources/daily-logs-output.json；tests/test_ocr_journal.py",
+            "docs/journal-mainwork-split.md；app/ocr/resources/daily-logs-output.json；"
+            "tests/test_ocr_journal.py；tests/test_agents_main_work.py",
             side_effects="只读取数据池照片，不写 PDF/Excel。",
             idempotency="识别结果可能因模型和照片变化而不同；只读调用可重试。",
             request_example={
@@ -1116,9 +1119,9 @@ OPERATIONS: dict[str, dict[str, dict[str, Any]]] = {
                             },
                             "fields": {
                                 "mainWork": {
-                                    "construction": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
-                                    "witness": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
-                                    "patrol": "主要施工情况路基填筑旁站情况旁站检查巡视情况巡视检查",
+                                    "construction": "主要施工情况K3+280段路基填筑",
+                                    "witness": "旁站情况旁站路基碾压",
+                                    "patrol": "巡视情况巡视挡土墙砌筑",
                                 },
                                 "issues": None,
                                 "nextDayPlan": None,
@@ -1130,6 +1133,9 @@ OPERATIONS: dict[str, dict[str, dict[str, Any]]] = {
                     "路径越界、文件不存在/不是文件、图片无法解码或文档处理失败。"
                 ),
                 "422": REQUEST_ERROR_RESPONSE,
+                "502": _error_response(
+                    "mainWork 无法可靠拆分：模型分类不合格，标题规则也无法完整覆盖原文。"
+                ),
                 "503": _error_response("OCR 模型不可用。"),
             },
         )

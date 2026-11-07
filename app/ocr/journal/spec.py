@@ -6,8 +6,8 @@
 issues、next_day_plan 六段。换表样版本时只需要重新标定本文件，不涉及识别算法。
 
 "当日主要监理工作情况"的 construction / witness / patrol 三个子栏在样例表上是
-同一个 mainWork 单元格，用印刷小标题分隔。当前只识别整格文字，再由接口层把整段
-值同时回填到三个子栏；后续拆分逻辑只改接口层，不改识别链。
+同一个 mainWork 单元格，用印刷小标题分隔。识别链只读取整格文字；接口层再按可靠
+标题或模型分类把原文拆分到三个子栏，拆分逻辑不改变本文件的识别参数。
 """
 
 from app.ocr.journal.types import FieldSpec
@@ -104,11 +104,4 @@ FIELD_SPECS: tuple[FieldSpec, ...] = (
         rect=(0.246, 0.768, 0.640, 0.120),
         aliases=("次日工作计划",),
     ),
-)
-
-# mainWork 整格识别结果暂时同时回填到三个业务子栏；后续按印刷小标题拆分。
-MAIN_WORK_PARTS: tuple[tuple[str, str], ...] = (
-    ("construction", "主要施工情况"),
-    ("witness", "旁站情况"),
-    ("patrol", "巡视情况"),
 )

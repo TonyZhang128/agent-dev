@@ -302,7 +302,7 @@
           "ocr"
         ],
         "summary": "Journal Recognize",
-        "description": "新版监理日志识别：单次整页 OCR + 固定栏目匹配，不读取旧识别链。",
+        "description": "新版监理日志识别：整页 OCR 后按原文单元拆分 mainWork。",
         "operationId": "journal_recognize_ocr_daily_logs_new_post",
         "requestBody": {
           "content": {

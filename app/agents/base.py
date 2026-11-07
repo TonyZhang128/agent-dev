@@ -20,6 +20,8 @@ class BaseAgent[RequestT: BaseModel, ResultT: BaseModel](ABC):
     dynamic_schema = False
     # 结构化输出已通过 provider 的 response_format 传递时，可不重复写入提示词。
     include_schema_in_prompt = True
+    # 能力级开关：关闭后不加入运行时云端回退，主模型失败直接按业务错误处理。
+    allow_model_fallback = True
 
     def __init__(self, models: ModelService, *, prompt_name: str | None = None):
         self.models = models
@@ -35,6 +37,7 @@ class BaseAgent[RequestT: BaseModel, ResultT: BaseModel](ABC):
             schema=schema,
             temperature=self.temperature,
             include_schema_in_prompt=self.include_schema_in_prompt,
+            allow_model_fallback=self.allow_model_fallback,
         )
 
     def response_schema(self, request: RequestT) -> dict | None:

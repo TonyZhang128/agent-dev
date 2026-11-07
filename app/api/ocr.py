@@ -10,6 +10,7 @@ import cv2
 import pymupdf
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
+from starlette.concurrency import run_in_threadpool
 
 from app.ocr import daily_logs, journal
 from app.ocr.core.resources import (
@@ -115,12 +116,17 @@ def daily_logs_recognize(req: DailyLogsReq, request: Request) -> dict:
 
 
 @router.post("/ocr/daily-logs-new", response_model=None)
-def journal_recognize(req: JournalReq, request: Request) -> dict:
-    """新版监理日志识别：单次整页 OCR + 固定栏目匹配，不读取旧识别链。"""
+async def journal_recognize(req: JournalReq, request: Request) -> dict:
+    """新版监理日志识别：整页 OCR 后按原文单元拆分 mainWork。"""
     with document_resources(request) as resources:
         path, img = photo_input(req, resources)
-        result = journal.read_photo(path, img, req.task_id)
-        return {"status": 200, "message": "识别完成", "data": result["processed"]}
+        # 同步 OCR 在线程池执行；文档资源 ContextVar 随线程上下文传入。
+        sheet = await run_in_threadpool(journal.read_sheet, path, img, req.task_id)
+    outcome = await journal.split_main_work(
+        sheet.readings, request.app.state.main_work_split_agent.plan
+    )
+    data = journal.build_result(sheet, outcome.values)["processed"]
+    return {"status": 200, "message": "识别完成", "data": data}
 
 
 @router.post("/ocr/jianbiao", response_model=None)

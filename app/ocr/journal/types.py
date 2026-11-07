@@ -70,11 +70,21 @@ class PageLocation:
 
 
 @dataclass(frozen=True)
+class TextSegment:
+    """最终栏目文本中的一个连续片段，位置相对 FieldReading.value。"""
+
+    text: str
+    start: int
+    end: int
+
+
+@dataclass(frozen=True)
 class FieldReading:
-    """单个栏目的识别结果。"""
+    """单个栏目的识别结果；segments 只在需要按文字框拆分时填充。"""
 
     spec: FieldSpec
     boxes: tuple[TextBox, ...]
     value: str
     conf: float
     ambiguous: bool = False
+    segments: tuple[TextSegment, ...] = ()

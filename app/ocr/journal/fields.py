@@ -17,7 +17,7 @@ from app.ocr.journal.spec import (
     MATCH_COVERAGE_MIN,
     MAX_FALLBACK_FIELDS,
 )
-from app.ocr.journal.types import FieldReading, FieldSpec, TextBox
+from app.ocr.journal.types import FieldReading, FieldSpec, TextBox, TextSegment
 
 Reader = Callable[[np.ndarray], list[TextBox]]
 
@@ -35,13 +35,14 @@ def read_fields(
     readings: dict[str, FieldReading] = {}
     for spec in specs:
         assigned = groups.get(spec.key, [])
-        value, conf = _clean(spec, assigned)
+        value, conf, segments = _clean_parts(spec, assigned)
         readings[spec.key] = FieldReading(
             spec=spec,
             boxes=tuple(assigned),
             value=value,
             conf=conf,
             ambiguous=spec.key in ambiguous,
+            segments=segments,
         )
 
     order = [spec for spec in specs if readings[spec.key].ambiguous]
@@ -68,7 +69,7 @@ def read_fields(
         if not extra:
             continue
         merged = _dedup(list(readings[spec.key].boxes) + extra)
-        value, conf = _clean(spec, merged)
+        value, conf, segments = _clean_parts(spec, merged)
         if value:
             readings[spec.key] = FieldReading(
                 spec=spec,
@@ -76,6 +77,7 @@ def read_fields(
                 value=value,
                 conf=conf,
                 ambiguous=False,
+                segments=segments,
             )
     return [readings[spec.key] for spec in specs]
 
@@ -135,16 +137,26 @@ def _has_value_box(spec: FieldSpec, boxes: tuple[TextBox, ...] | list[TextBox]) 
 
 
 def _clean(spec: FieldSpec, boxes: list[TextBox]) -> tuple[str, float]:
+    text, conf, _segments = _clean_parts(spec, boxes)
+    return text, conf
+
+
+def _clean_parts(
+    spec: FieldSpec, boxes: list[TextBox]
+) -> tuple[str, float, tuple[TextSegment, ...]]:
     kept = [
         box for box in _dedup(boxes) if _compact(box.text) and not _is_pure_label(box.text, spec)
     ]
     kept = _order_lines(kept)
-    text = "".join(_compact(box.text) for box in kept)
-    text = _trim(_strip_label(text, spec))
+    chunks = [_compact(box.text) for box in kept]
+    joined = "".join(chunks)
+    stripped = _strip_label(joined, spec)
+    text, kept_indices = _trim_map(stripped)
     if spec.kind == "date":
         text = _normalise_date(text)
     conf = round(sum(box.conf for box in kept) / len(kept), 3) if kept else 0.0
-    return text, conf
+    segments = _segments(spec, chunks, joined, stripped, text, kept_indices)
+    return text, conf, segments
 
 
 def _dedup(boxes: list[TextBox]) -> list[TextBox]:
@@ -210,12 +222,59 @@ def _is_pure_label(text: str, spec: FieldSpec) -> bool:
     )
 
 
+_TRIMMED_CHARACTERS = "□☐"
+_TRIM_EDGE = ":：_＿"
+
+
 def _trim(text: str) -> str:
-    text = text.replace("□", "").replace("☐", "")
-    text = re.sub(r"^[\s:：_＿]+|[\s:：_＿]+$", "", text)
-    if re.fullmatch(r"[年月日\s:：_＿\-—]*", text):
-        return ""
-    return text
+    return _trim_map(text)[0]
+
+
+def _trim_map(text: str) -> tuple[str, list[int]]:
+    """按原 _trim 规则清洗，并返回每个保留字符在入参中的下标。"""
+    kept = [(index, char) for index, char in enumerate(text) if char not in _TRIMMED_CHARACTERS]
+    while kept and _is_trim_edge(kept[0][1]):
+        kept.pop(0)
+    while kept and _is_trim_edge(kept[-1][1]):
+        kept.pop()
+    value = "".join(char for _, char in kept)
+    if re.fullmatch(r"[年月日\s:：_＿\-—]*", value):
+        return "", []
+    return value, [index for index, _ in kept]
+
+
+def _is_trim_edge(char: str) -> bool:
+    return char.isspace() or char in _TRIM_EDGE
+
+
+def _segments(
+    spec: FieldSpec,
+    chunks: list[str],
+    joined: str,
+    stripped: str,
+    text: str,
+    kept_indices: list[int],
+) -> tuple[TextSegment, ...]:
+    """把每个保留文字框映射回最终 text；只有 mainWork 需要位置片段。"""
+    if spec.key != "mainWork" or not text:
+        return ()
+    prefix = len(joined) - len(stripped)
+    if prefix < 0 or not joined.endswith(stripped):
+        return (TextSegment(text=text, start=0, end=len(text)),)
+    final_index = {index: position for position, index in enumerate(kept_indices)}
+    segments: list[TextSegment] = []
+    cursor = 0
+    for chunk in chunks:
+        positions = []
+        for offset in range(len(chunk)):
+            position = final_index.get(cursor + offset - prefix)
+            if position is not None:
+                positions.append(position)
+        cursor += len(chunk)
+        if positions:
+            start, end = positions[0], positions[-1] + 1
+            segments.append(TextSegment(text=text[start:end], start=start, end=end))
+    return tuple(segments) or (TextSegment(text=text, start=0, end=len(text)),)
 
 
 _DATE_PATTERN = re.compile(r"(20\d{2})\s*[年.\-/\s]\s*(\d{1,2})\s*[月.\-/\s]\s*(\d{1,2})")

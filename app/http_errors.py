@@ -7,7 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from openai import APIConnectionError, APIStatusError, APITimeoutError
 
-from app.errors import ConversationInputTooLarge, InvalidModelOutput
+from app.errors import ConversationInputTooLarge, InvalidModelOutput, MainWorkSplitError
 
 # 保留既有日志通道，兼容按 HTTP 错误日志过滤的部署。
 logger = logging.getLogger("app.main")
@@ -50,3 +50,11 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(InvalidModelOutput)
     async def invalid_output(request: Request, exc: InvalidModelOutput) -> JSONResponse:
         return JSONResponse(status_code=502, content={"detail": "模型未返回完整且符合约定的结果"})
+
+    @app.exception_handler(MainWorkSplitError)
+    async def main_work_not_split(request: Request, exc: MainWorkSplitError) -> JSONResponse:
+        # 固定文案；不回显原文、OCR 内容、单元 ID 或上游错误正文。
+        return JSONResponse(
+            status_code=502,
+            content={"detail": "监理日志主要工作情况无法可靠拆分，请核对照片后重试"},
+        )

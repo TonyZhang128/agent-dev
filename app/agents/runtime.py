@@ -46,15 +46,16 @@ def build_agent(
     temperature: float = 0,
     tools: tuple[BaseTool, ...] = (),
     include_schema_in_prompt: bool = True,
+    allow_model_fallback: bool = True,
 ):
     strategy = None
     schema = prepared_schema(schema, name)
     if schema is not None:
         strategy = ProviderStrategy(schema=schema, strict=True)
     middleware: list[AgentMiddleware] = [ResponseGuard(allow_tool_calls=bool(tools))]
-    if models.fallback_enabled:
+    if models.fallback_enabled and allow_model_fallback:
         # 主模型调用失败（连接、超时、上游错误）时改用云端模型重试；
-        # 重试后仍会执行输出校验。
+        # 重试后仍会执行输出校验。需要控制成本或避免原文外发的能力可显式关闭。
         middleware.append(
             ModelFallbackMiddleware(models.fallback_chat_model(temperature=temperature))
         )

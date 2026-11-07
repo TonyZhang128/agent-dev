@@ -9,11 +9,13 @@ import json
 from pathlib import Path
 
 import cv2
+import httpx
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
+from app.llm import ModelService
 from app.main import create_app
 from app.ocr.journal import fields, frame, image, spec
 from app.ocr.journal.types import Photo
@@ -54,7 +56,8 @@ def field_box(
     ]
 
 
-MAIN_WORK_TEXT = "主要施工情况K3+280段路基填筑旁站情况旁站路基碾压《视情况挡土墙错缝砌筑"
+MAIN_WORK_CONSTRUCTION = "主要施工情况K3+280段路基填筑"
+MAIN_WORK_WITNESS = "旁站情况旁站路基碾压《视情况挡土墙错缝砌筑"
 
 
 def full_page_items(shape: tuple[int, ...], *, skip: str = "") -> list[tuple]:
@@ -115,9 +118,24 @@ def settings(tmp_path):
     return make_ocr_settings(tmp_path)
 
 
+def offline_service(settings) -> ModelService:
+    """拆分模型不可达：本文件只验证 OCR，mainWork 应按标题规则完成。"""
+
+    def unavailable(request):
+        raise httpx.ConnectError("offline", request=request)
+
+    return ModelService(
+        settings,
+        http_client=httpx.Client(transport=httpx.MockTransport(unavailable), trust_env=False),
+        http_async_client=httpx.AsyncClient(
+            transport=httpx.MockTransport(unavailable), trust_env=False
+        ),
+    )
+
+
 @pytest.fixture
 def client(settings):
-    with TestClient(create_app(settings=settings)) as client:
+    with TestClient(create_app(offline_service(settings))) as client:
         yield client
 
 
@@ -154,9 +172,9 @@ def test_new_route_reads_one_page_and_maps_fields(client, settings):
             },
             "fields": {
                 "mainWork": {
-                    "construction": MAIN_WORK_TEXT,
-                    "witness": MAIN_WORK_TEXT,
-                    "patrol": MAIN_WORK_TEXT,
+                    "construction": MAIN_WORK_CONSTRUCTION,
+                    "witness": MAIN_WORK_WITNESS,
+                    "patrol": None,
                 },
                 "issues": "挡土墙墙背回填局部压实不足",
                 "nextDayPlan": "见证水稳基层检测",
@@ -239,7 +257,7 @@ def test_cleaning_strips_printed_labels_and_normalizes_dates():
         fields.TextBox("《视情况", 0, 160, 200, 190, 0.8),
         fields.TextBox("挡土墙错缝砌筑", 0, 200, 400, 230, 0.93),
     ]
-    # mainWork 保留印刷小标题，供后续按标题拆分；当前整段值原样回填三个子栏。
+    # mainWork 保留印刷小标题；拆分发生在识别之后的独立阶段，_clean 不改文本内容。
     assert fields._clean(main_work, boxes)[0] == (
         "主要施土情况K3+280段路基填筑旁站情况旁站路基碾压《视情况挡土墙错缝砌筑"
     )

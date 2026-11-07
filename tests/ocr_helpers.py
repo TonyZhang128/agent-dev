@@ -25,7 +25,9 @@ def ocr_result(*items):
     )
 
 
-def make_ocr_settings(root: Path, *, name: str = "测试表", height: int = 300) -> Settings:
+def make_ocr_settings(
+    root: Path, *, name: str = "测试表", height: int = 300, **overrides
+) -> Settings:
     templates, assets, projects = root / "templates", root / "assets", root / "projects"
     projects.mkdir(parents=True)
     (assets / "pdf").mkdir(parents=True)
@@ -115,6 +117,7 @@ def make_ocr_settings(root: Path, *, name: str = "测试表", height: int = 300)
         ocr_model_root=root / "models",
         # 离线测试默认 CPU 推理，与 .env.example 一致，不依赖本机 CUDA。
         ocr_device="cpu",
+        **overrides,
     )
 
 
