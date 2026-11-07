@@ -31,7 +31,8 @@ def read_fields(
 ) -> list[FieldReading]:
     """一次整页 OCR 后按栏目取值；只对歧义/漏框字段做有限次裁剪补充识别。"""
     height, width = sheet.shape[:2]
-    groups, ambiguous = _assign(reader(sheet), specs, width, height)
+    ocr_results = reader(sheet)
+    groups, ambiguous = _assign(ocr_results, specs, width, height)
     readings: dict[str, FieldReading] = {}
     for spec in specs:
         assigned = groups.get(spec.key, [])
@@ -88,6 +89,7 @@ def _assign(
     width: int,
     height: int,
 ) -> tuple[dict[str, list[TextBox]], set[str]]:
+    """根据OCR识别出的文字框，按照空间关系分配给预设好的栏目"""
     groups: dict[str, list[TextBox]] = {spec.key: [] for spec in specs}
     ambiguous: set[str] = set()
     for box in _dedup(boxes):

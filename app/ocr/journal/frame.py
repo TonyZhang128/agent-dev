@@ -21,25 +21,26 @@ from app.ocr.journal.types import LocationKind, PageLocation, Photo
 
 def locate(photo: Photo) -> PageLocation:
     """照片 → 校正页面；返回画布、原图坐标四角和定位方式。"""
-    quad, kind = _find_table_quad(photo)  #
-    width, height = _canvas_size(quad, kind)
-    destination = _destination(kind, width, height)
-    matrix = cv2.getPerspectiveTransform(quad, destination)
+    # quad 是原图坐标系下的 table 四角坐标，kind 是定位方式（table/page/whole）
+    quad, kind = _find_table_quad(photo)
+    page_width, page_height = _canvas_size(quad, kind)  # 推算页面宽高
+    destination = _destination(kind, page_width, page_height)  # 推算table四角坐标矫正后该在哪儿
+    matrix = cv2.getPerspectiveTransform(quad, destination)  # 计算透视变换矩阵
     sheet = cv2.warpPerspective(
         photo.bgr,
         matrix,
-        (width, height),
+        (page_width, page_height),
         flags=cv2.INTER_LINEAR,
         borderValue=(255, 255, 255),
-    )
+    )  # 透视变换，得到校正后的页面图像
     original_quad = quad if photo.scale == 1.0 else quad / photo.scale
     return PageLocation(
         sheet=sheet,
         quad=np.asarray(original_quad, np.float32),
         kind=kind,
         how=_how(kind),
-        width=width,
-        height=height,
+        width=page_width,
+        height=page_height,
         matrix=matrix,
     )
 
@@ -48,27 +49,32 @@ def _find_table_quad(photo: Photo) -> tuple[np.ndarray, LocationKind]:
     """在原图上找表格外框；返回四角坐标和定位方式。"""
     height, width = photo.gray.shape
     # 自适应阈值二值化，获取线
-    binary = cv2.adaptiveThreshold(
+    binary_table = cv2.adaptiveThreshold(
         photo.gray,
         255,
         cv2.ADAPTIVE_THRESH_MEAN_C,
-        cv2.THRESH_BINARY_INV,
+        cv2.THRESH_BINARY_INV,  # 线是白色255，背景是黑色0
         31,
         12,
     )
-    binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+    binary_table = cv2.morphologyEx(
+        binary_table, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8)
+    )  # 闭运算：膨胀-腐蚀法补充间隙
     horizontal = cv2.bitwise_or(
-        _line_mask(binary, (max(20, width // 30), 1)),
-        _line_mask(binary, (max(20, width // 12), 1)),
+        _line_mask(binary_table, (max(20, width // 30), 1)),
+        _line_mask(binary_table, (max(20, width // 12), 1)),
     )
     vertical = cv2.bitwise_or(
-        _line_mask(binary, (1, max(20, height // 30))),
-        _line_mask(binary, (1, max(20, height // 12))),
+        _line_mask(binary_table, (1, max(20, height // 30))),
+        _line_mask(binary_table, (1, max(20, height // 12))),
     )
+    # 合并网格
     grid = cv2.dilate(cv2.bitwise_or(horizontal, vertical), np.ones((3, 3), np.uint8))
 
     candidates: list[np.ndarray] = []
     closed = cv2.morphologyEx(grid, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+
+    # 1、轮廓法找表格外框
     contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     for contour in sorted(contours, key=cv2.contourArea, reverse=True)[:5]:
         if cv2.contourArea(contour) < MIN_QUAD_AREA_RATIO * width * height:
@@ -76,6 +82,7 @@ def _find_table_quad(photo: Photo) -> tuple[np.ndarray, LocationKind]:
         quad = _quad_from_contour(contour, width, height)
         if quad is not None:
             candidates.append(quad)
+    # 2、边框线法找表格外框
     border = _quad_from_borders(horizontal, vertical, width, height)
     if border is not None:
         candidates.append(border)
@@ -87,9 +94,10 @@ def _find_table_quad(photo: Photo) -> tuple[np.ndarray, LocationKind]:
     return _order_points(best), kind
 
 
-def _line_mask(binary: np.ndarray, kernel: tuple[int, int]) -> np.ndarray:
+def _line_mask(binary_table: np.ndarray, kernel: tuple[int, int]) -> np.ndarray:
+    """开运算：腐蚀-膨胀法去掉小的噪点，保留线条"""
     return cv2.morphologyEx(
-        binary,
+        binary_table,
         cv2.MORPH_OPEN,
         cv2.getStructuringElement(cv2.MORPH_RECT, kernel),
     )
@@ -260,21 +268,23 @@ def _line_density(quad: np.ndarray, grid: np.ndarray) -> float:
 
 
 def _canvas_size(quad: np.ndarray, kind: LocationKind) -> tuple[int, int]:
+    """根据找到的四边形table，反推页面page的宽高"""
     top = float(np.linalg.norm(quad[1] - quad[0]))
     bottom = float(np.linalg.norm(quad[2] - quad[3]))
-    measured = (top + bottom) / 2
+    measured = (top + bottom) / 2  # 计算平均宽度
     table_width = TABLE_RECT[2] - TABLE_RECT[0]
-    width = measured / table_width if kind == "table" else measured
-    width = int(round(min(max(width, CANVAS_MIN_WIDTH), CANVAS_MAX_WIDTH)))
-    height = int(round(width * PAGE_ASPECT))
-    if max(width, height) > CANVAS_MAX_SIDE:
-        scale = CANVAS_MAX_SIDE / max(width, height)
-        width = max(1, int(round(width * scale)))
-        height = max(1, int(round(height * scale)))
-    return max(width, 1), max(height, 1)
+    page_width = measured / table_width if kind == "table" else measured
+    page_width = int(round(min(max(page_width, CANVAS_MIN_WIDTH), CANVAS_MAX_WIDTH)))
+    page_height = int(round(page_width * PAGE_ASPECT))
+    if max(page_width, page_height) > CANVAS_MAX_SIDE:
+        scale = CANVAS_MAX_SIDE / max(page_width, page_height)
+        page_width = max(1, int(round(page_width * scale)))
+        page_height = max(1, int(round(page_height * scale)))
+    return max(page_width, 1), max(page_height, 1)
 
 
 def _destination(kind: LocationKind, width: int, height: int) -> np.ndarray:
+    """根据预设的标准表格位置以及获取到的页面宽高，计算出tabel四角坐标矫正后该在哪儿"""
     if kind != "table":
         return np.array(
             [[0, 0], [width - 1, 0], [width - 1, height - 1], [0, height - 1]],
@@ -305,6 +315,7 @@ def _order_points(points: np.ndarray) -> np.ndarray:
 
 
 def _whole_quad(width: int, height: int) -> np.ndarray:
+    """兜底策略，当找不到四边形时，返回整页图片的四角坐标。"""
     return np.array(
         [[0, 0], [width - 1, 0], [width - 1, height - 1], [0, height - 1]],
         np.float32,
