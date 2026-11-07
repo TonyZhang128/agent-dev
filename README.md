@@ -14,7 +14,7 @@
 | 业务端意图识别 | `POST /agents/intent/business` | 当前消息、当前页面与可选上下文 → 最小功能 `page/action`、一级意图澄清、聊天或未知状态、判断分数、目录版本 |
 | 归档端意图识别 | `POST /agents/intent/archive` | 文字与历史消息 → `A`–`D` 占位分类或 `unknown`、判断分数、澄清标记 |
 | 自由对话 | `POST /agents/chat` | 当前消息、必填历史（首轮 `[]`）→ 回答和模型名称 |
-| 照片/简表/监理日志 OCR | `POST /ocr/recognize`、`POST /ocr/jianbiao`、`POST /ocr/daily-logs`、`POST /ocr/daily-logs-new` | 数据池照片或 base64 图片 → 识别字段；新版监理日志仅返回后端约定的业务结构 |
+| 照片/简表/监理日志 OCR | `POST /ocr/recognize`、`POST /ocr/jianbiao`、`POST /ocr/daily-logs`、`POST /ocr/daily-logs-new` | 数据池照片或 base64 图片 → 识别字段；新版监理日志仅返回后端约定的业务结构，`mainWork` 按业务含义拆分为施工/旁站/巡视 |
 | 公式与填表 | `POST /ocr/fill` | 核对后的值 + 配置 → 公式/引用结果，可输出同源 PDF/Excel |
 | 表样预览与字段 | `GET /ocr/blank/{form}.png`、`GET /ocr/sheet/{form}` | 空白表 PNG、版面栏与格子字段 |
 | 施工图划分 | `POST /wbs/draft` | PDF/工可 → WBS 划分初稿 |
@@ -88,6 +88,8 @@ test -f .env || cp .env.example .env
 | `LLM_FALLBACK_TIMEOUT_SECONDS` | `60` | 回退调用超时，叠加在 `LLM_TIMEOUT_SECONDS` 之上 |
 | `LLM_FALLBACK_REASONING_EFFORT` | `none` | 关闭回退模型思考；不支持的服务可设为空 |
 | `AGENT_RECURSION_LIMIT` | `8` | Agent 运行步数上限，包含工具调用循环 |
+| `MAIN_WORK_SPLIT_TIMEOUT_SECONDS` | `30` | 新版监理日志 `mainWork` 分类的总预算（含并发排队），超时改用标题规则 |
+| `MAIN_WORK_SPLIT_CONCURRENCY` | `1` | `mainWork` 分类的本地模型并发上限；OCR 推理仍按应用串行加锁 |
 | `LANGSMITH_TRACING` | `false` | 是否开启 LangSmith 追踪 |
 | `TEMPLATES_ROOT` | `data/ocr/templates` | 模板 JSON：forms、layouts、refs |
 | `ADMIN_ROOT` | `data/ocr/admin` | 管理端资料目录（优先查找 PDF/Excel） |
@@ -238,7 +240,7 @@ app/
     system.py             # /health、/ready、/diagnostics：存活、模型就绪与本地诊断
     ocr.py                # /ocr：识别、监理日志、简表、填表与表样
     wbs.py                # /wbs/draft：施工图划分初稿
-  ocr/                    # 文档加工业务（core 原语与资源 / form 照片模板对齐识别 / sheets 表样格子与 Excel / jianbiao 简表识别与公式填表 / daily_logs 监理日志 / wbs_draft 划分初稿）
+  ocr/                    # 文档加工业务（core 原语与资源 / form 照片模板对齐识别 / sheets 表样格子与 Excel / jianbiao 简表识别与公式填表 / daily_logs 旧监理日志 / journal 新版监理日志与 mainWork 拆分 / wbs_draft 划分初稿）
   http_errors.py          # 输入与模型异常的统一 HTTP 映射、校验详情脱敏
   config.py               # .env 配置与默认值
   schemas/                # 请求、响应的 Pydantic 模型和校验
@@ -255,6 +257,7 @@ app/
     history.py            # 请求局部历史、预算及完整回合裁剪
     profiles.py           # 归档端扁平意图的标签、提示词与输出模型配置
     log_summary.py        # 工程表单 OCR 日志描述（兼容通用日志）
+    main_work.py          # 监理日志 mainWork 原文单元分类（不生成字段文本）
     intent.py             # 扁平归档意图流程（复用 IntentProfile）
     intent_business.py    # 层级业务意图、page/action 校验与一级意图澄清
     intent_catalog.py     # 生成目录的只读运行时视图
@@ -263,6 +266,7 @@ app/
   prompts/
     __init__.py           # 按模块路径加载提示词，不依赖当前工作目录
     log_summary.md        # 各业务独立维护的系统提示词
+    main_work.md          # mainWork 单元分类边界与 unknown 规则
     intent/
       business.md         # 业务端层级意图识别规则
       business_clarify.md # 一级意图澄清措辞

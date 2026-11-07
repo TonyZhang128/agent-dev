@@ -103,7 +103,7 @@ PROJECTS_ROOT=../6_shujuchi/yewu
 | `GET /diagnostics` | 无 | 运行库、推理设备、模板/版面/WBS 规则、模型目录与数据池的静态检查；`data.ok` 汇总必需检查，`data.warnings` 记录非致命问题 |
 | `POST /ocr/recognize` | `path` 或 `img`（至少提供一个），可选 `form=""` | `fields`、`keys`、`lines`、`detail`、`align`、`warning`、`image`、`ms` |
 | `POST /ocr/daily-logs` | `path` 或 `img`（至少提供一个），可选 `taskId=""` | 监理日记（JLB13）固定栏目识别、原始框、`frame`、业务结构 `processed`、`ms` |
-| `POST /ocr/daily-logs-new` | 同 `/ocr/daily-logs` | 独立新链路；严格返回 `status`、`message`、`data`，业务字段直接在 `data` 内 |
+| `POST /ocr/daily-logs-new` | 同 `/ocr/daily-logs` | 独立新链路；严格返回 `status`、`message`、`data`，`mainWork` 按业务含义拆分，无法可靠拆分时 `502` |
 | `POST /ocr/jianbiao` | `path`、`form`、`cfg`；可选 `bound={}`、`out=""` | 简表定位/识别、公式结果、锚点、PDF/Excel 路径 |
 | `POST /ocr/fill` | `form`、`cfg`、`values`；可选 `out=""`、`rects={}` | `values`、`errors`、`anchors`、`pdf`、`xlsx`、`xlsxSkipped` |
 | `GET /ocr/blank/{form}.png` | 可选 `width=1400`，正整数，上限按 2400 渲染 | 第 1 页 PNG，带缓存头 |
@@ -149,7 +149,7 @@ curl --noproxy '*' -fsS http://127.0.0.1:8309/ocr/fill \
 
 `/ocr/daily-logs` 复用「找外框 → 透视校正 → 逐格 OCR」，按现场《监理日记》表样返回 `recognized`（`project`、`number`、`supervision_org`、`recorder`、`weather`、`position`、`date`、`reviewer`、`construction`、`witness`、`patrol`、`issues`、`next_day_plan`）和 `detail`；`date` 归一为 `yyyy-mm-dd`，长文本栏保留 OCR 拼接结果。`frame.how` 为 `contour`/`contour+table`/`whole` 等定位方式，`whole` 时 `warning` 提示核对定位。`processed` 是业务结构：`taskId`（请求原样回显，未传为 `null`）、`documentType`（固定 `supervision_diary`）、`common` 和 `fields`；识别不到的栏目为 `null`，不做推断。该接口只读取照片，不写 PDF/Excel，也不生成任务 ID。
 
-`/ocr/daily-logs-new` 是独立实现，成功响应严格按 `app/ocr/resources/daily-logs-output.json` 返回 `{"status":200,"message":"识别完成","data":...}`。`data` 直接包含 `taskId`、`documentType`、`common`、`fields`，缺失值为 `null`，不返回 `processed` 包装或其他识别详情。算法流程为：在原图上用横竖线定位表格外框，只做一次透视校正；整页只调用一次 OCR；文字框按栏目区域用中心点和框内覆盖率匹配；印刷栏目名按栏目名近似剥离；歧义或漏框字段最多补充识别 3 次。样例表中 `construction`、`witness`、`patrol` 同属一个 `mainWork` 单元格，当前整格识别后暂时同时回填到这三个字段，后续再按"主要施工情况 / 旁站情况 / 巡视情况"小标题拆分。定位信息与 warning 只保留在内部结果及本地工具中，不通过新版 HTTP 接口返回。
+`/ocr/daily-logs-new` 是独立实现，成功响应严格按 `app/ocr/resources/daily-logs-output.json` 返回 `{"status":200,"message":"识别完成","data":...}`。`data` 直接包含 `taskId`、`documentType`、`common`、`fields`，缺失值为 `null`，不返回 `processed` 包装或其他识别详情。算法流程为：在原图上用横竖线定位表格外框，只做一次透视校正；整页只调用一次 OCR；文字框按栏目区域用中心点和框内覆盖率匹配；印刷栏目名按栏目名近似剥离；歧义或漏框字段最多补充识别 3 次。样例表中 `construction`、`witness`、`patrol` 同属一个 `mainWork` 单元格，识别后按 `docs/journal-mainwork-split.md` 的已确认方案拆分：先把原文切成文字单元，模型只返回单元 ID → 类别的分类计划（不启用运行时云端回退）；模型失败、结果不完整、标题不一致或仍有有效 `unknown` 时，整体改用“主要施工情况 / 旁站情况 / 巡视情况”标题规则。字段值由程序从原文按类别截取，保留标题、不生成内容；缺失类别为 `null`；两者都无法可靠完成时返回受控 `502`。拆分只调用一次主模型，超时预算由 `MAIN_WORK_SPLIT_TIMEOUT_SECONDS`（默认 30 秒，含排队）控制，并发由 `MAIN_WORK_SPLIT_CONCURRENCY`（默认 1）控制；超过 `MAX_SPLIT_CHARACTERS`（4000 字符，初始值）时跳过模型直接尝试规则。定位信息与 warning 只保留在内部结果及本地工具中，不通过新版 HTTP 接口返回。
 
 `cfg` 保留配置平台的 fields/anchors/edges/formulas 元数据；处理所需字段会校验，非法结构返回 `422`。`EXCEL_RANGE.range` 为单个单元格地址（如 `A3`），合并单元格归到左上角。`PDF_REGION.rect` 和 `rects` 是 `{x,y,w,h}` 页面比例坐标；简表 `cells[].rect` 是 `[x,y,w,h]` 外框比例，二者不可混用。
 
@@ -193,7 +193,7 @@ uv run --locked pytest -v
 
 离线测试由临时 PDF/Excel/JSON 和图片构成，OCR 只在模型边界模拟；覆盖真实文件生成、合并单元格与印刷文字、公式/引用、WBS、资源隔离和目录限制。原 docsvc 测试依赖 Java 并且兜底 cfg 缺 PDF 锚点，已用确定性夹具替换。
 
-`tests/test_ocr_recognize.py` 覆盖 `/ocr/recognize` 的响应契约、表号缺省/未知/不匹配、模板坐标对齐和错误映射。其中真实照片用例读取 `data/ocr/imgs/CJ5.jpg`、`data/ocr/imgs/test.jpg` 与 `.cache/models/ocr/` 下的 RapidOCR 模型；照片或模型缺失时自动跳过，干净克隆和 CI 不要求这些本地素材。真实识别结果用于回归印刷体表格字段和页眉文字，手写内容不作准确性断言。`tests/test_ocr_daily_logs.py` 覆盖 `/ocr/daily-logs` 的固定栏目裁剪、日期归一、base64 来源、`taskId` 回显、业务映射、路径/模型错误映射；OCR 同样只在模型边界模拟。`tests/test_ocr_journal.py` 覆盖 `/ocr/daily-logs-new` 的单次整页 OCR、栏目归属、印刷栏目名剥离、补充识别、表格定位、整页兜底和 EXIF 方向。
+`tests/test_ocr_recognize.py` 覆盖 `/ocr/recognize` 的响应契约、表号缺省/未知/不匹配、模板坐标对齐和错误映射。其中真实照片用例读取 `data/ocr/imgs/CJ5.jpg`、`data/ocr/imgs/test.jpg` 与 `.cache/models/ocr/` 下的 RapidOCR 模型；照片或模型缺失时自动跳过，干净克隆和 CI 不要求这些本地素材。真实识别结果用于回归印刷体表格字段和页眉文字，手写内容不作准确性断言。`tests/test_ocr_daily_logs.py` 覆盖 `/ocr/daily-logs` 的固定栏目裁剪、日期归一、base64 来源、`taskId` 回显、业务映射、路径/模型错误映射；OCR 同样只在模型边界模拟。`tests/test_ocr_journal.py` 覆盖 `/ocr/daily-logs-new` 的单次整页 OCR、栏目归属、印刷栏目名剥离、补充识别、表格定位、整页兜底和 EXIF 方向，以及模型不可达时按标题规则拆分；`tests/test_ocr_journal_split.py` 覆盖文字单元、可靠标题、规则回退、计划校验和字段组装；`tests/test_agents_main_work.py` 覆盖模型分类、非法输出回退、受控 `502`、云端回退开关和并发隔离。
 
 运行中的 API、已有模板和真实简表照片齐备后执行：
 

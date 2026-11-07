@@ -7,6 +7,8 @@ OCR 模型和辅助脚本见 [文档加工与 OCR](../../docs/ocr.md)。
 ## 共同规则
 
 - 全部为同步请求；CPU 处理在线程池执行，同一应用的 OCR 推理串行加锁。
+  `/ocr/daily-logs-new` 在 OCR 之后还会同步调用一次模型拆分 `mainWork`，仍以单个
+  HTTP 响应返回，不产生服务端任务或轮询。
 - 没有服务端任务 ID、异步轮询、webhook、回调、分页或 multipart 上传；
   `/ocr/daily-logs` 的 `taskId` 仅原样回显调用方传入的值。
 - 没有鉴权。应由可信调用方在既有部署边界内使用。
@@ -94,14 +96,21 @@ ONNX Runtime 能否导入，`OCR_DEVICE` 与 onnxruntime provider 是否一致�
 4. 按固定栏目区域，用中心点优先、框内覆盖率兜底的方式归属文字框。
 5. 按栏目名近似剥离印刷字；日期归一为 `yyyy-mm-dd`；长文本栏保留拼接结果。
 6. 对歧义或漏框字段最多补充识别 3 次。
-7. 严格返回 `{"status":200,"message":"识别完成","data":...}`；`data` 直接包含
+7. 把 `mainWork` 原文切成文字单元，先做一次模型分类（不启用运行时云端回退）；
+   模型失败、结果不完整、标题不一致或仍有有效 `unknown` 时，整体改用标题规则。
+8. 校验模型与规则结果后，从原文按类别截取 `construction`、`witness`、`patrol`。
+9. 严格返回 `{"status":200,"message":"识别完成","data":...}`；`data` 直接包含
    `taskId`、`documentType`、`common`、`fields`，缺失值为 `null`。
 
 - 成功响应依据后端已约定的 `app/ocr/resources/daily-logs-output.json`，正式响应子契约见
-  [journal/response.schema.json](../journal/response.schema.json)。
+  [journal/response.schema.json](../journal/response.schema.json)；本次拆分不改变成功结构。
 - 实现独立，不读取旧逐格识别链；HTTP 成功响应不包含内部诊断信息或 `processed` 包装。
-- `construction`、`witness`、`patrol` 在样例表上同属一个 `mainWork` 单元格；当前只
-  整格识别 `mainWork`，并把整段值同时回填到这三个字段；后续按印刷小标题拆分。
+- `construction`、`witness`、`patrol` 在样例表上同属一个 `mainWork` 单元格。拆分只做
+  分配：字段值必须能在 `mainWork` OCR 文本中原样找到；保留各节标题原文；原文没有的
+  类别为 `null`；不纠错、不润色、不总结、不补充记录。`common`、`issues`、
+  `nextDayPlan` 不受拆分影响。
+- 模型与规则都无法可靠完成时返回 `502`，`detail` 为固定文案，不回显原文、OCR 内容、
+  单元 ID 或上游错误正文。不会复制整段 `mainWork` 或强塞到 `construction`。
 - 定位信息保留在内部识别链和本地可视化工具中，不通过此接口返回。
 - 不写 PDF/Excel，不生成服务端任务 ID。
 
@@ -176,6 +185,7 @@ ONNX Runtime 能否导入，`OCR_DEVICE` 与 onnxruntime provider 是否一致�
 | 400 | 路径越界、文件不存在/不是文件、图片或文档处理失败、公式循环引用、简表版面缺失 |
 | 404 | 表样接口找不到该表号的 PDF |
 | 422 | 请求字段或配置结构校验失败；`path` 与 `img` 都为空 |
+| 502 | `/ocr/daily-logs-new` 的 `mainWork` 无法可靠拆分 |
 | 503 | 模板资源、OCR 模型或推理依赖不可用 |
 
 错误响应统一为 `{"detail":"..."}`；请求校验失败时为错误数组。错误信息不泄露文件系统

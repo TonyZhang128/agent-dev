@@ -2,6 +2,21 @@
 
 只记录对外接口契约的变化。运行时行为、提示词和内部重构不在此记录。
 
+## 2026-11-07 — 新版监理日志 mainWork 字段拆分（待确认）
+
+- `POST /ocr/daily-logs-new` 的 `data.fields.mainWork.construction`、`witness`、
+  `patrol` 由“整段 `mainWork` 同时回填”改为“按业务含义拆分后的原文”。
+  这是行为变化，已随 `docs/journal-mainwork-split.md` 方案确认。
+- 成功响应结构不变：仍严格为 `status`、`message`、`data`，不新增原始 `mainWork`、
+  未分类内容或复核状态字段；`interfaces/journal/response.schema.json` 不变。
+- 字段值只从本次 `mainWork` OCR 文本原样截取，保留各节标题；原文没有的类别为
+  `null`；不改动 `common`、`issues`、`nextDayPlan`。
+- 新增失败语义：模型与标题规则都无法可靠完成时返回 `502`，`detail` 为固定文案，
+  不回显原文、OCR 内容、单元 ID 或上游错误正文。
+- 操作仍为 `pending-review`，未提升为正式契约。
+- 调用方影响：原来读取三个相同整段值的调用方需要按类别读取；同一字段可能为
+  `null`；需要处理新增的 `502`。
+
 ## 2026-11-06 — 新版监理日志成功响应对齐后端约定（用户已确认）
 
 - 用户指定 `app/ocr/resources/daily-logs-output.json` 为 `POST /ocr/daily-logs-new`
