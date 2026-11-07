@@ -7,13 +7,11 @@ mainWork 拆分由 Agent 在异步层完成，最终由 build_result() 组装业
 from dataclasses import dataclass
 from pathlib import Path
 
-import numpy as np
-
 from app.ocr.journal.fields import read_fields
 from app.ocr.journal.frame import locate
 from app.ocr.journal.image import load_photo
 from app.ocr.journal.reading import read_boxes
-from app.ocr.journal.spec import DOCUMENT_TYPE, FIELD_SPECS, FORM_CODE, FORM_NAME
+from app.ocr.journal.spec import DOCUMENT_TYPE, FIELD_SPECS
 from app.ocr.journal.split import MAX_SPLIT_CHARACTERS, split_main_work
 from app.ocr.journal.types import FieldReading, FieldSpec, PageLocation, Photo
 from app.schemas.ocr import MainWorkValues
@@ -55,27 +53,27 @@ def build_result(sheet: JournalSheet, values: MainWorkValues) -> dict:
     """组装内部结果；HTTP 层只取 processed。"""
     recognized = _recognized(sheet.readings)
     return {
-        "form": FORM_CODE,
-        "formName": FORM_NAME,
-        "frame": {
-            "how": sheet.location.how,
-            "quad": np.rint(sheet.location.quad).astype(int).tolist(),
-        },
-        "recognized": recognized,
-        "detail": _detail(sheet.readings, sheet.location),
+        # "form": FORM_CODE,
+        # "formName": FORM_NAME,
+        # "frame": {
+        #     "how": sheet.location.how,
+        #     "quad": np.rint(sheet.location.quad).astype(int).tolist(),
+        # },
+        # "recognized": recognized,
+        # "detail": _detail(sheet.readings, sheet.location),
         "processed": _processed(recognized, values, sheet.task_id),
         "warning": WARNING_NO_FRAME if sheet.location.kind == "whole" else "",
-        "image": {"width": sheet.source.width, "height": sheet.source.height},
+        # "image": {"width": sheet.source.width, "height": sheet.source.height},
     }
 
 
 def _recognized(readings: tuple[FieldReading, ...]) -> dict[str, str]:
     """原始栏目值；mainWork 必须先拆分，不能再整段复制到三个子栏。"""
-    values: dict[str, str] = {}
+    recognized_values: dict[str, str] = {}
     for reading in readings:
         if reading.value and reading.spec.key != "mainWork":
-            values[reading.spec.key] = reading.value
-    return values
+            recognized_values[reading.spec.key] = reading.value
+    return recognized_values
 
 
 def _detail(readings: tuple[FieldReading, ...], location: PageLocation) -> list[dict]:
