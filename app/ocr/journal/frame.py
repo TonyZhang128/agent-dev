@@ -1,7 +1,6 @@
 """在原图上定位表格外框，并用一次单应变换把整页校正到固定画布。
 
-和旧的"先找纸、再在纸里找表、再把坐标映射回原图"不同，这里直接对照片
-做横竖线提取：线区域的最大内轮廓就是表格，取不到时再用四条边框线拟合，
+表格外框定位原理：对照片做横竖线提取，线区域的最大内轮廓就是表格，取不到时再用四条边框线拟合，
 最后才退回整张照片。最终图像只从原图采样一次。
 """
 
@@ -22,7 +21,7 @@ from app.ocr.journal.types import LocationKind, PageLocation, Photo
 
 def locate(photo: Photo) -> PageLocation:
     """照片 → 校正页面；返回画布、原图坐标四角和定位方式。"""
-    quad, kind = _find_table_quad(photo)
+    quad, kind = _find_table_quad(photo)  #
     width, height = _canvas_size(quad, kind)
     destination = _destination(kind, width, height)
     matrix = cv2.getPerspectiveTransform(quad, destination)
@@ -46,7 +45,9 @@ def locate(photo: Photo) -> PageLocation:
 
 
 def _find_table_quad(photo: Photo) -> tuple[np.ndarray, LocationKind]:
+    """在原图上找表格外框；返回四角坐标和定位方式。"""
     height, width = photo.gray.shape
+    # 自适应阈值二值化，获取线
     binary = cv2.adaptiveThreshold(
         photo.gray,
         255,

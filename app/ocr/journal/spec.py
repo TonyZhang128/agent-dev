@@ -45,7 +45,7 @@ FIELD_SPECS: tuple[FieldSpec, ...] = (
     FieldSpec(
         key="project",
         label="公路工程项目",
-        rect=(0.300, 0.116, 0.280, 0.060),
+        rect=(0.300, 0.116, 0.280, 0.060),  # (左上点坐标) + (宽度, 高度)
         aliases=("项目名称", "工程项目"),
     ),
     FieldSpec(

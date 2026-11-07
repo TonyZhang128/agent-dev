@@ -21,7 +21,7 @@ def load_photo(path: Path | None, img: str = "") -> Photo:
     data = _source_bytes(path, img)
     try:
         with Image.open(io.BytesIO(data)) as opened:
-            oriented = ImageOps.exif_transpose(opened)
+            oriented = ImageOps.exif_transpose(opened)  # 修正图片方向
             rgb = _flatten(oriented).convert("RGB")
             pixels = np.asarray(rgb)
     except Exception as exc:  # noqa: BLE001 —— 解码库异常统一为图片不可识别

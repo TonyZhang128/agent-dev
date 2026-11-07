@@ -29,7 +29,7 @@ __all__ = [
 ]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True)  # 不可重新赋值的数据类
 class JournalSheet:
     """同步 OCR 阶段的完整结果；不包含任何业务字段分配。"""
 
@@ -40,7 +40,8 @@ class JournalSheet:
 
 
 def read_sheet(photo: Path | None, img: str = "", task_id: str = "") -> JournalSheet:
-    """同步 OCR：照片路径与 base64 图片至少提供一个，同时提供时优先 base64。
+    """OCR识别监理日记图片
+    输入：图片路径与 base64 图片至少提供一个，同时提供时优先 base64。
 
     返回的 FieldReading 保留 mainWork 原文与文字框位置片段；本函数不调用模型。
     """

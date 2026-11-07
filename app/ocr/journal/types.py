@@ -25,10 +25,10 @@ class TextBox:
     """OCR 文字框，坐标为所在图像的像素坐标。"""
 
     text: str
-    x0: float
+    x0: float  # 左上
     y0: float
     x1: float
-    y1: float
+    y1: float  # 右下
     conf: float
 
     @property
