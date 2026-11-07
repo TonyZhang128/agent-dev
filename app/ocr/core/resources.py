@@ -6,7 +6,6 @@ from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import lru_cache, wraps
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from app.config import Settings
@@ -60,25 +59,6 @@ class OCRResources:
             self._json[relative] = data
         return self._json[relative]
 
-    def asset(self, relative: str) -> Path:
-        """管理端优先，再查规范资料；兼容模板记录的旧目录名。"""
-        for root in (self.admin, self.assets):
-            path = (root / relative).resolve()
-            if not path.is_relative_to(root):
-                raise ValueError("模板资源路径必须位于配置目录内")
-            if path.exists():
-                return path
-        parts = relative.split("/")
-        rename_file = self.templates / "library/pdf_dirs.json"
-        if len(parts) > 2 and parts[0] == "pdf" and rename_file.is_file():
-            books = self.load("library/pdf_dirs.json").get("books", {})
-            for book in books.values():
-                if book.get("old") == parts[1] and book.get("dir"):
-                    path = (self.assets / "pdf" / book["dir"] / Path(*parts[2:])).resolve()
-                    if path.is_relative_to(self.assets) and path.exists():
-                        return path
-        return self.assets / relative
-
 
 _current: ContextVar[OCRResources | None] = ContextVar("ocr_resources", default=None)
 
@@ -114,11 +94,3 @@ def resource_cache(maxsize: int = 128) -> Callable[..., Any]:
         return wrapped
 
     return decorate
-
-
-def forms() -> dict[str, Any]:
-    return get_resources().load("forms/files.json")["forms"]
-
-
-def asset(relative: str) -> Path:
-    return get_resources().asset(relative)
