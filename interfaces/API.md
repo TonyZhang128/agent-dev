@@ -463,11 +463,11 @@ Schema：`ChatResponse`
 | --- | --- |
 | 摘要 | 识别监理日记（新版链路） |
 | 契约状态 | `pending-review` |
-| 来源 | interfaces/journal/response.schema.json（成功响应已确认）；docs/journal-mainwork-split.md；app/ocr/resources/daily-logs-output.json；tests/test_ocr_journal.py；tests/test_agents_main_work.py |
+| 来源 | interfaces/journal/response.schema.json（成功响应已确认）；interfaces/journal/main-work-processing.md（生成语义已确认）；docs/journal-mainwork-split.md；tests/test_ocr_journal.py；tests/test_agents_main_work.py |
 | 副作用 | 只读取数据池照片，不写 PDF/Excel。 |
 | 幂等/重试 | 识别结果可能因模型和照片变化而不同；只读调用可重试。 |
 
-新版监理日志识别：按 PDF 构建的模板对齐完整表格，整页一次 OCR 后匹配表内外字段；不进行字段级补充识别。mainWork 原文优先按可靠标题或单元开头强标记做规则拆分，规则无法完整覆盖时才用模型分类拆分 construction、witness、patrol；字段值始终原样取自 OCR 文本，不生成、不纠错、不润色，原文没有的类别为 null。成功响应严格遵守已确认的后端格式，顶层只有 status、message、data，业务字段直接位于 data，不返回内部识别详情。mainWork 无法可靠拆分时返回 502。
+新版监理日志识别：按 PDF 构建的模板对齐完整表格，整页一次 OCR 后匹配表内外字段；不进行字段级补充识别。mainWork先合并OCR文字，再按施工情况、旁站情况、巡视情况关键词提取；规则无法完整可靠覆盖时，由Agent基于全文生成construction、witness、patrol。允许整理表达、合并断句和去标题，但保留全部业务事实与关键数据，不摘要、不补充事实；原文没有的类别为 null。成功响应严格遵守已确认的后端格式，顶层只有 status、message、data，业务字段直接位于 data，不返回内部识别详情。mainWork 无法可靠拆分时返回 502。
 
 **请求体**
 
@@ -493,7 +493,7 @@ Schema：`JournalReq`
 - `200`：监理日志业务字段；成功响应结构已由用户确认，不含额外信息。
 - `400`：路径越界、文件不存在/不是文件、图片无法解码、未检测到通过模板结构核验的监理日志表格，或文档处理失败。
 - `422`：请求校验失败，或输入与上下文超过预算。校验失败时 detail 为错误数组；输入超限时为字符串。
-- `502`：mainWork 无法可靠拆分：标题规则无法完整覆盖原文，模型分类也不合格。
+- `502`：mainWork无法可靠处理：关键词规则无法完整提取，且Agent不可用、超时或生成结果未通过结构/关键数据检查。
 - `503`：OCR 模型不可用。
 
 **200 响应体**
@@ -517,9 +517,9 @@ Schema：`JournalReq`
     },
     "fields": {
       "mainWork": {
-        "construction": "主要施工情况K3+280段路基填筑",
-        "witness": "旁站情况旁站路基碾压",
-        "patrol": "巡视情况巡视挡土墙砌筑"
+        "construction": "K3+280段路基填筑",
+        "witness": "旁站路基碾压",
+        "patrol": "巡视挡土墙砌筑"
       },
       "issues": null,
       "nextDayPlan": null

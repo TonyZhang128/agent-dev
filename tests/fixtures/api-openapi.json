@@ -224,7 +224,7 @@
           "ocr"
         ],
         "summary": "Journal Recognize",
-        "description": "新版监理日志识别：整页 OCR 后按原文单元拆分 mainWork。",
+        "description": "新版监理日志识别：整页OCR后按关键词提取，必要时由Agent基于完整mainWork生成三部分。",
         "operationId": "journal_recognize_ocr_daily_logs_new_post",
         "requestBody": {
           "content": {

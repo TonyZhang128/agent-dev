@@ -253,7 +253,7 @@ app/
     history.py            # 请求局部历史、预算及完整回合裁剪
     profiles.py           # 归档端扁平意图的标签、提示词与输出模型配置
     log_summary.py        # 工程表单 OCR 日志描述（兼容通用日志）
-    main_work.py          # 监理日志 mainWork 原文单元分类（不生成字段文本）
+    main_work.py          # 监理日志 mainWork 全文生成（关键词规则不足时兜底）
     intent.py             # 扁平归档意图流程（复用 IntentProfile）
     intent_business.py    # 层级业务意图、page/action 校验与一级意图澄清
     intent_catalog.py     # 生成目录的只读运行时视图
@@ -262,7 +262,7 @@ app/
   prompts/
     __init__.py           # 按模块路径加载提示词，不依赖当前工作目录
     log_summary.md        # 各业务独立维护的系统提示词
-    main_work.md          # mainWork 单元分类边界与 unknown 规则
+    main_work.md          # mainWork 三部分生成与事实/关键数据保留规则
     intent/
       business.md         # 业务端层级意图识别规则
       business_clarify.md # 一级意图澄清措辞

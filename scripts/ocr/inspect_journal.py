@@ -11,7 +11,11 @@ from app.config import Settings
 from app.ocr import journal
 from app.ocr.core.resources import OCRResources, use_resources
 from app.ocr.journal.field_matching import field_bounds_on_canvas
-from app.ocr.journal.main_work_split import assemble_values, assign_by_headings, split_into_units
+from app.ocr.journal.main_work_split import (
+    extract_by_keywords,
+    merge_main_work,
+    validate_generated_values,
+)
 
 
 def inspect_photo(photo: Path, output: Path, task_id: str = "") -> dict:
@@ -58,19 +62,15 @@ def inspect_photo(photo: Path, output: Path, task_id: str = "") -> dict:
                 ],
             }
         )
-    main_work = next(
-        reading for reading in recognition.readings if reading.layout.key == "main_work"
-    )
-    units = split_into_units(main_work.value, main_work.segments)
-    assignments = assign_by_headings(units) if units else {}
+    source = merge_main_work(recognition.readings)
+    values = extract_by_keywords(source)
     payload = None
-    if assignments is not None:
+    if values is not None:
+        validate_generated_values(source, values)
         payload = {
             "status": 200,
             "message": "识别完成",
-            "data": journal.build_processed_payload(
-                recognition, assemble_values(units, assignments)
-            ),
+            "data": journal.build_processed_payload(recognition, values),
         }
     report = {
         "photo": str(photo),
@@ -78,7 +78,7 @@ def inspect_photo(photo: Path, output: Path, task_id: str = "") -> dict:
         "table_rect_on_canvas": recognition.alignment.table_rect_on_canvas,
         "line_support": recognition.alignment.line_support,
         "elapsed_ms": round((time.perf_counter() - started) * 1000),
-        "split_strategy": "rules" if assignments is not None else "requires_model",
+        "split_strategy": "rules" if values is not None else "requires_model",
         "fields": regions,
         "response": payload,
     }
@@ -90,6 +90,9 @@ def inspect_photo(photo: Path, output: Path, task_id: str = "") -> dict:
         (output / "response.json").write_text(
             json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
+    else:
+        # 同一目录连续检查不同照片时，不能把上次的成功JSON冒充本次结果。
+        (output / "response.json").unlink(missing_ok=True)
     cv2.imencode(".png", canvas)[1].tofile(output / "fields.png")
     cv2.imencode(".png", recognition.alignment.source_coverage_mask)[1].tofile(
         output / "coverage.png"

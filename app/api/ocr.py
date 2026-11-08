@@ -58,13 +58,13 @@ def photo_input(req: JournalReq, resources: OCRResources) -> tuple[Path | None, 
 
 @router.post("/ocr/daily-logs-new", response_model=None)
 async def journal_recognize(req: JournalReq, request: Request) -> dict:
-    """新版监理日志识别：整页 OCR 后按原文单元拆分 mainWork。"""
+    """新版监理日志识别：整页OCR后按关键词提取，必要时由Agent基于完整mainWork生成三部分。"""
     with document_resources(request) as resources:
         path, img = photo_input(req, resources)
         # 同步 OCR 在线程池执行；文档资源 ContextVar 随线程上下文传入。
         sheet = await run_in_threadpool(journal.recognize_journal, path, img, req.task_id)
     outcome = await journal.split_main_work(
-        sheet.readings, request.app.state.main_work_split_agent.plan
+        sheet.readings, request.app.state.main_work_agent.generate
     )
     data = journal.build_processed_payload(sheet, outcome.values)
     return {"status": 200, "message": "识别完成", "data": data}

@@ -1,8 +1,6 @@
 """文档加工请求；保留 docsvc 字段和空输出语义。"""
 
-from enum import StrEnum
-
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class JournalReq(BaseModel):
@@ -30,64 +28,30 @@ class JournalReq(BaseModel):
         return self
 
 
-class MainWorkCategory(StrEnum):
-    """mainWork 原文单元的业务类别；unknown 只在内部使用，不进入 HTTP 响应。"""
-
-    construction = "construction"
-    witness = "witness"
-    patrol = "patrol"
-    unknown = "unknown"
-
-
-class MainWorkUnit(BaseModel):
-    """拆分的最小单位；text 必须来自 source_text，start/end 相对 source_text。"""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    unit_id: str = Field(pattern=r"^u\d+$")
-    text: str = Field(min_length=1)
-    start: int = Field(ge=0)
-    end: int = Field(gt=0)
-    is_heading: bool = False
-    heading_category: MainWorkCategory | None = None
-
-    @model_validator(mode="after")
-    def validate_span(self) -> "MainWorkUnit":
-        if self.end <= self.start:
-            raise ValueError("end 必须大于 start")
-        if self.heading_category is not None and not self.is_heading:
-            raise ValueError("只有标题单元可以带 heading_category")
-        return self
-
-
-class MainWorkSplitRequest(BaseModel):
-    """模型输入；start/end 是内部坐标，不发送给模型。"""
+class MainWorkRequest(BaseModel):
+    """Agent输入合并后的完整mainWork，不再输入碎片ID和预判类别。"""
 
     model_config = ConfigDict(extra="forbid")
-
-    units: tuple[MainWorkUnit, ...] = Field(min_length=1)
-
-
-class MainWorkAssignment(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    unit_id: str = Field(pattern=r"^u\d+$")
-    category: MainWorkCategory
-
-
-class MainWorkSplitPlan(BaseModel):
-    """模型输出：每个原文单元必须出现且只出现一次。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    assignments: list[MainWorkAssignment] = Field(min_length=1)
+    main_work: str = Field(
+        min_length=1, description="按阅读顺序合并的全部OCR文字，换行不是强制业务边界"
+    )
 
 
 class MainWorkValues(BaseModel):
-    """拆分后的三个业务字段；原文没有该类内容时为 null。"""
+    """三个字段必须明确返回；不存在的类别为null，内容必须依据原文。"""
 
     model_config = ConfigDict(extra="forbid")
+    construction: str | None = Field(
+        description="施工部位、工序和进展；保留全部事实与关键数据，不摘要"
+    )
+    witness: str | None = Field(
+        description="旁站活动、过程和检测记录；保留全部事实与关键数据，不摘要"
+    )
+    patrol: str | None = Field(
+        description="巡视检查、现场观察及质量安全状态；保留全部事实与关键数据，不摘要"
+    )
 
-    construction: str | None = None
-    witness: str | None = None
-    patrol: str | None = None
+    @field_validator("construction", "witness", "patrol")
+    @classmethod
+    def trim_content(cls, text: str | None) -> str | None:
+        return text.strip() or None if text is not None else None

@@ -8,7 +8,7 @@ from app.agents.clarify import ClarificationAgent
 from app.agents.intent import IntentAgent
 from app.agents.intent_business import BusinessIntentAgent
 from app.agents.log_summary import LogSummaryAgent
-from app.agents.main_work import MainWorkSplitAgent
+from app.agents.main_work import MainWorkAgent
 from app.agents.profiles import ARCHIVE_INTENT_PROFILE
 from app.api.router import api_router
 from app.config import Settings
@@ -36,7 +36,7 @@ def create_app(service: ModelService | None = None, *, settings: Settings | None
                 app.state.model_service,
                 ARCHIVE_INTENT_PROFILE,
             )
-            app.state.main_work_split_agent = MainWorkSplitAgent(app.state.model_service)
+            app.state.main_work_agent = MainWorkAgent(app.state.model_service)
             yield
         finally:
             try:

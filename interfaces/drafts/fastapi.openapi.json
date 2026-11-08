@@ -496,7 +496,7 @@
           "ocr"
         ],
         "summary": "识别监理日记（新版链路）",
-        "description": "新版监理日志识别：按 PDF 构建的模板对齐完整表格，整页一次 OCR 后匹配表内外字段；不进行字段级补充识别。mainWork 原文优先按可靠标题或单元开头强标记做规则拆分，规则无法完整覆盖时才用模型分类拆分 construction、witness、patrol；字段值始终原样取自 OCR 文本，不生成、不纠错、不润色，原文没有的类别为 null。成功响应严格遵守已确认的后端格式，顶层只有 status、message、data，业务字段直接位于 data，不返回内部识别详情。mainWork 无法可靠拆分时返回 502。",
+        "description": "新版监理日志识别：按 PDF 构建的模板对齐完整表格，整页一次 OCR 后匹配表内外字段；不进行字段级补充识别。mainWork先合并OCR文字，再按施工情况、旁站情况、巡视情况关键词提取；规则无法完整可靠覆盖时，由Agent基于全文生成construction、witness、patrol。允许整理表达、合并断句和去标题，但保留全部业务事实与关键数据，不摘要、不补充事实；原文没有的类别为 null。成功响应严格遵守已确认的后端格式，顶层只有 status、message、data，业务字段直接位于 data，不返回内部识别详情。mainWork 无法可靠拆分时返回 502。",
         "operationId": "journal_recognize_ocr_daily_logs_new_post",
         "requestBody": {
           "content": {
@@ -538,9 +538,9 @@
                     },
                     "fields": {
                       "mainWork": {
-                        "construction": "主要施工情况K3+280段路基填筑",
-                        "witness": "旁站情况旁站路基碾压",
-                        "patrol": "巡视情况巡视挡土墙砌筑"
+                        "construction": "K3+280段路基填筑",
+                        "witness": "旁站路基碾压",
+                        "patrol": "巡视挡土墙砌筑"
                       },
                       "issues": null,
                       "nextDayPlan": null
@@ -571,7 +571,7 @@
             }
           },
           "502": {
-            "description": "mainWork 无法可靠拆分：标题规则无法完整覆盖原文，模型分类也不合格。",
+            "description": "mainWork无法可靠处理：关键词规则无法完整提取，且Agent不可用、超时或生成结果未通过结构/关键数据检查。",
             "content": {
               "application/json": {
                 "schema": {
@@ -592,7 +592,7 @@
           }
         },
         "x-contract-status": "pending-review",
-        "x-contract-source": "interfaces/journal/response.schema.json（成功响应已确认）；docs/journal-mainwork-split.md；app/ocr/resources/daily-logs-output.json；tests/test_ocr_journal.py；tests/test_agents_main_work.py",
+        "x-contract-source": "interfaces/journal/response.schema.json（成功响应已确认）；interfaces/journal/main-work-processing.md（生成语义已确认）；docs/journal-mainwork-split.md；tests/test_ocr_journal.py；tests/test_agents_main_work.py",
         "x-side-effects": "只读取数据池照片，不写 PDF/Excel。",
         "x-idempotency": "识别结果可能因模型和照片变化而不同；只读调用可重试。"
       }

@@ -63,9 +63,9 @@ def field_box(
     ]
 
 
-MAIN_WORK_CONSTRUCTION = "主要施工情况K3+280段路基填筑"
-MAIN_WORK_WITNESS = "旁站情况旁站路基碾压"
-MAIN_WORK_PATROL = "巡视情况挡土墙错缝砌筑"
+MAIN_WORK_CONSTRUCTION = "K3+280段路基填筑"
+MAIN_WORK_WITNESS = "旁站路基碾压"
+MAIN_WORK_PATROL = "挡土墙错缝砌筑"
 
 
 def full_page_items(shape: tuple[int, ...], *, skip: str = "") -> list[tuple]:

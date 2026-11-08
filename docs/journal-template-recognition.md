@@ -45,7 +45,7 @@ uv run --locked python -m scripts.ocr.inspect_journal \
 
 成功仍为 `{"status":200,"message":"识别完成","data":...}`，请求及业务字段不变。用户已明确批准：无通过结构核验的table或候选歧义时，返回400和 `{"detail":"未检测到监理日志表格，请重新拍摄"}`，不执行OCR或mainWork分类。合法空白表格仍可成功返回空字段。
 
-mainWork继续只分配原文。损坏的独立短标题不能静默继承前一节类别，转入已有模型分类；模型仍只返回单元ID的类别，不生成字段字符串。模型无法可靠分类仍为既有502。正文与短标题纵向框重叠时，按同列上下关系保持阅读顺序。
+mainWork先合并文字，再按施工情况、旁站情况、巡视情况关键词提取；规则不足时由Agent基于全文直接生成三个字段。允许整理表达、合并断句和去标题，但保留全部业务事实与关键数据，不摘要、不补充事实。失败仍为既有502。详见 [规则与生成](journal-mainwork-split.md)。
 
 ## 保留与删除
 
@@ -58,7 +58,7 @@ mainWork继续只分配原文。损坏的独立短标题不能静默继承前一
 | `alignment.py` | table落点、包含表外区域的画布及来源mask |
 | `photo.py` / `ocr_adapter.py` | 图片解码、EXIF、共享模型四点框适配 |
 | `field_matching.py` | table坐标换算、框归属、阅读顺序、原文片段 |
-| `main_work_split.py` | 规则与模型分类及原文组装 |
+| `main_work_split.py` | 关键词规则、全文生成兜底与关键数据检查 |
 | `pipeline.py` / `output.py` | 编排与既有成功结构映射 |
 
 ## 验收与回归
@@ -68,7 +68,7 @@ TDD锁定行为缺陷，真实图片验收独立执行。`tests/fixtures/journal
 分别检查：table四角是否真实、字段框是否正确、文字是否漏/串栏、OCR字符是否正确、mainWork分类是否正确。HTTP200、非空字段数、置信度及覆盖率都不等于业务验收通过。增加空白纸、错误合并格、照片留白变化和table落点变化反例；不能为某张照片写专用坐标或参数。
 
 ```zsh
-uv run --locked pytest tests/test_ocr_journal*.py tests/test_agents_main_work.py tests/test_ocr.py -v
+uv run --locked pytest tests/test_ocr_journal*.py tests/test_ocr_main_work_generation.py tests/test_agents_main_work.py tests/test_ocr.py -v
 uv run --locked ruff check app tests scripts
 uv run --locked ruff format --check app tests scripts
 uv run --locked pyright
