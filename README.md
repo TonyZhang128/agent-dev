@@ -79,9 +79,10 @@ test -f .env || cp .env.example .env
 | `LLM_CONTEXT_MARGIN_TOKENS` | `256` | 历史裁剪预算额外余量 |
 | `CONVERSATION_MAX_INPUT_CHARACTERS` | `1000000` | 历史及序列化当前输入总字符上限，超出返回422 |
 | `LLM_REASONING_EFFORT` | `none` | 关闭当前 Qwen 服务的思考输出；不支持的服务可设为空 |
+| `LLM_FALLBACK_ENABLED` | `false` | 云端回退总开关；`true` 且回退密钥非空时才启用 |
 | `LLM_FALLBACK_BASE_URL` | `https://api.deepseek.com` | 本地 Ollama/vLLM 调用失败时的云端 OpenAI 兼容地址 |
 | `LLM_FALLBACK_MODEL` | `deepseek-flash` | 回退模型名称 |
-| `LLM_FALLBACK_API_KEY` | 空 | 回退密钥；留空即关闭回退 |
+| `LLM_FALLBACK_API_KEY` | 空 | 回退密钥；留空不启用回退，已配置时仍受总开关控制 |
 | `LLM_FALLBACK_TIMEOUT_SECONDS` | `60` | 回退调用超时，叠加在 `LLM_TIMEOUT_SECONDS` 之上 |
 | `LLM_FALLBACK_REASONING_EFFORT` | `none` | 关闭回退模型思考；不支持的服务可设为空 |
 | `AGENT_RECURSION_LIMIT` | `8` | Agent 运行步数上限，包含工具调用循环 |
@@ -96,7 +97,17 @@ test -f .env || cp .env.example .env
 | `OCR_DEVICE` | `cpu` | OCR 推理设备：`cpu`（默认，适合无 NVIDIA GPU 的开发/Mac 环境）或 `cuda`（需 CUDA 12 + cuDNN 9，同时通过 `--extra ocr-gpu` 安装 onnxruntime-gpu）；cuda 不可用时接口返回 503 |
 | `OCR_CUDA_ROOT` | `.cache/cuda` | 仅 cuda 模式：Windows 可将 NVIDIA redist 解压到此目录免系统安装，需 CUDA 12 + cuDNN 9 |
 
-云端回退默认关闭：只有提供非空 `LLM_FALLBACK_API_KEY` 时才启用。启用后，本地 Ollama/vLLM 的模型调用因连接失败、超时或上游 HTTP 错误抛出异常时，本次调用改用回退模型重试一次，总预算为 `LLM_TIMEOUT_SECONDS + LLM_FALLBACK_TIMEOUT_SECONDS`。回退不重试已返回但未通过 Schema 校验的输出，`/ready` 仍只检查本地模型。DeepSeek 不支持严格 `json_schema`，回退时改用 JSON 模式并继续用 Pydantic 校验，不会退回宽松文本解析。启用回退意味着业务输入会发送到云端，需按数据合规要求决定。
+云端回退默认关闭：只有 `LLM_FALLBACK_ENABLED=true` 且提供非空 `LLM_FALLBACK_API_KEY` 时才启用。设为 `false` 后即使保留密钥也只调用本地模型，总预算为 `LLM_TIMEOUT_SECONDS`；开关开启但密钥为空或纯空白时也不启用回退。启用后，本地 Ollama/vLLM 的模型调用因连接失败、超时或上游 HTTP 错误抛出异常时，本次调用改用回退模型重试一次，总预算为 `LLM_TIMEOUT_SECONDS + LLM_FALLBACK_TIMEOUT_SECONDS`。回退不重试已返回但未通过 Schema 校验的输出，`/ready` 仍只检查本地模型。DeepSeek 不支持严格 `json_schema`，回退时改用 JSON 模式并继续用 Pydantic 校验，不会退回宽松文本解析。启用回退意味着业务输入会发送到云端，需按数据合规要求决定。
+
+开发（`.env.example`）和 Linux 生产（`scripts/prod/api.env.example`）均在各自部署的根目录 `.env` 中配置：
+
+```dotenv
+# 开启回退；关闭时改为 false，无需删除密钥。
+LLM_FALLBACK_ENABLED=true
+LLM_FALLBACK_API_KEY=<云端服务密钥>
+```
+
+修改后重启 API。已有部署若仅配置了回退密钥，升级后需补充 `LLM_FALLBACK_ENABLED=true` 才继续启用。Docker 生产在 `docker/prod.env` 中设置同名变量，再执行 `docker compose --env-file docker/prod.env -f compose.prod.yml up -d api` 重建 API 容器以加载配置；仅 `restart` 不会更新容器环境变量。
 
 开启 LangSmith 时，还需在进程环境提供其凭据；追踪可能包含业务输入和模型输出。项目默认不会上传追踪。
 

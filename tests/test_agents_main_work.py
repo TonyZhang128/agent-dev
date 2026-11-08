@@ -215,7 +215,9 @@ def test_generation_keeps_configured_cloud_fallback(tmp_path):
             return completion(json.dumps(GENERATED), model="deepseek-flash")
         raise httpx.ConnectError("offline", request=request)
 
-    settings, client = client_for(tmp_path, respond, llm_fallback_api_key="secret")
+    settings, client = client_for(
+        tmp_path, respond, llm_fallback_enabled=True, llm_fallback_api_key="secret"
+    )
     with client:
         response = post_journal(client, settings, engine=JournalEngine(parts=MIXED_MAIN_WORK_PARTS))
     assert response.status_code == 200 and len(calls) == 2
@@ -231,7 +233,9 @@ def test_other_agents_keep_configured_cloud_fallback(tmp_path):
             return completion("云端回答", model="deepseek-flash")
         raise httpx.ConnectError("offline", request=request)
 
-    _settings, client = client_for(tmp_path, respond, llm_fallback_api_key="secret")
+    _settings, client = client_for(
+        tmp_path, respond, llm_fallback_enabled=True, llm_fallback_api_key="secret"
+    )
     with client:
         response = client.post(
             "/agents/chat",

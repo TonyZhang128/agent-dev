@@ -90,7 +90,9 @@
 | 504 | 模型推理超时 | `{"detail":"模型推理超时"}` |
 
 - 默认总超时为 `LLM_TIMEOUT_SECONDS`。
-- 配置非空 `LLM_FALLBACK_API_KEY` 后，本地模型连接失败、超时或上游 HTTP 错误会改用回退
+- 默认关闭云端回退；只有 `LLM_FALLBACK_ENABLED=true` 且配置非空 `LLM_FALLBACK_API_KEY`
+  时启用。设为 `false` 后即使保留密钥也不回退。
+- 启用回退后，本地模型连接失败、超时或上游 HTTP 错误会改用回退
   模型重试一次；两次尝试的总预算为 `LLM_TIMEOUT_SECONDS + LLM_FALLBACK_TIMEOUT_SECONDS`。
 - 回退只覆盖模型调用失败，不重试已返回但未通过校验的输出。
 - 启用回退会把本次请求内容发送到云端，必须按数据合规要求评估。

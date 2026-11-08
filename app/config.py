@@ -21,7 +21,8 @@ class Settings(BaseSettings):
     llm_context_margin_tokens: int = Field(default=256, ge=0, le=8192)
     conversation_max_input_characters: int = Field(default=1000000, ge=1, le=10000000)
     llm_reasoning_effort: str = "none"
-    # 本地 Ollama/vLLM 调用失败时使用的云端回退；key 为空即关闭。
+    # 本地 Ollama/vLLM 调用失败时使用的云端回退；开关与非空密钥需同时具备。
+    llm_fallback_enabled: bool = False
     llm_fallback_base_url: str = "https://api.deepseek.com"
     llm_fallback_model: str = "deepseek-flash"
     llm_fallback_api_key: SecretStr = SecretStr("")

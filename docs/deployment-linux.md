@@ -23,7 +23,12 @@ LLM_REASONING_EFFORT=
 
 其他变量与开发共用同一 `Settings`，见 README。进程变量优先于 `.env`。生产 API 入口会拒绝 Ollama 开发地址/模型和未修改的密钥占位符；请勿直接复制 Mac 的 `.env` 上线。
 
-可选云端回退沿用 `LLM_FALLBACK_*`，默认关闭；启用后本地模型调用失败会把本次业务输入发送到云端，是否启用按数据合规要求决定。
+可选云端回退使用 `LLM_FALLBACK_*`，默认 `LLM_FALLBACK_ENABLED=false`。
+在本部署根目录 `.env` 中设置 `LLM_FALLBACK_ENABLED=true` 并配置非空
+`LLM_FALLBACK_API_KEY` 后重启 API，才会在本地模型调用失败时尝试云端。
+关闭时只需改回 `false`，可以保留密钥；只有开关、没有密钥时不会启用。
+已有部署若只配置密钥，升级后需要显式补充开关。启用后本次业务输入会发送到云端，
+是否启用按数据合规要求决定。
 
 ## 2. 准备独立模型服务
 

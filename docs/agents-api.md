@@ -286,7 +286,7 @@ UV_CACHE_DIR="$PWD/.cache/uv" uv run --locked python -m scripts.common.verify_ag
 
 输入不合法返回 422，其中请求字段校验失败的 `detail` 是 `[{type,loc,msg}]` 数组，输入/上下文超限时是字符串；模型不可达返回 503；模型推理超时返回 504；上游错误、响应截断或输出校验失败返回 502。模型类错误的 `detail` 均为脱敏字符串。
 
-配置非空 `LLM_FALLBACK_API_KEY` 后启用云端回退：本地 Ollama/vLLM 的模型调用因连接失败、超时或上游 HTTP 错误抛出异常时，本次调用改用回退模型重试一次，两次尝试的总预算为 `LLM_TIMEOUT_SECONDS + LLM_FALLBACK_TIMEOUT_SECONDS`。回退只覆盖模型调用失败，不重试已返回但未通过 Schema 校验的输出；`/ready` 仍只检查本地模型。回退模型若为 DeepSeek，`ProviderStrategy` 的严格 `json_schema` 请求会降级为 `json_object`，响应仍由 LangChain 解析并由 Pydantic 严格校验。启用回退会把本次请求内容发送到云端，需按数据合规要求评估。
+云端回退默认关闭；设置 `LLM_FALLBACK_ENABLED=true` 且配置非空 `LLM_FALLBACK_API_KEY` 后才启用。设为 `false` 可保留密钥并禁止回退，总预算恢复为 `LLM_TIMEOUT_SECONDS`。启用后，本地 Ollama/vLLM 的模型调用因连接失败、超时或上游 HTTP 错误抛出异常时，本次调用改用回退模型重试一次，两次尝试的总预算为 `LLM_TIMEOUT_SECONDS + LLM_FALLBACK_TIMEOUT_SECONDS`。回退只覆盖模型调用失败，不重试已返回但未通过 Schema 校验的输出；`/ready` 仍只检查本地模型。回退模型若为 DeepSeek，`ProviderStrategy` 的严格 `json_schema` 请求会降级为 `json_object`，响应仍由 LangChain 解析并由 Pydantic 严格校验。启用回退会把本次请求内容发送到云端，需按数据合规要求评估。
 
 后台服务修改代码后，重启 API 即可，模型服务可继续复用：
 

@@ -109,6 +109,7 @@ OCR_MODEL_DIR=/srv/models/ocr
 - `VLLM_MAX_MODEL_LEN` 必须与 `LLM_CONTEXT_TOKENS` 一致（默认 8192）。vLLM 默认上下文远大于业务预算，会浪费显存。
 - `LLM_MODEL` 固定为 `VLLM_SERVED_MODEL_NAME`（默认 `highway-agent`），`/ready` 以此校验服务端模型列表。
 - `LLM_REASONING_EFFORT` 留空；思考模式由 `--default-chat-template-kwargs '{"enable_thinking": false}'` 关闭。
+- 云端回退默认 `LLM_FALLBACK_ENABLED=false`；在 `docker/prod.env` 中设为 `true` 且配置非空 `LLM_FALLBACK_API_KEY` 才启用，设回 `false` 可保留密钥。旧部署仅配置密钥的需补上开关。修改后执行 `docker compose --env-file docker/prod.env -f compose.prod.yml up -d api` 重建 API 容器，单独 `restart` 不加载新环境变量。
 - 业务容器以 UID/GID `10001` 运行。挂载目录需对该用户可读，`OCR_PROJECTS_DIR` 需可写：
 
   ```bash

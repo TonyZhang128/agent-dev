@@ -10,7 +10,7 @@ from openai import APIStatusError
 from pydantic import BaseModel
 
 from app.agents.runtime import build_agent, invoke_agent
-from app.config import Settings
+from app.config import ROOT, Settings
 from app.llm import ModelService
 from app.main import create_app
 from tests.helpers import request_payload
@@ -185,6 +185,7 @@ async def test_primary_failure_falls_back_to_cloud_model():
 
     service = models_for(
         respond,
+        llm_fallback_enabled=True,
         llm_fallback_api_key="test-fallback-key",
         llm_fallback_model="test-deepseek",
         llm_timeout_seconds=10,
@@ -211,14 +212,23 @@ async def test_primary_failure_falls_back_to_cloud_model():
 
 
 @pytest.mark.asyncio
-async def test_primary_failure_without_fallback_key_keeps_upstream_error():
+@pytest.mark.parametrize(
+    "enabled,api_key",
+    [(None, "secret"), ("false", "secret"), ("true", ""), ("true", "   ")],
+    ids=["default-off", "explicit-off", "empty-key", "blank-key"],
+)
+async def test_primary_failure_with_disabled_fallback_keeps_upstream_error(
+    monkeypatch, enabled, api_key
+):
     calls = []
+    if enabled is not None:
+        monkeypatch.setenv("LLM_FALLBACK_ENABLED", enabled)
 
     def respond(request):
         calls.append(request.url.host)
         return httpx.Response(503, json={"error": {"message": "local model down"}})
 
-    service = models_for(respond)
+    service = models_for(respond, llm_fallback_api_key=api_key)
     try:
         agent = build_agent(
             service,
@@ -231,6 +241,80 @@ async def test_primary_failure_without_fallback_key_keeps_upstream_error():
         assert calls == ["127.0.0.1"]
         assert not service.fallback_enabled
         assert service.inference_timeout_seconds == service.settings.llm_timeout_seconds
+        with pytest.raises(RuntimeError):
+            service.fallback_chat_model()
+    finally:
+        await service.close()
+
+
+@pytest.mark.parametrize("enabled", ["true", "false"])
+def test_primary_success_never_calls_cloud(monkeypatch, enabled):
+    monkeypatch.setenv("LLM_FALLBACK_ENABLED", enabled)
+    calls = []
+
+    def respond(request):
+        calls.append(request.url.host)
+        return completion({"content": "本地回答"})
+
+    service = models_for(respond, llm_fallback_api_key="secret")
+    with TestClient(create_app(service)) as client:
+        response = client.post("/agents/chat", json=request_payload({"message": "你好"}))
+    assert response.status_code == 200
+    assert response.json()["reply"] == "本地回答"
+    assert calls == ["127.0.0.1"]
+
+
+@pytest.mark.parametrize("enabled,expected_status", [("false", 503), ("true", 200)])
+def test_fallback_environment_switch_controls_api(monkeypatch, enabled, expected_status):
+    monkeypatch.setenv("LLM_FALLBACK_ENABLED", enabled)
+    calls = []
+
+    def respond(request):
+        calls.append(request.url.host)
+        if request.url.host == "127.0.0.1":
+            raise httpx.ConnectError("offline", request=request)
+        return completion({"content": "云端回答"})
+
+    service = models_for(respond, llm_fallback_api_key="secret")
+    with TestClient(create_app(service)) as client:
+        response = client.post("/agents/chat", json=request_payload({"message": "你好"}))
+    assert response.status_code == expected_status
+    if enabled == "true":
+        assert response.json()["reply"] == "云端回答"
+        assert calls == ["127.0.0.1", "api.deepseek.com"]
+    else:
+        assert response.json() == {"detail": "模型服务不可达，请检查 Ollama/vLLM"}
+        assert calls == ["127.0.0.1"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("enabled,expected_timeout", [("true", 14), ("false", 10)])
+async def test_fallback_switch_environment_overrides_dotenv(
+    monkeypatch, tmp_path, enabled, expected_timeout
+):
+    env_file = tmp_path / ".env"
+    file_enabled = "false" if enabled == "true" else "true"
+    env_file.write_text(
+        f"LLM_FALLBACK_ENABLED={file_enabled}\nLLM_FALLBACK_API_KEY=secret\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("LLM_FALLBACK_ENABLED", enabled)
+    service = ModelService(
+        Settings(_env_file=env_file, llm_timeout_seconds=10, llm_fallback_timeout_seconds=4)
+    )
+    try:
+        assert service.inference_timeout_seconds == expected_timeout
+    finally:
+        await service.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("template", [".env.example", "scripts/prod/api.env.example"])
+async def test_environment_templates_disable_fallback_with_saved_key(template):
+    service = ModelService(Settings(_env_file=ROOT / template, llm_fallback_api_key="secret"))
+    try:
+        assert not service.fallback_enabled
+        assert service.inference_timeout_seconds == 180
     finally:
         await service.close()
 
