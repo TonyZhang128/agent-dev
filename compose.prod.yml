@@ -1,6 +1,7 @@
 # 生产编排：业务 API + 独立 vLLM 模型服务（两个镜像、两个环境）。
 #
-#   cp docker/env.example docker/prod.env && chmod 600 docker/prod.env
+#   test -f docker/prod.env || cp docker/env.example docker/prod.env
+#   chmod 600 docker/prod.env
 #   # 编辑 docker/prod.env，至少填写 VLLM_MODEL_DIR、VLLM_MODEL_PATH、VLLM_API_KEY
 #   docker compose -f compose.prod.yml --env-file docker/prod.env build
 #   docker compose -f compose.prod.yml --env-file docker/prod.env up -d
@@ -10,6 +11,8 @@ name: highway-agent
 
 services:
   model:
+    # 当前 GGUF 插件镜像及 OCR GPU wheel 都按 Linux x86_64 发布。
+    platform: linux/amd64
     build:
       context: .
       dockerfile: Dockerfile.vllm
@@ -46,7 +49,7 @@ services:
       - --max-model-len
       - "${VLLM_MAX_MODEL_LEN:-8192}"
       - --gpu-memory-utilization
-      - "${VLLM_GPU_MEMORY_UTILIZATION:-0.90}"
+      - "${VLLM_GPU_MEMORY_UTILIZATION:-0.75}"
       - --reasoning-parser
       - qwen3
       - --default-chat-template-kwargs
@@ -67,6 +70,7 @@ services:
               capabilities: [gpu]
 
   api:
+    platform: linux/amd64
     build:
       context: .
       dockerfile: Dockerfile
@@ -94,11 +98,13 @@ services:
       LLM_FALLBACK_TIMEOUT_SECONDS: ${LLM_FALLBACK_TIMEOUT_SECONDS:-60}
       LLM_FALLBACK_REASONING_EFFORT: ${LLM_FALLBACK_REASONING_EFFORT-none}
       AGENT_RECURSION_LIMIT: ${AGENT_RECURSION_LIMIT:-8}
+      MAIN_WORK_SPLIT_TIMEOUT_SECONDS: ${MAIN_WORK_SPLIT_TIMEOUT_SECONDS:-30}
+      MAIN_WORK_SPLIT_CONCURRENCY: ${MAIN_WORK_SPLIT_CONCURRENCY:-1}
       LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
       LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
       # 与下面的只读挂载点一致；宿主机目录由 OCR_MODEL_DIR 指定。
       OCR_MODEL_ROOT: /app/data/ocr/models
-      # OCR 推理设备：生产默认使用 GPU CUDA EP；无 GPU 主机在 docker/prod.env 改为 cpu。
+      # 镜像包含 CUDA/cuDNN；切换为 cpu 可独立排查 OCR，不影响 vLLM 使用 GPU。
       OCR_DEVICE: ${OCR_DEVICE:-cuda}
     # 业务 API 默认分配 GPU；与 vLLM 共享同一块 GPU 时保持 1。
     # 无 GPU 主机需改用覆盖文件移除本段，并把 OCR_DEVICE 设为 cpu。

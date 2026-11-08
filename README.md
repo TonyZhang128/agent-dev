@@ -111,7 +111,7 @@ LLM_FALLBACK_API_KEY=<云端服务密钥>
 
 开启 LangSmith 时，还需在进程环境提供其凭据；追踪可能包含业务输入和模型输出。项目默认不会上传追踪。
 
-OCR 相对路径均以仓库根目录解析。没有模板时仍可启动智能体；模板接口返回 `503` 提示配置资源。已有 daolu_v6 资料的本机配置示例见 [OCR 路径配置](docs/ocr.md#路径配置)。模板和业务文件不随代码迁移或提交。RapidOCR 的 ONNX 模型开发环境首次识别时自动下载；离线或容器部署用 `uv run --locked python -m scripts.models.download_ocr_models` 预置到 `.cache/models/ocr/` 后只读挂载，详见 [Docker 生产部署](docs/docker.md#2-准备权重)。
+OCR 相对路径均以仓库根目录解析。新版监理日记模板 `app/ocr/journal/templates/journal.json` 随代码和镜像发布；源 PDF、业务照片及识别输出不进镜像。旧模板/资料目录仍用于静态诊断，路径含义见 [OCR 资源与路径](docs/ocr.md#资源与路径)。RapidOCR 的 ONNX 模型开发环境首次识别时自动下载；离线或容器部署用 `uv run --locked python -m scripts.models.download_ocr_models` 预置到 `.cache/models/ocr/` 后只读挂载，详见 [Docker 生产部署](docs/docker.md#2-准备权重)。
 
 Mac 后台运行：
 
@@ -365,7 +365,7 @@ api_router.include_router(example.router)
 
 开发和上线使用同一份业务代码及 `uv.lock`，通过脚本目录与模型配置区分。Linux 不执行 Homebrew、launchd 或 Ollama 安装；vLLM 独立于业务 `.venv`。脚本清单见 [scripts/README.md](scripts/README.md)，后台托管示例见 [Linux 部署说明](docs/deployment-linux.md)。
 
-容器化部署使用两个镜像（业务 API 与 vLLM 模型服务）和 [compose.prod.yml](compose.prod.yml)，权重由宿主机只读挂载；构建、GGUF 基础镜像选择与验收见 [Docker 生产部署](docs/docker.md)。下文是不使用容器的脚本部署方式。
+容器化部署使用两个镜像（业务 API 与 vLLM 模型服务）和 [compose.prod.yml](compose.prod.yml)，权重由宿主机只读挂载。业务镜像包含 Python 3.12、CUDA 12.9.1 和 cuDNN 9，默认使用 GPU OCR；Compose 面向 Linux x86_64，单卡 vLLM 初始显存预算为 0.75，为 OCR 留出余量，仍需实机验收。RTX 5090 Laptop 的权重预下载、迁移校验、构建及 Agent/OCR 分别验收见 [Docker 生产部署](docs/docker.md)。下文是不使用容器的脚本部署方式。
 
 先在 Linux 安装 uv，再准备业务环境：
 

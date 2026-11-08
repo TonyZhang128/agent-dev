@@ -7,6 +7,7 @@
 # 密钥和本机配置不会进入镜像。
 .env
 .env.*
+docker/prod.env
 .secrets/
 
 # 本地环境、缓存、日志和验收输出。
@@ -19,8 +20,8 @@
 .coverage
 htmlcov/
 verification/
-__pycache__/
-*.pyc
+**/__pycache__/
+**/*.pyc
 
 # 运行时不需要，用于减小 API 镜像体积。
 # 注意不要忽略 app/prompts/*.md，提示词随应用代码进入镜像。
@@ -31,6 +32,7 @@ interfaces/
 data/
 config/
 ocr/
+app/ocr/resources/
 README.md
 AGENTS.md
 CLAUDE.md

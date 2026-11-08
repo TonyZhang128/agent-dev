@@ -42,6 +42,8 @@ Linux 完整步骤、配置和后台托管见 [部署说明](../docs/deployment-
 
 `scripts/ocr/build_journal_template.py` 从指定 PDF 离线构建监理日记模板；`scripts/ocr/inspect_journal.py` 读取指定照片，输出单次 OCR 诊断、字段覆盖图和规则拆分报告，默认不调用 LLM。完整命令见 [模板识别维护](../docs/journal-template-recognition.md)。已删除的旧 docsvc 工具不由本次重构恢复。
 
+容器部署前在开发机预置两类模型，并分别运行 `scripts.models.download_qwen35_gguf --check` 与 `scripts.models.download_ocr_models --check`。完整目录迁移和 SHA256 清单见 [Docker 部署](../docs/docker.md#2-准备权重)。`scripts.common.verify_agents` 只覆盖 Agent；照片 OCR 及 CUDA EP 需要按该文档独立验收，不能从 Agent 回归通过推断 OCR 可用。
+
 真实验收会调用模型，报告写入忽略提交的 `verification/`。业务验收报告 `agents-live-result.json` 的每条 `checks` 记录包含实际请求体 `request` 和 API 输出 `response`。设置 `BUSINESS_API_URL` 可验证其他地址的 API，模型直调仍读取当前进程及根目录 `.env` 的 `LLM_*` 配置，二者需对应同一部署。Linux 验收使用 `--no-sync --no-dev`，避免安装开发工具或在验收时修改环境。
 
 通用业务验收读取 `data/intent.json` 的版本化评测集，逐条比对 `status`、`page`、`action`，并验证缺少/非法 `current_page`、非法历史和旧 `text` 字段被拒绝为 `422`；任何不匹配都会使验收失败。用例和成功标准见 [意图识别测试说明](../docs/intent-testing.md)。
