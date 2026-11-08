@@ -41,13 +41,13 @@ def table_rect_on_canvas(template: JournalTemplate) -> tuple[float, float, float
 def align_canvas(photo: LoadedPhoto) -> CanvasAlignment:
     """只接受通过模板拓扑核验的table；失败异常发生在OCR之前。"""
     template = load_template()
-    match = detect_table(photo.gray, template)
+    match = detect_table(photo.gray, template) # 检测table
     table_width = (
         np.linalg.norm(match.corners[1] - match.corners[0])
         + np.linalg.norm(match.corners[2] - match.corners[3])
     ) / 2
     table_width = float(np.clip(table_width, TABLE_MIN_WIDTH, TABLE_MAX_WIDTH))
-    left, top, right, bottom = canvas_extent_in_table(template)
+    left, top, right, bottom = canvas_extent_in_table(template) # 由table与表外字段并集决定画布范围
     width = table_width * (right - left)
     height = table_width * template.table_aspect * (bottom - top)
     scale = min(1.0, CANVAS_MAX_SIDE / max(width, height))
