@@ -15,6 +15,7 @@
 | 归档端意图识别 | `POST /agents/intent/archive` | 文字与历史消息 → `A`–`D` 占位分类或 `unknown`、判断分数、澄清标记 |
 | 自由对话 | `POST /agents/chat` | 当前消息、必填历史（首轮 `[]`）→ 回答和模型名称 |
 | 监理日记 OCR | `POST /ocr/daily-logs-new` | 数据池照片或 base64 图片 → 识别字段；新版监理日志仅返回后端约定的业务结构，`mainWork` 按业务含义拆分为施工/旁站/巡视 |
+| 简表照片 OCR | `POST /ocr/jianbiao` | 数据池照片或 base64 图片 + 模板 `form` → 固定公共字段和 10 行记录；`out` 非空时在数据池写出结果与诊断文件；不调用语言模型 |
 | 本地依赖诊断 | `GET /diagnostics` | 运行库、推理设备、OCR 模板/模型与数据池静态检查；`warnings` 记录非致命问题 |
 | 进程存活 | `GET /health` | `{"status":"ok"}`，不访问模型 |
 | 模型就绪 | `GET /ready` | 检查配置模型是否出现在上游模型列表，成功返回 `{"status":"ready"}`，不执行推理 |
@@ -140,6 +141,14 @@ zsh scripts/dev/start-api.sh --reload
 
 如 Ollama 已由其他方式启动，直接复用。默认 Ollama 上下文 `8192`、单模型、单并发；Apple Silicon 的 GPU 由 Ollama 自动选择，使用 `ollama ps` 查看 `PROCESSOR` 列。不要同时在端口 8309 启动前台和后台 API。
 
+Windows 前台开发使用 GPU 版 OCR 运行时：
+
+```bat
+scripts\dev\start-api.cmd --reload
+```
+
+该脚本可从其他工作目录调用，内部定位仓库根目录，通过 `--extra ocr-gpu` 安装并使用 `onnxruntime-gpu`，同时以进程环境变量 `OCR_DEVICE=cuda` 覆盖 `.env` 的 CPU 默认值；额外参数透传给 uvicorn。OCR 模型权重不变，仍需 NVIDIA 驱动以及 CUDA 12 + cuDNN 9 运行库；Windows 可将 redist 包解压到 `.cache/cuda/`。CUDA 不可用时 OCR 请求会返回受控错误，不会静默回退 CPU。
+
 需要断点调试时，可使用本机 `.vscode/launch.json`（该目录不纳入 Git）：
 
 - 选择 `Debug API (launch)`，由 VS Code 直接启动并调试；
@@ -225,7 +234,7 @@ pyright 以 `basic` 模式检查整个 `app/`，包含 Agent 和 OCR；Ruff 格�
 
 ### 接口契约、Swagger 与 API-First
 
-[interfaces/](interfaces/README.md) 是对外接口文档的唯一入口，包含正式契约、待确认草案、业务指南和变更记录。当前 8 个 HTTP 操作全部有文档，其中 `/agents/*`、`/health`、`/ready` 标记为 `confirmed`；`/diagnostics`、`/ocr/daily-logs-new` 的完整响应/错误契约标记为 `pending-review`，见 [待确认草案](interfaces/drafts/README.md)。
+[interfaces/](interfaces/README.md) 是对外接口文档的唯一入口，包含正式契约、待确认草案、业务指南和变更记录。当前 9 个 HTTP 操作全部有文档，其中 `/agents/*`、`/health`、`/ready` 标记为 `confirmed`；`/diagnostics`、`/ocr/daily-logs-new`、`/ocr/jianbiao` 的完整响应/错误契约标记为 `pending-review`，见 [待确认草案](interfaces/drafts/README.md)。
 
 - Swagger UI：启动 API 后访问 <http://127.0.0.1:8309/docs>；ReDoc 为 `/redoc`，运行时 OpenAPI 为 `/openapi.json`。这些是当前实现的投影，不是正式契约。
 - 完整 OpenAPI 草案：[interfaces/drafts/fastapi.openapi.json](interfaces/drafts/fastapi.openapi.json)，覆盖请求、成功响应、400/404/422/502/503/504 错误以及每个操作的副作用和幂等说明。
@@ -246,8 +255,8 @@ app/
     router.py             # 聚合 Router，由主应用统一 include_router
     agents.py             # /agents：日志总结、意图识别、聊天
     system.py             # /health、/ready、/diagnostics：存活、模型就绪与本地诊断
-    ocr.py                # /ocr/daily-logs-new：监理日记table模板识别
-  ocr/                    # core共享引擎/资源/诊断；journal：table模板、匹配和mainWork拆分
+    ocr.py                # /ocr/daily-logs-new：监理日记table模板识别；/ocr/jianbiao：简表照片识别
+  ocr/                    # core共享引擎/资源/诊断；journal：table模板、匹配和mainWork拆分；jianbiao：schema2模板核验与字段归属
   http_errors.py          # 输入与模型异常的统一 HTTP 映射、校验详情脱敏
   config.py               # .env 配置与默认值
   schemas/                # 请求、响应的 Pydantic 模型和校验

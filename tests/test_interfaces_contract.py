@@ -55,7 +55,7 @@ def test_contract_covers_exactly_the_registered_operations():
         for method in operations
     }
     assert documented == registered_operations()
-    assert len(documented) == 8
+    assert len(documented) == 9
 
 
 def test_operation_ids_are_unique():
@@ -88,6 +88,7 @@ def test_draft_and_review_states_are_explicit():
         } == {
             "/diagnostics",
             "/ocr/daily-logs-new",
+            "/ocr/jianbiao",
         }
 
 
@@ -118,6 +119,7 @@ def test_document_endpoints_declare_envelope_and_errors():
     paths = read_contract()["paths"]
     for path in (
         "/ocr/daily-logs-new",
+        "/ocr/jianbiao",
         "/diagnostics",
     ):
         method = "get" if path == "/diagnostics" else "post"
@@ -130,6 +132,14 @@ def test_journal_documents_the_main_work_split_failure():
     responses = read_contract()["paths"]["/ocr/daily-logs-new"]["post"]["responses"]
     assert {"200", "400", "422", "502", "503"} <= set(responses)
     assert responses["502"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/ErrorDetail"
+    }
+
+
+def test_jianbiao_documents_the_recognition_errors():
+    responses = read_contract()["paths"]["/ocr/jianbiao"]["post"]["responses"]
+    assert {"200", "400", "422", "503"} <= set(responses)
+    assert responses["400"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/ErrorDetail"
     }
 

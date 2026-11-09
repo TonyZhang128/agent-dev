@@ -1,6 +1,14 @@
-# 监理日记与本地诊断接口
+# 监理日记、简表与本地诊断接口
 
-当前仅保留 `POST /ocr/daily-logs-new` 和系统级 `GET /diagnostics`。字段以 [OpenAPI草案](../drafts/fastapi.openapi.json) 为准；已确认成功结构和表格失败响应分别见 [成功子契约](../journal/response.schema.json)、[无表格子契约](../journal/table-not-found.schema.json)。完整OpenAPI仍为待确认，不能据此扩展接口。
+当前保留 `POST /ocr/daily-logs-new`、`POST /ocr/jianbiao` 和系统级 `GET /diagnostics`。字段以 [OpenAPI草案](../drafts/fastapi.openapi.json) 为准；已确认成功结构和表格失败响应分别见 [成功子契约](../journal/response.schema.json)、[无表格子契约](../journal/table-not-found.schema.json)。完整OpenAPI仍为待确认，不能据此扩展接口。
+
+## POST /ocr/jianbiao
+
+- 请求在 `path`/`img` 之外必填 `form`（简表模板 ID 或兼容别名，如 `subgrade_spot_check`、`JB12-4.5.2-4`）；`cfg`、`bound` 为预留字段，当前版本不使用。
+- 识别链：模板行列结构核验（0°/90°/180°/270°）→ 透视校正 → 单次整页 OCR → 字段归属；检测失败不退回整图 OCR，也不做逐格重识。
+- 成功 `data` 固定含 `taskId`、`documentType`、`common`（5 个公共字段）和 `fields.records`（固定 10 行）；空字段、歧义字段和无法完整解析的合格率为 `null`，不补写示例值。
+- `out` 非空时为数据池内输出目录，写出 `response.json`、`diagnostics.json`、`aligned.png`；空则不写文件。路径越界返回 400。
+- 失败语义：400（非法路径、图片无法解码、模板未配置、未检测到通过模板结构核验的简表表格，固定 detail“未检测到简表表格，请重新拍摄”）、422（请求校验失败）、503（OCR 模型不可用）。不调用语言模型。
 
 ## 图片输入与处理
 

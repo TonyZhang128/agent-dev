@@ -11,7 +11,7 @@
 | 标题 | 公路工程业务智能体 |
 | OpenAPI 版本 | 3.1.0 |
 | 接口版本 | `0.1.0` |
-| 契约版本 | `0.1.0-review.2` |
+| 契约版本 | `0.1.0-review.3` |
 | 契约状态 | `draft-pending-review` |
 | 服务地址 | http://127.0.0.1:8309 |
 
@@ -44,7 +44,8 @@
 | 5 | `POST /agents/intent/business` | 识别业务页面与最小功能意图 | `confirmed` |
 | 6 | `POST /agents/intent/archive` | 识别文件归档系统意图 | `confirmed` |
 | 7 | `POST /agents/chat` | 自由对话 | `confirmed` |
-| 8 | `POST /ocr/daily-logs-new` | 识别监理日记（新版链路） | `pending-review` |
+| 8 | `POST /ocr/jianbiao` | 识别简表照片（模板核验＋整页 OCR） | `pending-review` |
+| 9 | `POST /ocr/daily-logs-new` | 识别监理日记（新版链路） | `pending-review` |
 
 ## 接口详情
 
@@ -457,7 +458,166 @@ Schema：`ChatRequest`
 
 Schema：`ChatResponse`
 
-### 8. `POST /ocr/daily-logs-new`
+### 8. `POST /ocr/jianbiao`
+
+| 项目 | 内容 |
+| --- | --- |
+| 摘要 | 识别简表照片（模板核验＋整页 OCR） |
+| 契约状态 | `pending-review` |
+| 来源 | app/ocr/jianbiao/README.md；tests/test_ocr_jianbiao.py；tests/fixtures/jianbiao-response.example.json；tests/http-test/demo.http |
+| 副作用 | out 非空时只在数据池内写出识别结果与诊断文件；不调用语言模型。 |
+| 幂等/重试 | 识别结果可能因照片和模型变化而不同；out 写出可安全重复，同名文件被覆盖。 |
+
+简表照片识别：先核验表格结构，再做直角方向选择和透视校正，单次整页 OCR 后把文字框归属到字段；只支持经模板核验的 0°/90°/180°/270°，检测失败不会退回整图 OCR，空字段、歧义字段和非法数字一律输出 null。out 非空时在数据池内写出 response.json、diagnostics.json 和 aligned.png。
+
+**请求体**
+
+```json
+{
+  "img": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD...",
+  "form": "subgrade_spot_check",
+  "cfg": {},
+  "bound": {},
+  "out": "",
+  "taskId": "123456789012345678"
+}
+```
+
+**请求字段**
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `path` | string | 否 | `""` |  | PROJECTS_ROOT 数据池内的简表照片路径 |
+| `img` | string | 否 | `""` |  | base64 编码的图片数据；path 与 img 至少提供一个 |
+| `form` | string | 是 |  | minLength=1，maxLength=128 | 简表模板 ID 或兼容别名，如 subgrade_spot_check（JB12-4.5.2-4） |
+| `cfg` | object | 否 |  |  | 预留识别配置，当前版本不使用 |
+| `bound` | object | 否 |  |  | 预留识别范围，当前版本不使用 |
+| `out` | string | 否 | `""` |  | 数据池内输出目录；非空时写出 response.json、diagnostics.json 和 aligned.png，空则不写文件 |
+| `taskId` | string | 否 | `""` | maxLength=128 | 业务任务 ID，仅原样回显到 data.taskId；不传则为 null |
+
+Schema：`JianbiaoReq`
+
+**响应**
+
+- `200`：固定公共字段和全部 10 行记录；空值、歧义值和无法完整解析的合格率为 null。
+- `400`：路径越界、文件不存在/不是文件、图片无法解码、模板未配置，或未检测到通过模板结构核验的简表表格。
+- `422`：请求校验失败，或输入与上下文超过预算。校验失败时 detail 为错误数组；输入超限时为字符串。
+- `503`：OCR 模型不可用。
+
+**200 响应体**
+
+```json
+{
+  "status": 200,
+  "message": "识别完成",
+  "data": {
+    "taskId": "123456789012345678",
+    "documentType": "subgrade_spot_check",
+    "common": {
+      "projectName": "成乐高速公路扩容建设项目",
+      "documentNo": "JB12-4.5.2-4",
+      "inspectorName": "王璐瑶",
+      "inspectDate": "2026-11-11",
+      "position": "防裂工程土工合成材料处治层（土工格栅）"
+    },
+    "fields": {
+      "records": [
+        {
+          "rowIndex": 1,
+          "checkItem": "压实度",
+          "standardValue": "≥96%",
+          "measuredValue": "96.2、96.5、96.8",
+          "passRate": 100.0
+        },
+        {
+          "rowIndex": 2,
+          "checkItem": null,
+          "standardValue": null,
+          "measuredValue": null,
+          "passRate": null
+        },
+        {
+          "rowIndex": 3,
+          "checkItem": null,
+          "standardValue": null,
+          "measuredValue": null,
+          "passRate": null
+        },
+        {
+          "rowIndex": 4,
+          "checkItem": null,
+          "standardValue": null,
+          "measuredValue": null,
+          "passRate": null
+        },
+        {
+          "rowIndex": 5,
+          "checkItem": null,
+          "standardValue": null,
+          "measuredValue": null,
+          "passRate": null
+        },
+        {
+          "rowIndex": 6,
+          "checkItem": null,
+          "standardValue": null,
+          "measuredValue": null,
+          "passRate": null
+        },
+        {
+          "rowIndex": 7,
+          "checkItem": null,
+          "standardValue": null,
+          "measuredValue": null,
+          "passRate": null
+        },
+        {
+          "rowIndex": 8,
+          "checkItem": null,
+          "standardValue": null,
+          "measuredValue": null,
+          "passRate": null
+        },
+        {
+          "rowIndex": 9,
+          "checkItem": null,
+          "standardValue": null,
+          "measuredValue": null,
+          "passRate": null
+        },
+        {
+          "rowIndex": 10,
+          "checkItem": null,
+          "standardValue": null,
+          "measuredValue": null,
+          "passRate": null
+        }
+      ]
+    }
+  }
+}
+```
+
+**响应字段**
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `status` | integer | 是 |  |  |  |
+| `message` | string | 是 |  |  |  |
+| `data` | `JianbiaoPayload` | 是 |  |  |  |
+
+**`data` 字段**
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `taskId` | string 或 null | 是 |  |  |  |
+| `documentType` | string | 是 |  |  |  |
+| `common` | `JianbiaoCommon` | 是 |  |  |  |
+| `fields` | `JianbiaoFields` | 是 |  |  |  |
+
+Schema：`JianbiaoResponse`
+
+### 9. `POST /ocr/daily-logs-new`
 
 | 项目 | 内容 |
 | --- | --- |
@@ -633,6 +793,20 @@ Schema：`JournalResponse`
 | `text` | string | 是 |  | minLength=1，maxLength=2000 | 待识别的归档业务内容 |
 | `intents` | array<`JsonValue`> | 否 |  | maxItems=0 | 仅为兼容保留，必须省略或为[]；不支持调用方自定义分类 |
 
+### `JianbiaoReq`
+
+简表照片识别请求；form 取模板 ID 或兼容别名，out 非空时在数据池内写出结果文件。
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `path` | string | 否 | `""` |  | PROJECTS_ROOT 数据池内的简表照片路径 |
+| `img` | string | 否 | `""` |  | base64 编码的图片数据；path 与 img 至少提供一个 |
+| `form` | string | 是 |  | minLength=1，maxLength=128 | 简表模板 ID 或兼容别名，如 subgrade_spot_check（JB12-4.5.2-4） |
+| `cfg` | object | 否 |  |  | 预留识别配置，当前版本不使用 |
+| `bound` | object | 否 |  |  | 预留识别范围，当前版本不使用 |
+| `out` | string | 否 | `""` |  | 数据池内输出目录；非空时写出 response.json、diagnostics.json 和 aligned.png，空则不写文件 |
+| `taskId` | string | 否 | `""` | maxLength=128 | 业务任务 ID，仅原样回显到 data.taskId；不传则为 null |
+
 ### `JournalReq`
 
 新版监理日志识别请求；与旧接口字段一致，实现链独立。
@@ -776,3 +950,46 @@ Schema：`JournalResponse`
 | `status` | const `200` | 是 |  |  |  |
 | `message` | const `识别完成` | 是 |  |  |  |
 | `data` | object | 是 |  |  |  |
+
+### `JianbiaoCommon`
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `projectName` | string 或 null | 是 |  |  |  |
+| `documentNo` | string 或 null | 是 |  |  |  |
+| `inspectorName` | string 或 null | 是 |  |  |  |
+| `inspectDate` | string 或 null | 是 |  |  |  |
+| `position` | string 或 null | 是 |  |  |  |
+
+### `JianbiaoFields`
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `records` | array<`SpotCheckRecord`> | 是 |  |  |  |
+
+### `JianbiaoPayload`
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `taskId` | string 或 null | 是 |  |  |  |
+| `documentType` | string | 是 |  |  |  |
+| `common` | `JianbiaoCommon` | 是 |  |  |  |
+| `fields` | `JianbiaoFields` | 是 |  |  |  |
+
+### `SpotCheckRecord`
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `rowIndex` | integer | 是 |  |  |  |
+| `checkItem` | string 或 null | 是 |  |  |  |
+| `standardValue` | string 或 null | 是 |  |  |  |
+| `measuredValue` | string 或 null | 是 |  |  |  |
+| `passRate` | number 或 null | 是 |  |  |  |
+
+### `JianbiaoResponse`
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `status` | integer | 是 |  |  |  |
+| `message` | string | 是 |  |  |  |
+| `data` | `JianbiaoPayload` | 是 |  |  |  |

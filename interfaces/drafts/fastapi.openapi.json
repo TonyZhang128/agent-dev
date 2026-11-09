@@ -5,7 +5,7 @@
     "version": "0.1.0",
     "description": "公路工程业务智能体与文档加工服务的对外 HTTP 契约。当前文件是从实现归纳的待确认草案：已实现接口的请求和成功响应来自 FastAPI/Pydantic，补充的响应结构及统一错误响应由 scripts/docs/openapi_contract.py 维护。经用户批准前不得视为正式契约，也不得据此绕过接口变更审批。",
     "x-contract-status": "draft-pending-review",
-    "x-contract-version": "0.1.0-review.2",
+    "x-contract-version": "0.1.0-review.3",
     "x-review-status": "revised-pending-review",
     "x-contract-authority": "interfaces/openapi/ 中的正式契约（批准后）优先于本草案和运行时自动生成结果。"
   },
@@ -488,6 +488,169 @@
         "x-contract-source": "AGENTS.md 第四节；docs/agents-api.md；docs/sessions.md；tests/test_agents.py",
         "x-side-effects": "无外部业务写入。",
         "x-idempotency": "同一输入可能生成不同回答；重试前应确认业务是否接受。"
+      }
+    },
+    "/ocr/jianbiao": {
+      "post": {
+        "tags": [
+          "ocr"
+        ],
+        "summary": "识别简表照片（模板核验＋整页 OCR）",
+        "description": "简表照片识别：先核验表格结构，再做直角方向选择和透视校正，单次整页 OCR 后把文字框归属到字段；只支持经模板核验的 0°/90°/180°/270°，检测失败不会退回整图 OCR，空字段、歧义字段和非法数字一律输出 null。out 非空时在数据池内写出 response.json、diagnostics.json 和 aligned.png。",
+        "operationId": "jianbiao_recognize_ocr_jianbiao_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JianbiaoReq"
+              },
+              "example": {
+                "img": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD...",
+                "form": "subgrade_spot_check",
+                "cfg": {},
+                "bound": {},
+                "out": "",
+                "taskId": "123456789012345678"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "固定公共字段和全部 10 行记录；空值、歧义值和无法完整解析的合格率为 null。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JianbiaoResponse"
+                },
+                "example": {
+                  "status": 200,
+                  "message": "识别完成",
+                  "data": {
+                    "taskId": "123456789012345678",
+                    "documentType": "subgrade_spot_check",
+                    "common": {
+                      "projectName": "成乐高速公路扩容建设项目",
+                      "documentNo": "JB12-4.5.2-4",
+                      "inspectorName": "王璐瑶",
+                      "inspectDate": "2026-11-11",
+                      "position": "防裂工程土工合成材料处治层（土工格栅）"
+                    },
+                    "fields": {
+                      "records": [
+                        {
+                          "rowIndex": 1,
+                          "checkItem": "压实度",
+                          "standardValue": "≥96%",
+                          "measuredValue": "96.2、96.5、96.8",
+                          "passRate": 100.0
+                        },
+                        {
+                          "rowIndex": 2,
+                          "checkItem": null,
+                          "standardValue": null,
+                          "measuredValue": null,
+                          "passRate": null
+                        },
+                        {
+                          "rowIndex": 3,
+                          "checkItem": null,
+                          "standardValue": null,
+                          "measuredValue": null,
+                          "passRate": null
+                        },
+                        {
+                          "rowIndex": 4,
+                          "checkItem": null,
+                          "standardValue": null,
+                          "measuredValue": null,
+                          "passRate": null
+                        },
+                        {
+                          "rowIndex": 5,
+                          "checkItem": null,
+                          "standardValue": null,
+                          "measuredValue": null,
+                          "passRate": null
+                        },
+                        {
+                          "rowIndex": 6,
+                          "checkItem": null,
+                          "standardValue": null,
+                          "measuredValue": null,
+                          "passRate": null
+                        },
+                        {
+                          "rowIndex": 7,
+                          "checkItem": null,
+                          "standardValue": null,
+                          "measuredValue": null,
+                          "passRate": null
+                        },
+                        {
+                          "rowIndex": 8,
+                          "checkItem": null,
+                          "standardValue": null,
+                          "measuredValue": null,
+                          "passRate": null
+                        },
+                        {
+                          "rowIndex": 9,
+                          "checkItem": null,
+                          "standardValue": null,
+                          "measuredValue": null,
+                          "passRate": null
+                        },
+                        {
+                          "rowIndex": 10,
+                          "checkItem": null,
+                          "standardValue": null,
+                          "measuredValue": null,
+                          "passRate": null
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求校验失败，或输入与上下文超过预算。校验失败时 detail 为错误数组；输入超限时为字符串。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestError"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "路径越界、文件不存在/不是文件、图片无法解码、模板未配置，或未检测到通过模板结构核验的简表表格。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "OCR 模型不可用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-contract-status": "pending-review",
+        "x-contract-source": "app/ocr/jianbiao/README.md；tests/test_ocr_jianbiao.py；tests/fixtures/jianbiao-response.example.json；tests/http-test/demo.http",
+        "x-side-effects": "out 非空时只在数据池内写出识别结果与诊断文件；不调用语言模型。",
+        "x-idempotency": "识别结果可能因照片和模型变化而不同；out 写出可安全重复，同名文件被覆盖。"
       }
     },
     "/ocr/daily-logs-new": {
@@ -1130,6 +1293,61 @@
         ],
         "title": "IntentRequest"
       },
+      "JianbiaoReq": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path",
+            "description": "PROJECTS_ROOT 数据池内的简表照片路径",
+            "default": ""
+          },
+          "img": {
+            "type": "string",
+            "title": "Img",
+            "description": "base64 编码的图片数据；path 与 img 至少提供一个",
+            "default": ""
+          },
+          "form": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Form",
+            "description": "简表模板 ID 或兼容别名，如 subgrade_spot_check（JB12-4.5.2-4）"
+          },
+          "cfg": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Cfg",
+            "description": "预留识别配置，当前版本不使用"
+          },
+          "bound": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Bound",
+            "description": "预留识别范围，当前版本不使用"
+          },
+          "out": {
+            "type": "string",
+            "title": "Out",
+            "description": "数据池内输出目录；非空时写出 response.json、diagnostics.json 和 aligned.png，空则不写文件",
+            "default": ""
+          },
+          "taskId": {
+            "type": "string",
+            "maxLength": 128,
+            "title": "TaskId",
+            "description": "业务任务 ID，仅原样回显到 data.taskId；不传则为 null",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "form"
+        ],
+        "title": "JianbiaoReq",
+        "description": "简表照片识别请求；form 取模板 ID 或兼容别名，out 非空时在数据池内写出结果文件。"
+      },
       "JournalReq": {
         "properties": {
           "path": {
@@ -1715,6 +1933,206 @@
             }
           }
         }
+      },
+      "JianbiaoCommon": {
+        "properties": {
+          "projectName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Projectname"
+          },
+          "documentNo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Documentno"
+          },
+          "inspectorName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inspectorname"
+          },
+          "inspectDate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inspectdate"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position"
+          }
+        },
+        "required": [
+          "projectName",
+          "documentNo",
+          "inspectorName",
+          "inspectDate",
+          "position"
+        ],
+        "title": "JianbiaoCommon",
+        "type": "object"
+      },
+      "JianbiaoFields": {
+        "properties": {
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/SpotCheckRecord"
+            },
+            "title": "Records",
+            "type": "array"
+          }
+        },
+        "required": [
+          "records"
+        ],
+        "title": "JianbiaoFields",
+        "type": "object"
+      },
+      "JianbiaoPayload": {
+        "properties": {
+          "taskId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Taskid"
+          },
+          "documentType": {
+            "title": "Documenttype",
+            "type": "string"
+          },
+          "common": {
+            "$ref": "#/components/schemas/JianbiaoCommon"
+          },
+          "fields": {
+            "$ref": "#/components/schemas/JianbiaoFields"
+          }
+        },
+        "required": [
+          "taskId",
+          "documentType",
+          "common",
+          "fields"
+        ],
+        "title": "JianbiaoPayload",
+        "type": "object"
+      },
+      "SpotCheckRecord": {
+        "properties": {
+          "rowIndex": {
+            "title": "Rowindex",
+            "type": "integer"
+          },
+          "checkItem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checkitem"
+          },
+          "standardValue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Standardvalue"
+          },
+          "measuredValue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measuredvalue"
+          },
+          "passRate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Passrate"
+          }
+        },
+        "required": [
+          "rowIndex",
+          "checkItem",
+          "standardValue",
+          "measuredValue",
+          "passRate"
+        ],
+        "title": "SpotCheckRecord",
+        "type": "object"
+      },
+      "JianbiaoResponse": {
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "integer"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/JianbiaoPayload"
+          }
+        },
+        "required": [
+          "status",
+          "message",
+          "data"
+        ],
+        "title": "JianbiaoResponse",
+        "type": "object"
       }
     }
   },
@@ -1731,7 +2149,7 @@
     },
     {
       "name": "ocr",
-      "description": "新版监理日志识别；CPU 处理同步执行。"
+      "description": "新版监理日志与简表照片识别；CPU 处理同步执行。"
     }
   ]
 }

@@ -1,6 +1,47 @@
 """文档加工请求；保留 docsvc 字段和空输出语义。"""
 
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+class JianbiaoReq(BaseModel):
+    """简表照片识别请求；form 取模板 ID 或兼容别名，out 非空时在数据池内写出结果文件。"""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    path: str = Field(default="", description="PROJECTS_ROOT 数据池内的简表照片路径")
+    img: str = Field(default="", description="base64 编码的图片数据；path 与 img 至少提供一个")
+    form: str = Field(
+        min_length=1,
+        max_length=128,
+        description="简表模板 ID 或兼容别名，如 subgrade_spot_check（JB12-4.5.2-4）",
+    )
+    cfg: dict[str, Any] = Field(default_factory=dict, description="预留识别配置，当前版本不使用")
+    bound: dict[str, Any] = Field(default_factory=dict, description="预留识别范围，当前版本不使用")
+    out: str = Field(
+        default="",
+        description="数据池内输出目录；非空时写出 response.json、diagnostics.json 和"
+        " aligned.png，空则不写文件",
+    )
+    task_id: str = Field(
+        default="",
+        alias="taskId",
+        title="TaskId",
+        max_length=128,
+        description="业务任务 ID，仅原样回显到 data.taskId；不传则为 null",
+    )
+
+    @model_validator(mode="after")
+    def validate_source(self) -> "JianbiaoReq":
+        self.path = self.path.strip()
+        self.img = self.img.strip()
+        self.form = self.form.strip()
+        self.out = self.out.strip()
+        self.task_id = self.task_id.strip()
+        if not self.path and not self.img:
+            raise ValueError("path 与 img 至少提供一个")
+        return self
 
 
 class JournalReq(BaseModel):

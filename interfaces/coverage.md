@@ -31,7 +31,7 @@
 | 普通照片/简表识别 | `POST /ocr/recognize` | `app/api/ocr.py`、`app/ocr/form_ocr.py` | pending-review | Java 调用；2 分钟超时 |
 | 监理日志识别 | `POST /ocr/daily-logs` | `app/api/ocr.py`、`app/ocr/daily_logs.py` | pending-review | 未观察到 Java 调用 |
 | 监理日志识别（新版链路） | `POST /ocr/daily-logs-new` | `app/api/ocr.py`、`app/ocr/journal/` | pending-review | 独立实现；返回结构与旧接口相同 |
-| 简表识别与填表 | `POST /ocr/jianbiao` | `app/api/ocr.py`、`app/ocr/jianbiao.py` | pending-review | Java 调用；2 分钟超时 |
+| 简表照片识别 | `POST /ocr/jianbiao` | `app/api/ocr.py`、`app/ocr/jianbiao/` | pending-review | 模板 ID 或别名；`out` 非空写出结果与诊断文件；不调用语言模型 |
 | 公式与填表 | `POST /ocr/fill` | `app/api/ocr.py`、`app/ocr/jianbiao.py`、`app/ocr/grid.py` | pending-review | Java 调用；30 秒超时；`out` 可空 |
 | 表样预览 | `GET /ocr/blank/{form}.png` | `app/api/ocr.py` | pending-review | Java 读取原始 PNG |
 | 表样栏目 | `GET /ocr/sheet/{form}` | `app/api/ocr.py`、`app/ocr/grid.py` | pending-review | Java 调用；表号 URL 编码 |

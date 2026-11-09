@@ -1,0 +1,89 @@
+{
+  "status": 200,
+  "message": "识别完成",
+  "data": {
+    "taskId": "123456789012345678",
+    "documentType": "subgrade_spot_check",
+    "common": {
+      "projectName": "成乐高速公路扩容建设项目",
+      "documentNo": "JB12-4.5.2-4",
+      "inspectorName": "王璐瑶",
+      "inspectDate": "2026-11-11",
+      "position": "防裂工程土工合成材料处治层（土工格栅）"
+    },
+    "fields": {
+      "records": [
+        {
+          "rowIndex": 1,
+          "checkItem": "压实度",
+          "standardValue": "≥96%",
+          "measuredValue": "96.2、96.5、96.8",
+          "passRate": 100.0
+        },
+        {
+          "rowIndex": 2,
+          "checkItem": "弯沉",
+          "standardValue": "满足设计要求",
+          "measuredValue": "212、218、226（0.01 mm）",
+          "passRate": 100.0
+        },
+        {
+          "rowIndex": 3,
+          "checkItem": "平整度",
+          "standardValue": "≤15 mm",
+          "measuredValue": "8、10、9",
+          "passRate": 100.0
+        },
+        {
+          "rowIndex": 4,
+          "checkItem": null,
+          "standardValue": null,
+          "measuredValue": null,
+          "passRate": null
+        },
+        {
+          "rowIndex": 5,
+          "checkItem": null,
+          "standardValue": null,
+          "measuredValue": null,
+          "passRate": null
+        },
+        {
+          "rowIndex": 6,
+          "checkItem": null,
+          "standardValue": null,
+          "measuredValue": null,
+          "passRate": null
+        },
+        {
+          "rowIndex": 7,
+          "checkItem": null,
+          "standardValue": null,
+          "measuredValue": null,
+          "passRate": null
+        },
+        {
+          "rowIndex": 8,
+          "checkItem": null,
+          "standardValue": null,
+          "measuredValue": null,
+          "passRate": null
+        },
+        {
+          "rowIndex": 9,
+          "checkItem": null,
+          "standardValue": null,
+          "measuredValue": null,
+          "passRate": null
+        },
+        {
+          "rowIndex": 10,
+          "checkItem": null,
+          "standardValue": null,
+          "measuredValue": null,
+          "passRate": null
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,690 @@
+{
+  "schema_version": 2,
+  "template_id": "subgrade_spot_check",
+  "template_name": "土方路基抽检记录表",
+  "template_version": 3,
+  "source_sha256": "cfe3acbd2e41d8b869737d1ba5f8c5a8bdf4368918c65113d983a15ed802e39a",
+  "source_page_size": [
+    893.25,
+    629.25
+  ],
+  "source_table_bounds": [
+    36.75,
+    117.75,
+    853.5,
+    585.0
+  ],
+  "table_aspect": 1.747994,
+  "lines": [
+    {
+      "axis": "horizontal",
+      "position": 0.0,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "axis": "horizontal",
+      "position": 0.0864,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "axis": "horizontal",
+      "position": 0.1552,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "axis": "horizontal",
+      "position": 0.2304,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "axis": "horizontal",
+      "position": 0.3072,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "axis": "horizontal",
+      "position": 0.384,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "axis": "horizontal",
+      "position": 0.4608,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "axis": "horizontal",
+      "position": 0.5376,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "axis": "horizontal",
+      "position": 0.6144,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "axis": "horizontal",
+      "position": 0.6912,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "axis": "horizontal",
+      "position": 0.768,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "axis": "horizontal",
+      "position": 0.8448,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "axis": "horizontal",
+      "position": 0.9216,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "axis": "horizontal",
+      "position": 1.0,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "axis": "vertical",
+      "position": 0.0,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "axis": "vertical",
+      "position": 0.155046,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "axis": "vertical",
+      "position": 0.266972,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "axis": "vertical",
+      "position": 1.0,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "axis": "vertical",
+      "position": 0.925688,
+      "start": 0.1552,
+      "end": 1.0
+    },
+    {
+      "axis": "vertical",
+      "position": 0.389908,
+      "start": 0.0,
+      "end": 0.0864
+    }
+  ],
+  "fields": [
+    {
+      "key": "project",
+      "label": "工程项目",
+      "aliases": [
+        "公路工程项目",
+        "项目名称"
+      ],
+      "kind": "text",
+      "rect_in_table": [
+        0.369725,
+        -0.1472,
+        0.148624,
+        0.0288
+      ],
+      "label_rect_in_table": [
+        0.521101,
+        -0.1536,
+        0.114679,
+        0.0384
+      ],
+      "inside_table": false
+    },
+    {
+      "key": "number",
+      "label": "编号",
+      "aliases": [],
+      "kind": "text",
+      "rect_in_table": [
+        0.890826,
+        -0.0288,
+        0.106422,
+        0.0336
+      ],
+      "label_rect_in_table": [
+        0.846789,
+        -0.032,
+        0.042202,
+        0.0368
+      ],
+      "inside_table": false
+    },
+    {
+      "key": "inspector",
+      "label": "抽检人",
+      "aliases": [
+        "抽检人员"
+      ],
+      "kind": "text",
+      "rect_in_table": [
+        0.155046,
+        0.0,
+        0.111927,
+        0.0864
+      ],
+      "label_rect_in_table": [
+        0.051376,
+        0.0256,
+        0.073394,
+        0.0416
+      ],
+      "inside_table": true
+    },
+    {
+      "key": "inspect_date",
+      "label": "抽检时间",
+      "aliases": [
+        "抽检日期",
+        "日期"
+      ],
+      "kind": "date",
+      "rect_in_table": [
+        0.389908,
+        0.0,
+        0.609174,
+        0.0864
+      ],
+      "label_rect_in_table": [
+        0.292661,
+        0.0256,
+        0.082569,
+        0.0416
+      ],
+      "inside_table": true
+    },
+    {
+      "key": "position",
+      "label": "工程部位",
+      "aliases": [
+        "桩号",
+        "部位"
+      ],
+      "kind": "text",
+      "rect_in_table": [
+        0.155046,
+        0.0864,
+        0.844037,
+        0.0688
+      ],
+      "label_rect_in_table": [
+        0.041284,
+        0.1008,
+        0.075229,
+        0.0432
+      ],
+      "inside_table": true
+    }
+  ],
+  "record_columns": [
+    {
+      "key": "check_item",
+      "label": "抽检项目",
+      "aliases": [],
+      "kind": "text",
+      "label_rect_in_table": [
+        0.040367,
+        0.1744,
+        0.073394,
+        0.0432
+      ],
+      "column_rect_in_table": [
+        0.0,
+        0.2304,
+        0.155046,
+        0.768
+      ]
+    },
+    {
+      "key": "standard_value",
+      "label": "规定值或允许偏差",
+      "aliases": [
+        "规定值",
+        "允许偏差"
+      ],
+      "kind": "text",
+      "label_rect_in_table": [
+        0.173394,
+        0.1632,
+        0.084404,
+        0.0672
+      ],
+      "column_rect_in_table": [
+        0.155046,
+        0.2304,
+        0.111927,
+        0.768
+      ]
+    },
+    {
+      "key": "measured_value",
+      "label": "实测值或实测偏差值",
+      "aliases": [
+        "实测值",
+        "实测偏差值"
+      ],
+      "kind": "text",
+      "label_rect_in_table": [
+        0.518349,
+        0.1744,
+        0.157798,
+        0.0432
+      ],
+      "column_rect_in_table": [
+        0.266972,
+        0.2304,
+        0.658716,
+        0.768
+      ]
+    },
+    {
+      "key": "pass_rate",
+      "label": "合格率（%）",
+      "aliases": [
+        "合格率"
+      ],
+      "kind": "number",
+      "label_rect_in_table": [
+        0.934862,
+        0.1568,
+        0.056881,
+        0.072
+      ],
+      "column_rect_in_table": [
+        0.925688,
+        0.2304,
+        0.073394,
+        0.768
+      ]
+    }
+  ],
+  "row_groups": [
+    {
+      "record_index": 1,
+      "rect_in_table": [
+        0.001835,
+        0.2336,
+        0.995413,
+        0.0704
+      ],
+      "cells": {
+        "check_item": [
+          0.002752,
+          0.2352,
+          0.149541,
+          0.0672
+        ],
+        "standard_value": [
+          0.157798,
+          0.2352,
+          0.106422,
+          0.0672
+        ],
+        "measured_value": [
+          0.269725,
+          0.2352,
+          0.653211,
+          0.0672
+        ],
+        "pass_rate": [
+          0.92844,
+          0.2352,
+          0.06789,
+          0.0672
+        ]
+      }
+    },
+    {
+      "record_index": 2,
+      "rect_in_table": [
+        0.001835,
+        0.3104,
+        0.995413,
+        0.0704
+      ],
+      "cells": {
+        "check_item": [
+          0.002752,
+          0.312,
+          0.149541,
+          0.0672
+        ],
+        "standard_value": [
+          0.157798,
+          0.312,
+          0.106422,
+          0.0672
+        ],
+        "measured_value": [
+          0.269725,
+          0.312,
+          0.653211,
+          0.0672
+        ],
+        "pass_rate": [
+          0.92844,
+          0.312,
+          0.06789,
+          0.0672
+        ]
+      }
+    },
+    {
+      "record_index": 3,
+      "rect_in_table": [
+        0.001835,
+        0.3872,
+        0.995413,
+        0.0704
+      ],
+      "cells": {
+        "check_item": [
+          0.002752,
+          0.3888,
+          0.149541,
+          0.0672
+        ],
+        "standard_value": [
+          0.157798,
+          0.3888,
+          0.106422,
+          0.0672
+        ],
+        "measured_value": [
+          0.269725,
+          0.3888,
+          0.653211,
+          0.0672
+        ],
+        "pass_rate": [
+          0.92844,
+          0.3888,
+          0.06789,
+          0.0672
+        ]
+      }
+    },
+    {
+      "record_index": 4,
+      "rect_in_table": [
+        0.001835,
+        0.464,
+        0.995413,
+        0.0704
+      ],
+      "cells": {
+        "check_item": [
+          0.002752,
+          0.4656,
+          0.149541,
+          0.0672
+        ],
+        "standard_value": [
+          0.157798,
+          0.4656,
+          0.106422,
+          0.0672
+        ],
+        "measured_value": [
+          0.269725,
+          0.4656,
+          0.653211,
+          0.0672
+        ],
+        "pass_rate": [
+          0.92844,
+          0.4656,
+          0.06789,
+          0.0672
+        ]
+      }
+    },
+    {
+      "record_index": 5,
+      "rect_in_table": [
+        0.001835,
+        0.5408,
+        0.995413,
+        0.0704
+      ],
+      "cells": {
+        "check_item": [
+          0.002752,
+          0.5424,
+          0.149541,
+          0.0672
+        ],
+        "standard_value": [
+          0.157798,
+          0.5424,
+          0.106422,
+          0.0672
+        ],
+        "measured_value": [
+          0.269725,
+          0.5424,
+          0.653211,
+          0.0672
+        ],
+        "pass_rate": [
+          0.92844,
+          0.5424,
+          0.06789,
+          0.0672
+        ]
+      }
+    },
+    {
+      "record_index": 6,
+      "rect_in_table": [
+        0.001835,
+        0.6176,
+        0.995413,
+        0.0704
+      ],
+      "cells": {
+        "check_item": [
+          0.002752,
+          0.6192,
+          0.149541,
+          0.0672
+        ],
+        "standard_value": [
+          0.157798,
+          0.6192,
+          0.106422,
+          0.0672
+        ],
+        "measured_value": [
+          0.269725,
+          0.6192,
+          0.653211,
+          0.0672
+        ],
+        "pass_rate": [
+          0.92844,
+          0.6192,
+          0.06789,
+          0.0672
+        ]
+      }
+    },
+    {
+      "record_index": 7,
+      "rect_in_table": [
+        0.001835,
+        0.6944,
+        0.995413,
+        0.0704
+      ],
+      "cells": {
+        "check_item": [
+          0.002752,
+          0.696,
+          0.149541,
+          0.0672
+        ],
+        "standard_value": [
+          0.157798,
+          0.696,
+          0.106422,
+          0.0672
+        ],
+        "measured_value": [
+          0.269725,
+          0.696,
+          0.653211,
+          0.0672
+        ],
+        "pass_rate": [
+          0.92844,
+          0.696,
+          0.06789,
+          0.0672
+        ]
+      }
+    },
+    {
+      "record_index": 8,
+      "rect_in_table": [
+        0.001835,
+        0.7712,
+        0.995413,
+        0.0704
+      ],
+      "cells": {
+        "check_item": [
+          0.002752,
+          0.7728,
+          0.149541,
+          0.0672
+        ],
+        "standard_value": [
+          0.157798,
+          0.7728,
+          0.106422,
+          0.0672
+        ],
+        "measured_value": [
+          0.269725,
+          0.7728,
+          0.653211,
+          0.0672
+        ],
+        "pass_rate": [
+          0.92844,
+          0.7728,
+          0.06789,
+          0.0672
+        ]
+      }
+    },
+    {
+      "record_index": 9,
+      "rect_in_table": [
+        0.001835,
+        0.848,
+        0.995413,
+        0.0704
+      ],
+      "cells": {
+        "check_item": [
+          0.002752,
+          0.8496,
+          0.149541,
+          0.0672
+        ],
+        "standard_value": [
+          0.157798,
+          0.8496,
+          0.106422,
+          0.0672
+        ],
+        "measured_value": [
+          0.269725,
+          0.8496,
+          0.653211,
+          0.0672
+        ],
+        "pass_rate": [
+          0.92844,
+          0.8496,
+          0.06789,
+          0.0672
+        ]
+      }
+    },
+    {
+      "record_index": 10,
+      "rect_in_table": [
+        0.001835,
+        0.9248,
+        0.995413,
+        0.0704
+      ],
+      "cells": {
+        "check_item": [
+          0.002752,
+          0.9264,
+          0.149541,
+          0.0672
+        ],
+        "standard_value": [
+          0.157798,
+          0.9264,
+          0.106422,
+          0.0672
+        ],
+        "measured_value": [
+          0.269725,
+          0.9264,
+          0.653211,
+          0.0672
+        ],
+        "pass_rate": [
+          0.92844,
+          0.9264,
+          0.06789,
+          0.0672
+        ]
+      }
+    }
+  ],
+  "coordinate_system": {
+    "origin": "table_top_left",
+    "x_axis": "right",
+    "y_axis": "down",
+    "rect_format": "[x, y, width, height]",
+    "unit": "table_width/table_height fraction",
+    "note": "所有字段框、标签框、行分组和单元格均使用相对表格左上角的比例坐标；表外字段允许负值。"
+  }
+}

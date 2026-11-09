@@ -447,6 +447,76 @@ OPERATIONS: dict[str, dict[str, dict[str, Any]]] = {
             },
         )
     },
+    "/ocr/jianbiao": {
+        "post": _operation(
+            description="简表照片识别：先核验表格结构，再做直角方向选择和透视校正，"
+            "单次整页 OCR 后把文字框归属到字段；只支持经模板核验的 0°/90°/180°/270°，"
+            "检测失败不会退回整图 OCR，空字段、歧义字段和非法数字一律输出 null。"
+            "out 非空时在数据池内写出 response.json、diagnostics.json 和 aligned.png。",
+            summary="识别简表照片（模板核验＋整页 OCR）",
+            status="pending-review",
+            source="app/ocr/jianbiao/README.md；tests/test_ocr_jianbiao.py；"
+            "tests/fixtures/jianbiao-response.example.json；tests/http-test/demo.http",
+            side_effects="out 非空时只在数据池内写出识别结果与诊断文件；不调用语言模型。",
+            idempotency="识别结果可能因照片和模型变化而不同；out 写出可安全重复，同名文件被覆盖。",
+            request_example={
+                "img": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD...",
+                "form": "subgrade_spot_check",
+                "cfg": {},
+                "bound": {},
+                "out": "",
+                "taskId": "123456789012345678",
+            },
+            responses={
+                "200": _json_response(
+                    "固定公共字段和全部 10 行记录；空值、歧义值和无法完整解析的合格率为 null。",
+                    ref("JianbiaoResponse"),
+                    example={
+                        "status": 200,
+                        "message": "识别完成",
+                        "data": {
+                            "taskId": "123456789012345678",
+                            "documentType": "subgrade_spot_check",
+                            "common": {
+                                "projectName": "成乐高速公路扩容建设项目",
+                                "documentNo": "JB12-4.5.2-4",
+                                "inspectorName": "王璐瑶",
+                                "inspectDate": "2026-11-11",
+                                "position": "防裂工程土工合成材料处治层（土工格栅）",
+                            },
+                            "fields": {
+                                "records": [
+                                    {
+                                        "rowIndex": 1,
+                                        "checkItem": "压实度",
+                                        "standardValue": "≥96%",
+                                        "measuredValue": "96.2、96.5、96.8",
+                                        "passRate": 100.0,
+                                    },
+                                    *[
+                                        {
+                                            "rowIndex": row,
+                                            "checkItem": None,
+                                            "standardValue": None,
+                                            "measuredValue": None,
+                                            "passRate": None,
+                                        }
+                                        for row in range(2, 11)
+                                    ],
+                                ]
+                            },
+                        },
+                    },
+                ),
+                "400": _error_response(
+                    "路径越界、文件不存在/不是文件、图片无法解码、模板未配置，或未检测到通过"
+                    "模板结构核验的简表表格。"
+                ),
+                "422": REQUEST_ERROR_RESPONSE,
+                "503": _error_response("OCR 模型不可用。"),
+            },
+        )
+    },
     "/ocr/daily-logs-new": {
         "post": _operation(
             description="新版监理日志识别：按 PDF 构建的模板对齐完整表格，整页一次 OCR 后匹配"
@@ -582,6 +652,19 @@ def _prune_unused_schemas(spec: dict[str, Any]) -> None:
             del schemas[name]
 
 
+def _raise_defs_to_components(node: Any) -> None:
+    """把 TypeAdapter 的 #/$defs/X 引用改写为 #/components/schemas/X。"""
+    if isinstance(node, dict):
+        reference = node.get("$ref")
+        if isinstance(reference, str) and reference.startswith("#/$defs/"):
+            node["$ref"] = f"#/components/schemas/{reference.rsplit('/', 1)[-1]}"
+        for value in node.values():
+            _raise_defs_to_components(value)
+    elif isinstance(node, list):
+        for item in node:
+            _raise_defs_to_components(item)
+
+
 def build_contract() -> dict[str, Any]:
     """返回当前应用对应的完整 OpenAPI 草案；每次调用重新生成，不使用缓存。"""
     spec = copy.deepcopy(create_app().openapi())
@@ -592,7 +675,7 @@ def build_contract() -> dict[str, Any]:
         "经用户批准前不得视为正式契约，也不得据此绕过接口变更审批。"
     )
     spec["info"]["x-contract-status"] = "draft-pending-review"
-    spec["info"]["x-contract-version"] = "0.1.0-review.2"
+    spec["info"]["x-contract-version"] = "0.1.0-review.3"
     spec["info"]["x-review-status"] = "revised-pending-review"
     spec["info"]["x-contract-authority"] = (
         "interfaces/openapi/ 中的正式契约（批准后）优先于本草案和运行时自动生成结果。"
@@ -602,7 +685,7 @@ def build_contract() -> dict[str, Any]:
     ]
     spec["tags"] = [
         {"name": "智能体", "description": "日志总结、意图识别与自由对话；同步模型调用。"},
-        {"name": "ocr", "description": "新版监理日志识别；CPU 处理同步执行。"},
+        {"name": "ocr", "description": "新版监理日志与简表照片识别；CPU 处理同步执行。"},
     ]
     spec.setdefault("components", {}).setdefault("schemas", {}).update(copy.deepcopy(SCHEMAS))
     # 业务意图使用自包含的 $defs；与已发布 JSON Schema 保持逐字一致。
@@ -611,6 +694,18 @@ def build_contract() -> dict[str, Any]:
     spec["components"]["schemas"]["JournalResponse"] = json.loads(
         (ROOT / "interfaces/journal/response.schema.json").read_text(encoding="utf-8")
     )
+    # 简表成功响应的结构化 TypedDict 直接来自实现，草案随代码同步；
+    # TypeAdapter 把嵌套 TypedDict 放进 $defs，需提升为 components 引用。
+    from pydantic import TypeAdapter
+
+    from app.ocr.jianbiao.output import JianbiaoResponse
+
+    jianbiao_schema = TypeAdapter(JianbiaoResponse).json_schema()
+    for name, subschema in jianbiao_schema.pop("$defs", {}).items():
+        _raise_defs_to_components(subschema)
+        spec["components"]["schemas"][name] = subschema
+    _raise_defs_to_components(jianbiao_schema)
+    spec["components"]["schemas"]["JianbiaoResponse"] = jianbiao_schema
     _apply_component_descriptions(spec)
     _apply_operations(spec)
     _prune_unused_schemas(spec)

@@ -6,6 +6,7 @@
 | --- | --- | --- |
 | Mac 完整开发安装 | `zsh scripts/dev/setup.sh` | Homebrew/uv、dev 依赖、Ollama 模型、本项目服务及真实验收 |
 | Mac 前台 API | `zsh scripts/dev/start-api.sh --reload` | 仅用于 macOS 开发 |
+| Windows 前台 API（GPU OCR） | `scripts\dev\start-api.cmd --reload` | 定位仓库根目录，使用 `ocr-gpu` 并设置 `OCR_DEVICE=cuda`；其他参数透传 uvicorn |
 | Mac 前台调试 API | `zsh scripts/dev/start-api.sh --debug` | 前台启动并监听 `127.0.0.1:5678`，供 VS Code Attach |
 | Mac 后台调试 API | `zsh scripts/dev/services.sh debug-api` | launchd 启动带 debugpy 的 API，供 VS Code Attach；仅用于开发 |
 | Mac 前台 Ollama | `zsh scripts/dev/start-ollama.sh` | 复用本机模型存储 |
@@ -21,6 +22,7 @@
 | 通用业务验收 | `uv run --locked python -m scripts.common.verify_agents` | Mac/Linux；调用运行中的 API，验收完整意图及日志评测集 |
 | 通用推理验收 | `uv run --locked python -m scripts.common.verify_live` | Mac/Linux；直调 Agent、ASGI、TCP；不检查硬件 |
 | OCR 真实验收 | `uv run --locked python -m scripts.common.verify_ocr --photo <数据池相对路径> [--task-id <任务 ID>]` | 调运行中 API，检查新版监理日志识别；报告在 verification/ocr |
+| 简表真实 OCR | `uv run --locked python -m scripts.ocr.recognize_jianbiao --photo <图片路径> [--template-id subgrade_spot_check] [--task-id <任务 ID>] [--output <目录>]` | 本地处理土方路基简表，导出约定 JSON、逐字段诊断和校正图，不启动 API |
 | OpenAPI 草案导出 | `uv run --locked python -m scripts.docs.export_openapi` | 从当前应用导出到 `interfaces/drafts/`，拒绝写入正式契约目录 |
 | 接口评审文档渲染 | `uv run --locked python -m scripts.docs.render_api_markdown` | 把契约渲染为 `interfaces/API.md`；只读视图，不手工维护 |
 | OpenAPI 契约校验 | `uv run --locked python -m scripts.docs.check_openapi` | 比较契约与实现；有正式契约时优先检查正式契约，不写文件 |
