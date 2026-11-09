@@ -20,7 +20,7 @@
 
 ```zsh
 uv run --locked python -m scripts.ocr.build_journal_template \
-  --pdf app/ocr/resources/rj-tamplate.pdf \
+  --pdf data/ocr/resources/rj-tamplate.pdf \
   --output app/ocr/journal/templates/journal.json \
   --overlay verification/ocr/journal-template.png
 ```
@@ -33,13 +33,13 @@ uv run --locked python -m scripts.ocr.build_journal_template \
 
 ```zsh
 uv run --locked python -m scripts.ocr.inspect_journal \
-  --photo app/ocr/resources/jl1.jpg \
+  --photo data/ocr/resources/jl1.jpg \
   --output verification/ocr/journal --task-id example
 ```
 
 生成字段覆盖图、来源mask、报告；规则可完整拆分时另写业务JSON，需模型时记录 `requires_model`。工具默认不调用LLM；完整验收调用现有API。无可靠table直接失败，不输出全空“成功”。
 
-业务输出示例 `app/ocr/resources/daily-logs-output.json` 不等于照片逐字真值，不自动覆盖。OCR仍可能误识日期、机构编码、数值和单位；程序不拿示例、当前年份或词库强改原文。
+业务输出示例 `data/ocr/resources/daily-logs-output.json` 不等于照片逐字真值，不自动覆盖。OCR仍可能误识日期、机构编码、数值和单位；程序不拿示例、当前年份或词库强改原文。
 
 ## 接口行为
 

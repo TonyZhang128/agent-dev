@@ -769,7 +769,7 @@ Schema：`JournalResponse`
 
 ### `JournalResponse`
 
-用户于 2026-11-06 确认的 POST /ocr/daily-logs-new 成功响应；以 app/ocr/resources/daily-logs-output.json 为结构依据。
+用户于 2026-11-06 确认的 POST /ocr/daily-logs-new 成功响应；以 data/ocr/resources/daily-logs-output.json 为结构依据。
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |

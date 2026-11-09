@@ -124,7 +124,7 @@ chmod 600 docker/prod.env
 
 已有 `docker/prod.env` 时保留它并逐项补充，不覆盖真实密钥。
 当前监理日记模板是代码中的 `app/ocr/journal/templates/journal.json`，随镜像发布；
-本地 `app/ocr/resources/` 的源 PDF、照片及业务输出不进镜像。
+本地 `data/ocr/resources/` 的源 PDF、照片及业务输出不进镜像。
 `templates/admin/assets` 挂载仍服务于现有诊断；不是新版 journal 的模板来源。
 
 至少核对：

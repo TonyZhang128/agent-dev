@@ -46,7 +46,7 @@
 
 ## 2026-11-06 — 新版监理日志成功响应对齐后端约定（用户已确认）
 
-- 用户指定 `app/ocr/resources/daily-logs-output.json` 为 `POST /ocr/daily-logs-new`
+- 用户指定 `data/ocr/resources/daily-logs-output.json` 为 `POST /ocr/daily-logs-new`
   的成功响应格式；已确认的响应子契约保存在 `journal/response.schema.json`。
 - 顶层严格为 `status`、`message`、`data`，成功值为 `200`、`识别完成`；原
   `data.processed` 的业务字段直接放到 `data`，不返回 `form`、`formName`、`frame`、

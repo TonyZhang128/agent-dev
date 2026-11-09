@@ -32,7 +32,7 @@ interfaces/
 data/
 config/
 ocr/
-app/ocr/resources/
+data/ocr/resources/
 README.md
 AGENTS.md
 CLAUDE.md
