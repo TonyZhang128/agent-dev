@@ -78,3 +78,8 @@ dev = [
     "pytest-cov>=7.1.0",
     "ruff>=0.17.1",
 ]
+
+[[tool.uv.index]]
+name = "tuna"
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true

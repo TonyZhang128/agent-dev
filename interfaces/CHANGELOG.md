@@ -2,6 +2,33 @@
 
 只记录对外接口契约的变化。运行时行为、提示词和内部重构不在此记录。
 
+## 2026-11-08 — mainWork 规则优先、全文生成兜底（用户已确认）
+
+- 用户明确允许整理表达、合并断句和去标题，但要求保留全部业务事实与关键数据，不摘要、不补充事实。
+- 先从合并后的mainWork按施工情况、旁站情况、巡视情况关键词提取；规则不足时由Agent基于全文直接生成三个字段，不再返回unit_id分类计划。
+- 替代旧版逐字分配及保留标题要求，正式行为依据见 `journal/main-work-processing.md`。输出字段/类型、请求及mainWork之外字段不变；标题可能不再出现在值中。
+- 保留现有table失败400及mainWork失败502，空/不存在类别仍可为null，不承诺模型故障或不可辨输入也产生虚构成功。
+
+## 2026-11-07 — 监理日记无可靠表格时终止（用户已确认）
+
+- 用户明确回复“同意，按上述 400 语义执行”。`POST /ocr/daily-logs-new` 无通过模板结构核验的 table，或无法消解多个候选时，在 OCR 和 mainWork 分类之前终止。
+- 返回 HTTP `400` 和 `{"detail":"未检测到监理日志表格，请重新拍摄"}`，正式响应子契约为 `journal/table-not-found.schema.json`。
+- 删除纸张/整图回退以及定位失败后的空字段200；真实合法空白表格仍可成功返回空字段。
+- 成功 Schema、请求、taskId 和既有 mainWork 拆分失败502不变；调用方需对新增400条件提示重新拍摄。本确认不提升无关接口或整包OpenAPI。
+
+## 2026-11-07 — 草案移除未启用的 OCR/WBS 接口（用户已确认）
+
+- 从待确认草案中移除 `POST /ocr/recognize`、`POST /ocr/daily-logs`、
+  `POST /ocr/jianbiao`、`POST /ocr/fill`、`GET /ocr/blank/{form}.png`、
+  `GET /ocr/sheet/{form}` 与 `POST /wbs/draft`；实现代码已删除，对应入口在
+  `app/api/ocr.py` 中保留为注释，`app/api/wbs.py` 已移除。
+- 保留 `POST /ocr/daily-logs-new`、`/diagnostics` 及智能体接口，行为与状态不变。
+- 这些接口此前均为 `pending-review`，从未提升为正式契约；本次只同步草案、实现与
+  测试，不涉及已确认契约的破坏性变更。
+- 调用方影响：仍调用上述已移除接口的客户端会收到 404；需要这些能力时应重新提交
+  接口草案并完成审批，不能直接恢复路由。
+- 同时移除了仅被这些接口引用的组件 Schema，避免草案保留不可达模型。
+
 ## 2026-11-07 — 新版监理日志 mainWork 字段拆分（待确认）
 
 - `POST /ocr/daily-logs-new` 的 `data.fields.mainWork.construction`、`witness`、
@@ -19,7 +46,7 @@
 
 ## 2026-11-06 — 新版监理日志成功响应对齐后端约定（用户已确认）
 
-- 用户指定 `app/ocr/resources/daily-logs-output.json` 为 `POST /ocr/daily-logs-new`
+- 用户指定 `data/ocr/resources/daily-logs-output.json` 为 `POST /ocr/daily-logs-new`
   的成功响应格式；已确认的响应子契约保存在 `journal/response.schema.json`。
 - 顶层严格为 `status`、`message`、`data`，成功值为 `200`、`识别完成`；原
   `data.processed` 的业务字段直接放到 `data`，不返回 `form`、`formName`、`frame`、

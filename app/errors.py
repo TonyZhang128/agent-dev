@@ -11,3 +11,7 @@ class ConversationInputTooLarge(Exception):
 
 class MainWorkSplitError(Exception):
     """监理日志 mainWork 无法可靠拆分；HTTP 层返回受控 502。"""
+
+
+class JournalFrameNotFound(Exception):
+    """没有找到通过监理日记模板结构核验的真实表格，不得继续OCR。"""

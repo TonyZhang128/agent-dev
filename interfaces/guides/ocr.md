@@ -1,201 +1,37 @@
-# 文档加工接口说明
+# 监理日记与本地诊断接口
 
-本文说明 `/diagnostics`、`/ocr/*`、`/wbs/draft` 的业务流程、数据池约束、输出副作用和错误
-处理。字段结构以 [OpenAPI 草案](../drafts/fastapi.openapi.json) 为准；实现细节、模板目录、
-OCR 模型和辅助脚本见 [文档加工与 OCR](../../docs/ocr.md)。
+当前仅保留 `POST /ocr/daily-logs-new` 和系统级 `GET /diagnostics`。字段以 [OpenAPI草案](../drafts/fastapi.openapi.json) 为准；已确认成功结构和表格失败响应分别见 [成功子契约](../journal/response.schema.json)、[无表格子契约](../journal/table-not-found.schema.json)。完整OpenAPI仍为待确认，不能据此扩展接口。
 
-## 共同规则
+## 图片输入与处理
 
-- 全部为同步请求；CPU 处理在线程池执行，同一应用的 OCR 推理串行加锁。
-  `/ocr/daily-logs-new` 在 OCR 之后先按标题和单元开头强标记拆分 `mainWork`，规则无法
-  完整覆盖时才同步调用一次模型；仍以单个 HTTP 响应返回，不产生服务端任务或轮询。
-- 没有服务端任务 ID、异步轮询、webhook、回调、分页或 multipart 上传；
-  `/ocr/daily-logs` 的 `taskId` 仅原样回显调用方传入的值。
-- 没有鉴权。应由可信调用方在既有部署边界内使用。
-- 成功（PNG 除外）返回：
+- `path`、`img`至少一个非空；同时提供时img优先。img支持base64及data URI。
+- path必须是PROJECTS_ROOT内文件，兼容projects/前缀；拒绝绝对路径、穿越及越界符号链接。
+- taskId去除首尾空白后回显，缺省为null；不生成服务端任务。
+- 定位阶段只接受通过模板行列/合并结构核验的真实table。字段及标签以table为坐标基准，包含表外项目名称、编号、审核人。
+- 成功定位后整图一次OCR；字段名漏识别不妨碍可靠几何定位。文字框不强行跨栏分配，缺失不补写。
+- mainWork先合并OCR文本，按施工情况、旁站情况、巡视情况关键词规则提取；不足时Agent基于全文生成三个字段。允许整理表达、合并断句、去标题，保留全部事实和关键数据，不摘要不补充；没有对应内容为null。失败保持502。正式语义见 [mainWork处理](../journal/main-work-processing.md)。
 
-  ```json
-  {"status": 200, "data": {}}
-  ```
+## 响应与失败
 
-  `status` 是业务成功标记，与 HTTP 200 一致，不是 HTTP 状态码的替代。
-- 识别、填表和 WBS 只产生草稿，不执行人工确认、审批或数据库写入。
-- 模板和 OCR 引擎按需加载。应用启动不读取模板；缺模板只影响相关请求。
-- 模板或 OCR 模型不可用返回 503，其他智能体接口继续可用。
+成功严格为 `{"status":200,"message":"识别完成","data":...}`，data包含taskId、documentType、common、fields。只有真实合法空白表格可以成功返回空字段，不能把定位失败包装为空值200。
 
-## 数据池与路径
-
-- `TEMPLATES_ROOT`、`ADMIN_ROOT`、`ASSET_ROOT`、`PROJECTS_ROOT` 由 Settings 配置，相对路径
-  以仓库根目录解析。
-- 输入 `path`、`out`、`drawings` 必须是 `PROJECTS_ROOT` 内的相对路径，可带或不带
-  `projects/` 前缀。
-- 拒绝绝对路径、目录穿越、越界符号链接和非文件输入；返回 400。
-- `out` 为空不写文件。非空必须以 `.pdf` 结尾；Excel 和校正图分别为同名 `.xlsx`、
-  `.warp.jpg`。
-- 返回的 `pdf`、`xlsx` 相对 `PROJECTS_ROOT`。
-- `drawings` 支持 PDF 文件或 `*_N.pdf` 单页拆分目录；目录内其他文件忽略，越界 PDF 返回 400。
-
-## 图片输入
-
-`POST /ocr/recognize`、`POST /ocr/daily-logs` 和 `POST /ocr/daily-logs-new`：
-
-- `path` 与 `img` 至少提供一个。
-- `img` 为 base64 编码图片，兼容 `data:image/...;base64,` 前缀。
-- 同时提供时优先使用 `img`。
-- 两者都为空或只有空白返回 422。
-- 图片无法解码、路径不存在或不是文件返回 400。
-- `/ocr/daily-logs` 与 `/ocr/daily-logs-new` 额外接受可选 `taskId`（最长 128，去除首尾空白），
-  仅原样回显。
-
-`POST /ocr/jianbiao` 只接受数据池照片 `path`，不接受 base64。
-
-## 各接口流程
-
-### `GET /diagnostics`
-
-系统级本地诊断，不访问上游模型服务。检查 PyMuPDF、openpyxl、OpenCV、NumPy、RapidOCR、
-ONNX Runtime 能否导入，`OCR_DEVICE` 与 onnxruntime provider 是否一致，以及 OCR 模板清单、
-版面 JSON、WBS 规则、模型目录和数据池是否可用。`data.ok` 汇总必需检查，`data.warnings`
-记录模型目录为空、表样目录缺失等非致命问题；`data.ok=false` 时仍返回 HTTP 200。
-
-该接口不初始化 OCR 引擎、不加载模型、不注册 CUDA DLL、不访问网络、不写文件。“推理设备”
-只证明 provider 可用，CUDA 真实初始化在首次 OCR 时验证；模型文件 sha256 由
-`scripts.models.download_ocr_models --check` 校验。
-
-### `POST /ocr/recognize`
-
-1. 读取图片。
-2. 普通 OCR 得到文字框。
-3. 若提供 `form` 且模板存在，按栏目文字和模板坐标对齐。
-4. 按栏目提取字段；无法对齐时只按栏目文字取值，并在 `warning` 提示核对表号。
-5. 返回 `fields`、`keys`、`detail`、`lines`、`align`、`warning`、`image`、`ms`。
-
-- 未知表号不报错，仍尝试按栏目文字取值。
-- `align.how` 为 `anchors` 时才按模板坐标取值；`mismatch` 时不应信任坐标。
-- 200 不代表每个字段准确，识别结果必须人工核对。
-
-### `POST /ocr/daily-logs`
-
-1. 寻找纸张/表格外框并透视校正。
-2. 按现场《监理日记》固定栏目逐格 OCR，包括岗位、主要施工情况、旁站情况、巡视情况、
-   问题和次日计划。
-3. 日期归一为 `yyyy-mm-dd`，长文本栏保留拼接结果。
-4. 返回 `recognized`、`detail`、`frame`、`processed`、`warning`、`image`、`ms`。
-
-- `processed` 是业务结构：`taskId`（请求 `taskId` 原样回显，未传为 `null`）、
-  `documentType`（固定 `supervision_diary`）、`common`、`fields`；识别不到的栏目为 `null`，
-  不做推断。
-- `frame.how` 为 `whole` 时表示未找到外框，应按整张照片校正，需核对定位。
-- 不写 PDF/Excel，不生成服务端任务 ID。
-
-### `POST /ocr/daily-logs-new`
-
-1. 在原图上用横竖线定位表格外框；找不到表格时退回页面或整张照片。
-2. 只做一次透视校正，把整页映射到固定画布。
-3. 整页只调用一次 OCR，得到全部文字框。
-4. 按固定栏目区域，用中心点优先、框内覆盖率兜底的方式归属文字框。
-5. 按栏目名近似剥离印刷字；日期归一为 `yyyy-mm-dd`；长文本栏保留拼接结果。
-6. 对歧义或漏框字段最多补充识别 3 次。
-7. 把 `mainWork` 原文切成文字单元，先按可靠标题或单元开头强标记做规则拆分；
-   规则无法完整覆盖时才做一次模型分类（配置 `LLM_FALLBACK_API_KEY` 时允许一次云端回退）。
-8. 规则成功或模型计划通过校验后，从原文按类别截取 `construction`、`witness`、
-   `patrol`；两者都失败时返回受控 `502`。
-9. 严格返回 `{"status":200,"message":"识别完成","data":...}`；`data` 直接包含
-   `taskId`、`documentType`、`common`、`fields`，缺失值为 `null`。
-
-- 成功响应依据后端已约定的 `app/ocr/resources/daily-logs-output.json`，正式响应子契约见
-  [journal/response.schema.json](../journal/response.schema.json)；本次拆分不改变成功结构。
-- 实现独立，不读取旧逐格识别链；HTTP 成功响应不包含内部诊断信息或 `processed` 包装。
-- `construction`、`witness`、`patrol` 在样例表上同属一个 `mainWork` 单元格。拆分只做
-  分配：字段值必须能在 `mainWork` OCR 文本中原样找到；保留各节标题原文；原文没有的
-  类别为 `null`；不纠错、不润色、不总结、不补充记录。`common`、`issues`、
-  `nextDayPlan` 不受拆分影响。
-- 模型与规则都无法可靠完成时返回 `502`，`detail` 为固定文案，不回显原文、OCR 内容、
-  单元 ID 或上游错误正文。不会复制整段 `mainWork` 或强塞到 `construction`。
-- 定位信息保留在内部识别链和本地可视化工具中，不通过此接口返回。
-- 不写 PDF/Excel，不生成服务端任务 ID。
-
-### `POST /ocr/jianbiao`
-
-1. 按 `form` 找目标表的简表版面；没有简表版面返回 400。
-2. 寻找外框、透视校正、逐格识别。
-3. 将项目资料 `bound` 与照片识别值合并，照片手写值优先。
-4. 按 `cfg` 的公式/引用计算目标表。
-5. `out` 非空时写同名 PDF、Excel 和校正图。
-6. 返回 `jianbiao`、`recognized`、`detail`、`frame`、`values`、`errors`、`anchors`、
-   `pdf`、`xlsx`、`xlsxSkipped`、`ms`。
-
-### `POST /ocr/fill`
-
-不识别照片，只按 `cfg` 公式/引用计算 `values` 并回填目标表。
-
-- 公式目标字段以计算结果为准，传入的旧值不算数。
-- 单条公式失败进入 `errors`，该字段留空；调用方必须检查 `errors`。
-- 循环引用返回 400。
-- `out` 为空只计算，不写文件；非空时写 PDF/Excel。
-- Excel 无对应格子或有冲突时，通过本次响应的 `xlsxSkipped` 返回，不使用共享状态。
-
-### `GET /ocr/blank/{form}.png`
-
-- 渲染模板表样第 1 页为 PNG。
-- `width` 最小 1；实际渲染宽度不超过 2400，超过时按 2400 处理。
-- 模板没有该表号的 PDF 返回 404。
-- 响应是原始 `image/png`，带 `Cache-Control: max-age=3600`，不是 JSON 包装。
-
-### `GET /ocr/sheet/{form}`
-
-返回表样上可填的版面栏（`fld_*`）和其余空格子（`g*`）：
-
-- `field`：字段 ID 或格子键。
-- `name`：栏目名。
-- `rect`：页面比例坐标 `{x,y,w,h}`。
-- `behavior`：填写行为。
-- `kind`：`layout` 或 `grid`。
-
-模板没有该表号的 PDF 返回 404。
-
-### `POST /wbs/draft`
-
-1. 读取施工图 PDF 的文字层（封面、总目录、分册目录）。
-2. 识别桥梁、道路、隧道和桩号信息。
-3. 结合可选 `basis`（工可依据）补全没有施工图的路段。
-4. 按模板库 `refs/wbs_rules.json` 生成单位/分部/分项/子分项初稿。
-
-- 不写文件，不执行人工确认、审批或落库。
-- 当前不生成隧道划分；桥梁不按墩台/跨数配置合并分部，左右幅体现在分项名称，
-  `count.subs` 保持 0。
-- 返回 `units`、`count`、`drawings`；每个节点可带识别依据 `src`。
-
-## 配置与公式
-
-`cfg` 保留配置平台的 `fields`、`anchors`、`edges`、`formulas` 元数据；处理链只校验实际
-消费的字段，其余元数据原样保留。非法结构返回 422。
-
-- `PDF_REGION.rect` 和 `rects` 是 `{x,y,w,h}` 页面比例坐标。
-- 简表 `cells[].rect` 是 `[x,y,w,h]` 外框比例数组，两者不可混用。
-- `EXCEL_RANGE.range` 是单个单元格地址，如 `A3`；合并单元格归到左上角。
-- 引用优先级：`TEMPLATE` > `COPY` > 同名字段，再补版面/网格。
-- 公式支持 `AVG/SUM/MIN/MAX/COUNT/ROUND/IF/PASS_RATE/PASS_RATE_LE`、`@{field}`、
-  `&& || !`，保留 JS 风格 `.5` 舍入。
-- 字段 ID、格子键和坐标语义沿用 docsvc；保留隐藏文字层过滤、OCR 锁和模板引用优先级。
-
-## 错误
-
-| HTTP 状态 | 场景 |
+| HTTP | 场景 |
 | --- | --- |
-| 400 | 路径越界、文件不存在/不是文件、图片或文档处理失败、公式循环引用、简表版面缺失 |
-| 404 | 表样接口找不到该表号的 PDF |
-| 422 | 请求字段或配置结构校验失败；`path` 与 `img` 都为空 |
-| 502 | `/ocr/daily-logs-new` 的 `mainWork` 无法可靠拆分 |
-| 503 | 模板资源、OCR 模型或推理依赖不可用 |
+| 400 | 无通过结构核验的table或候选歧义：固定detail为“未检测到监理日志表格，请重新拍摄”，在OCR前终止；其他既有400仍包括非法路径、无法解码及文档处理错误 |
+| 422 | 请求字段校验失败，包括path/img均为空 |
+| 502 | mainWork无法可靠拆分，保持既有固定detail |
+| 503 | OCR模型不可用等既有资源失败 |
 
-错误响应统一为 `{"detail":"..."}`；请求校验失败时为错误数组。错误信息不泄露文件系统
-绝对路径、原始图片内容或模型内部细节。
+错误响应统一detail，不回显原始图片、OCR正文、密钥或上游正文。成功子Schema不增加诊断字段；逐线支持率、来源覆盖mask、定位图仅在内部和本地工具中使用。HTTP200、非空数量和OCR置信度不是准确率保证。
 
-## 重试与幂等
+## 同步、重试与副作用
 
-- `GET /diagnostics`、`/ocr/recognize`、`/ocr/daily-logs`、`/ocr/daily-logs-new`、`/ocr/sheet`、
-  `/ocr/blank`、`/wbs/draft` 为只读操作，可重试。
-- `/ocr/jianbiao`、`/ocr/fill` 在 `out` 非空时写文件；相同 `out` 重试会覆盖输出。
-  调用方应确认是否允许覆盖，当前没有幂等键或版本号。
-- OCR 结果可能因模型、照片质量和模板更新而变化；不要把 200 当作识别准确的保证。
+一次HTTP请求完成全部处理。CPU/OCR在线程池中执行，共享引擎按应用串行加锁；mainWork模型按已有并发和超时控制。没有异步任务、轮询、webhook、持久会话或multipart上传。
+
+接口只读图片，不写PDF/Excel、模板或固定示例JSON，可以重试；结果仍可能随模型、照片质量、模板版本变化。当前接口没有自定义鉴权，需在既有可信部署边界内使用。
+
+## GET /diagnostics
+
+保留现有静态诊断字段：依赖、运行库、设备provider、模型目录、资料库与数据池。不会初始化OCR引擎、注册CUDA、执行推理、访问网络或写文件；ok=false仍为HTTP200。旧资料库检查项仍属于此存量接口，本次未改变其字段或判定语义，且不参与journal模板匹配。
+
+实现与部署见 [OCR说明](../../docs/ocr.md)，算法及真实验收见 [table模板识别](../../docs/journal-template-recognition.md)。

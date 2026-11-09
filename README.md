@@ -2,7 +2,7 @@
 
 基于 LangChain 1.4.6、FastAPI 和 Pydantic 的公路工程业务智能体开发项目。主要为公路工程数据智采，业务平台，管理平台，归档组卷平台等提供智能体与AI算法服务。
 
-开发环境为 macOS + Ollama + Qwen3.5 9B Q4_K_M，上线环境为 Linux + NVIDIA + 独立 vLLM；业务 API 统一通过 OpenAI 兼容协议调用模型。
+开发环境为 macOS + Ollama + Qwen3.5 9B Q4_K_M，生产环境为 Linux + NVIDIA +  vLLM推理引擎；业务 API 统一通过 OpenAI 兼容协议调用模型。
 
 包版本为 `0.1.0`（`pyproject.toml`）；当前 OpenAPI 标题为“公路工程业务智能体”、版本为 `0.1.0`（`app/main.py`）。两者分别维护项目包元信息与 API 文档元信息。三个智能体均通过 `langchain.agents.create_agent()` 执行，HTTP 层使用按领域组织的 `APIRouter`。
 
@@ -14,17 +14,14 @@
 | 业务端意图识别 | `POST /agents/intent/business` | 当前消息、当前页面与可选上下文 → 最小功能 `page/action`、一级意图澄清、聊天或未知状态、判断分数、目录版本 |
 | 归档端意图识别 | `POST /agents/intent/archive` | 文字与历史消息 → `A`–`D` 占位分类或 `unknown`、判断分数、澄清标记 |
 | 自由对话 | `POST /agents/chat` | 当前消息、必填历史（首轮 `[]`）→ 回答和模型名称 |
-| 照片/简表/监理日志 OCR | `POST /ocr/recognize`、`POST /ocr/jianbiao`、`POST /ocr/daily-logs`、`POST /ocr/daily-logs-new` | 数据池照片或 base64 图片 → 识别字段；新版监理日志仅返回后端约定的业务结构，`mainWork` 按业务含义拆分为施工/旁站/巡视 |
-| 公式与填表 | `POST /ocr/fill` | 核对后的值 + 配置 → 公式/引用结果，可输出同源 PDF/Excel |
-| 表样预览与字段 | `GET /ocr/blank/{form}.png`、`GET /ocr/sheet/{form}` | 空白表 PNG、版面栏与格子字段 |
-| 施工图划分 | `POST /wbs/draft` | PDF/工可 → WBS 划分初稿 |
+| 监理日记 OCR | `POST /ocr/daily-logs-new` | 数据池照片或 base64 图片 → 识别字段；新版监理日志仅返回后端约定的业务结构，`mainWork` 按业务含义拆分为施工/旁站/巡视 |
 | 本地依赖诊断 | `GET /diagnostics` | 运行库、推理设备、OCR 模板/模型与数据池静态检查；`warnings` 记录非致命问题 |
 | 进程存活 | `GET /health` | `{"status":"ok"}`，不访问模型 |
 | 模型就绪 | `GET /ready` | 检查配置模型是否出现在上游模型列表，成功返回 `{"status":"ready"}`，不执行推理 |
 
 服务默认监听 `127.0.0.1:8309`，交互文档为 <http://127.0.0.1:8309/docs>。这些接口生成内容和计划，尚未连接审批、订单或消息发送等业务系统。
 
-`docsvc` 的全部运行代码和辅助脚本已合并到 `app/ocr/`、`scripts/ocr/`，共用当前应用入口、Python 3.12、依赖锁和 CI。配置、接口与验收见 [文档加工与 OCR](docs/ocr.md)。工作区原先未跟踪的 `ocr/` 是另一个表单匹配项目，仍保持独立；本次迁移来源为 `../docsvc`。
+`docsvc` 的全部运行代码和辅助脚本已合并到 `app/ocr/`、`scripts/ocr/`，共用当前应用入口、Python 3.12、依赖锁和 CI。配置、接口与验收见 [文档加工与 OCR](docs/ocr.md)。新版监理日记通过 PDF 模板对齐完整照片，表内外字段共用一次 OCR；模板构建与本地检查见 [监理日记模板识别](docs/journal-template-recognition.md)。工作区原先未跟踪的 `ocr/` 是另一个表单匹配项目，仍保持独立；本次迁移来源为 `../docsvc`。
 
 ## 环境与安装
 
@@ -82,9 +79,10 @@ test -f .env || cp .env.example .env
 | `LLM_CONTEXT_MARGIN_TOKENS` | `256` | 历史裁剪预算额外余量 |
 | `CONVERSATION_MAX_INPUT_CHARACTERS` | `1000000` | 历史及序列化当前输入总字符上限，超出返回422 |
 | `LLM_REASONING_EFFORT` | `none` | 关闭当前 Qwen 服务的思考输出；不支持的服务可设为空 |
+| `LLM_FALLBACK_ENABLED` | `false` | 云端回退总开关；`true` 且回退密钥非空时才启用 |
 | `LLM_FALLBACK_BASE_URL` | `https://api.deepseek.com` | 本地 Ollama/vLLM 调用失败时的云端 OpenAI 兼容地址 |
 | `LLM_FALLBACK_MODEL` | `deepseek-flash` | 回退模型名称 |
-| `LLM_FALLBACK_API_KEY` | 空 | 回退密钥；留空即关闭回退 |
+| `LLM_FALLBACK_API_KEY` | 空 | 回退密钥；留空不启用回退，已配置时仍受总开关控制 |
 | `LLM_FALLBACK_TIMEOUT_SECONDS` | `60` | 回退调用超时，叠加在 `LLM_TIMEOUT_SECONDS` 之上 |
 | `LLM_FALLBACK_REASONING_EFFORT` | `none` | 关闭回退模型思考；不支持的服务可设为空 |
 | `AGENT_RECURSION_LIMIT` | `8` | Agent 运行步数上限，包含工具调用循环 |
@@ -99,11 +97,21 @@ test -f .env || cp .env.example .env
 | `OCR_DEVICE` | `cpu` | OCR 推理设备：`cpu`（默认，适合无 NVIDIA GPU 的开发/Mac 环境）或 `cuda`（需 CUDA 12 + cuDNN 9，同时通过 `--extra ocr-gpu` 安装 onnxruntime-gpu）；cuda 不可用时接口返回 503 |
 | `OCR_CUDA_ROOT` | `.cache/cuda` | 仅 cuda 模式：Windows 可将 NVIDIA redist 解压到此目录免系统安装，需 CUDA 12 + cuDNN 9 |
 
-云端回退默认关闭：只有提供非空 `LLM_FALLBACK_API_KEY` 时才启用。启用后，本地 Ollama/vLLM 的模型调用因连接失败、超时或上游 HTTP 错误抛出异常时，本次调用改用回退模型重试一次，总预算为 `LLM_TIMEOUT_SECONDS + LLM_FALLBACK_TIMEOUT_SECONDS`。回退不重试已返回但未通过 Schema 校验的输出，`/ready` 仍只检查本地模型。DeepSeek 不支持严格 `json_schema`，回退时改用 JSON 模式并继续用 Pydantic 校验，不会退回宽松文本解析。启用回退意味着业务输入会发送到云端，需按数据合规要求决定。
+云端回退默认关闭：只有 `LLM_FALLBACK_ENABLED=true` 且提供非空 `LLM_FALLBACK_API_KEY` 时才启用。设为 `false` 后即使保留密钥也只调用本地模型，总预算为 `LLM_TIMEOUT_SECONDS`；开关开启但密钥为空或纯空白时也不启用回退。启用后，本地 Ollama/vLLM 的模型调用因连接失败、超时或上游 HTTP 错误抛出异常时，本次调用改用回退模型重试一次，总预算为 `LLM_TIMEOUT_SECONDS + LLM_FALLBACK_TIMEOUT_SECONDS`。回退不重试已返回但未通过 Schema 校验的输出，`/ready` 仍只检查本地模型。DeepSeek 不支持严格 `json_schema`，回退时改用 JSON 模式并继续用 Pydantic 校验，不会退回宽松文本解析。启用回退意味着业务输入会发送到云端，需按数据合规要求决定。
+
+开发（`.env.example`）和 Linux 生产（`scripts/prod/api.env.example`）均在各自部署的根目录 `.env` 中配置：
+
+```dotenv
+# 开启回退；关闭时改为 false，无需删除密钥。
+LLM_FALLBACK_ENABLED=true
+LLM_FALLBACK_API_KEY=<云端服务密钥>
+```
+
+修改后重启 API。已有部署若仅配置了回退密钥，升级后需补充 `LLM_FALLBACK_ENABLED=true` 才继续启用。Docker 生产在 `docker/prod.env` 中设置同名变量，再执行 `docker compose --env-file docker/prod.env -f compose.prod.yml up -d api` 重建 API 容器以加载配置；仅 `restart` 不会更新容器环境变量。
 
 开启 LangSmith 时，还需在进程环境提供其凭据；追踪可能包含业务输入和模型输出。项目默认不会上传追踪。
 
-OCR 相对路径均以仓库根目录解析。没有模板时仍可启动智能体；模板接口返回 `503` 提示配置资源。已有 daolu_v6 资料的本机配置示例见 [OCR 路径配置](docs/ocr.md#路径配置)。模板和业务文件不随代码迁移或提交。RapidOCR 的 ONNX 模型开发环境首次识别时自动下载；离线或容器部署用 `uv run --locked python -m scripts.models.download_ocr_models` 预置到 `.cache/models/ocr/` 后只读挂载，详见 [Docker 生产部署](docs/docker.md#2-准备权重)。
+OCR 相对路径均以仓库根目录解析。新版监理日记模板 `app/ocr/journal/templates/journal.json` 随代码和镜像发布；源 PDF、业务照片及识别输出不进镜像。旧模板/资料目录仍用于静态诊断，路径含义见 [OCR 资源与路径](docs/ocr.md#资源与路径)。RapidOCR 的 ONNX 模型开发环境首次识别时自动下载；离线或容器部署用 `uv run --locked python -m scripts.models.download_ocr_models` 预置到 `.cache/models/ocr/` 后只读挂载，详见 [Docker 生产部署](docs/docker.md#2-准备权重)。
 
 Mac 后台运行：
 
@@ -217,7 +225,7 @@ pyright 以 `basic` 模式检查整个 `app/`，包含 Agent 和 OCR；Ruff 格�
 
 ### 接口契约、Swagger 与 API-First
 
-[interfaces/](interfaces/README.md) 是对外接口文档的唯一入口，包含正式契约、待确认草案、业务指南和变更记录。当前 14 个 HTTP 操作全部有文档，其中 `/agents/*`、`/health`、`/ready` 标记为 `confirmed`；`/diagnostics`、`/ocr/*`、`/wbs/draft` 的完整响应/错误契约标记为 `pending-review`，见 [待确认草案](interfaces/drafts/README.md)。
+[interfaces/](interfaces/README.md) 是对外接口文档的唯一入口，包含正式契约、待确认草案、业务指南和变更记录。当前 8 个 HTTP 操作全部有文档，其中 `/agents/*`、`/health`、`/ready` 标记为 `confirmed`；`/diagnostics`、`/ocr/daily-logs-new` 的完整响应/错误契约标记为 `pending-review`，见 [待确认草案](interfaces/drafts/README.md)。
 
 - Swagger UI：启动 API 后访问 <http://127.0.0.1:8309/docs>；ReDoc 为 `/redoc`，运行时 OpenAPI 为 `/openapi.json`。这些是当前实现的投影，不是正式契约。
 - 完整 OpenAPI 草案：[interfaces/drafts/fastapi.openapi.json](interfaces/drafts/fastapi.openapi.json)，覆盖请求、成功响应、400/404/422/502/503/504 错误以及每个操作的副作用和幂等说明。
@@ -238,9 +246,8 @@ app/
     router.py             # 聚合 Router，由主应用统一 include_router
     agents.py             # /agents：日志总结、意图识别、聊天
     system.py             # /health、/ready、/diagnostics：存活、模型就绪与本地诊断
-    ocr.py                # /ocr：识别、监理日志、简表、填表与表样
-    wbs.py                # /wbs/draft：施工图划分初稿
-  ocr/                    # 文档加工业务（core 原语与资源 / form 照片模板对齐识别 / sheets 表样格子与 Excel / jianbiao 简表识别与公式填表 / daily_logs 旧监理日志 / journal 新版监理日志与 mainWork 拆分 / wbs_draft 划分初稿）
+    ocr.py                # /ocr/daily-logs-new：监理日记table模板识别
+  ocr/                    # core共享引擎/资源/诊断；journal：table模板、匹配和mainWork拆分
   http_errors.py          # 输入与模型异常的统一 HTTP 映射、校验详情脱敏
   config.py               # .env 配置与默认值
   schemas/                # 请求、响应的 Pydantic 模型和校验
@@ -257,7 +264,7 @@ app/
     history.py            # 请求局部历史、预算及完整回合裁剪
     profiles.py           # 归档端扁平意图的标签、提示词与输出模型配置
     log_summary.py        # 工程表单 OCR 日志描述（兼容通用日志）
-    main_work.py          # 监理日志 mainWork 原文单元分类（不生成字段文本）
+    main_work.py          # 监理日志 mainWork 全文生成（关键词规则不足时兜底）
     intent.py             # 扁平归档意图流程（复用 IntentProfile）
     intent_business.py    # 层级业务意图、page/action 校验与一级意图澄清
     intent_catalog.py     # 生成目录的只读运行时视图
@@ -266,7 +273,7 @@ app/
   prompts/
     __init__.py           # 按模块路径加载提示词，不依赖当前工作目录
     log_summary.md        # 各业务独立维护的系统提示词
-    main_work.md          # mainWork 单元分类边界与 unknown 规则
+    main_work.md          # mainWork 三部分生成与事实/关键数据保留规则
     intent/
       business.md         # 业务端层级意图识别规则
       business_clarify.md # 一级意图澄清措辞
@@ -358,7 +365,7 @@ api_router.include_router(example.router)
 
 开发和上线使用同一份业务代码及 `uv.lock`，通过脚本目录与模型配置区分。Linux 不执行 Homebrew、launchd 或 Ollama 安装；vLLM 独立于业务 `.venv`。脚本清单见 [scripts/README.md](scripts/README.md)，后台托管示例见 [Linux 部署说明](docs/deployment-linux.md)。
 
-容器化部署使用两个镜像（业务 API 与 vLLM 模型服务）和 [compose.prod.yml](compose.prod.yml)，权重由宿主机只读挂载；构建、GGUF 基础镜像选择与验收见 [Docker 生产部署](docs/docker.md)。下文是不使用容器的脚本部署方式。
+容器化部署使用两个镜像（业务 API 与 vLLM 模型服务）和 [compose.prod.yml](compose.prod.yml)，权重由宿主机只读挂载。业务镜像包含 Python 3.12、CUDA 12.9.1 和 cuDNN 9，默认使用 GPU OCR；Compose 面向 Linux x86_64，单卡 vLLM 初始显存预算为 0.75，为 OCR 留出余量，仍需实机验收。RTX 5090 Laptop 的权重预下载、迁移校验、构建及 Agent/OCR 分别验收见 [Docker 生产部署](docs/docker.md)。下文是不使用容器的脚本部署方式。
 
 先在 Linux 安装 uv，再准备业务环境：
 

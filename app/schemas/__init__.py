@@ -30,14 +30,6 @@ from app.schemas.base import (
     StrictModel,
 )
 from app.schemas.intent_catalog_generated import BusinessActionLabel, BusinessPageLabel
-from app.schemas.ocr import (
-    DailyLogsReq,
-    DraftReq,
-    FillReq,
-    JianbiaoReq,
-    OCRRequest,
-    RecognizeReq,
-)
 
 __all__ = [
     "ArchiveIntentClassification",
@@ -55,20 +47,14 @@ __all__ = [
     "ChatResponse",
     "ClarifyRequest",
     "ConversationRequest",
-    "DailyLogsReq",
     "Description",
-    "DraftReq",
-    "FillReq",
     "Identifier",
     "IntentDefinition",
     "IntentReason",
     "IntentRequest",
-    "JianbiaoReq",
     "LogSummary",
     "LogSummaryRequest",
-    "OCRRequest",
     "PendingClarification",
-    "RecognizeReq",
     "RequestContext",
     "ShortText",
     "StrictModel",

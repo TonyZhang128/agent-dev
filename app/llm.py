@@ -62,8 +62,10 @@ class ModelService:
 
     @property
     def fallback_enabled(self) -> bool:
-        """配置了回退密钥才启用；key 为空时保持原有行为。"""
-        return bool(self.settings.llm_fallback_api_key.get_secret_value().strip())
+        """显式开启且配置非空密钥才启用，关闭时可保留云端凭据。"""
+        return self.settings.llm_fallback_enabled and bool(
+            self.settings.llm_fallback_api_key.get_secret_value().strip()
+        )
 
     @property
     def inference_timeout_seconds(self) -> float:
@@ -88,7 +90,7 @@ class ModelService:
 
     def fallback_chat_model(self, *, temperature: float = 0) -> ChatOpenAI:
         if not self.fallback_enabled:
-            raise RuntimeError("fallback model requested without LLM_FALLBACK_API_KEY")
+            raise RuntimeError("fallback model requested while cloud fallback is disabled")
         if temperature not in self._fallback_models:
             self._fallback_models[temperature] = self._create_model(
                 model=self.settings.llm_fallback_model,

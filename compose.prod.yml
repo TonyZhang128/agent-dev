@@ -1,6 +1,7 @@
 # 生产编排：业务 API + 独立 vLLM 模型服务（两个镜像、两个环境）。
 #
-#   cp docker/env.example docker/prod.env && chmod 600 docker/prod.env
+#   test -f docker/prod.env || cp docker/env.example docker/prod.env
+#   chmod 600 docker/prod.env
 #   # 编辑 docker/prod.env，至少填写 VLLM_MODEL_DIR、VLLM_MODEL_PATH、VLLM_API_KEY
 #   docker compose -f compose.prod.yml --env-file docker/prod.env build
 #   docker compose -f compose.prod.yml --env-file docker/prod.env up -d
@@ -10,6 +11,8 @@ name: highway-agent
 
 services:
   model:
+    # 当前 GGUF 插件镜像及 OCR GPU wheel 都按 Linux x86_64 发布。
+    platform: linux/amd64
     build:
       context: .
       dockerfile: Dockerfile.vllm
@@ -46,7 +49,7 @@ services:
       - --max-model-len
       - "${VLLM_MAX_MODEL_LEN:-8192}"
       - --gpu-memory-utilization
-      - "${VLLM_GPU_MEMORY_UTILIZATION:-0.90}"
+      - "${VLLM_GPU_MEMORY_UTILIZATION:-0.75}"
       - --reasoning-parser
       - qwen3
       - --default-chat-template-kwargs
@@ -66,7 +69,8 @@ services:
               count: ${VLLM_GPU_COUNT:-1}
               capabilities: [gpu]
 
-  api:
+  docsvc:
+    platform: linux/amd64
     build:
       context: .
       dockerfile: Dockerfile
@@ -86,18 +90,21 @@ services:
       CONVERSATION_MAX_INPUT_CHARACTERS: ${CONVERSATION_MAX_INPUT_CHARACTERS:-1000000}
       # 思考开关由模型服务 chat template 控制，生产默认不再传 reasoning_effort。
       LLM_REASONING_EFFORT: ${LLM_REASONING_EFFORT:-}
-      # 可选云端回退；留空 key 即关闭。启用后本地调用失败时会把本次业务输入发送到该服务。
+      # 可选云端回退；开关与非空密钥需同时具备，关闭时可保留密钥。
+      LLM_FALLBACK_ENABLED: ${LLM_FALLBACK_ENABLED:-false}
       LLM_FALLBACK_BASE_URL: ${LLM_FALLBACK_BASE_URL:-https://api.deepseek.com}
       LLM_FALLBACK_MODEL: ${LLM_FALLBACK_MODEL:-deepseek-flash}
       LLM_FALLBACK_API_KEY: ${LLM_FALLBACK_API_KEY:-}
       LLM_FALLBACK_TIMEOUT_SECONDS: ${LLM_FALLBACK_TIMEOUT_SECONDS:-60}
       LLM_FALLBACK_REASONING_EFFORT: ${LLM_FALLBACK_REASONING_EFFORT-none}
       AGENT_RECURSION_LIMIT: ${AGENT_RECURSION_LIMIT:-8}
+      MAIN_WORK_SPLIT_TIMEOUT_SECONDS: ${MAIN_WORK_SPLIT_TIMEOUT_SECONDS:-30}
+      MAIN_WORK_SPLIT_CONCURRENCY: ${MAIN_WORK_SPLIT_CONCURRENCY:-1}
       LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
       LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
       # 与下面的只读挂载点一致；宿主机目录由 OCR_MODEL_DIR 指定。
       OCR_MODEL_ROOT: /app/data/ocr/models
-      # OCR 推理设备：生产默认使用 GPU CUDA EP；无 GPU 主机在 docker/prod.env 改为 cpu。
+      # 镜像包含 CUDA/cuDNN；切换为 cpu 可独立排查 OCR，不影响 vLLM 使用 GPU。
       OCR_DEVICE: ${OCR_DEVICE:-cuda}
     # 业务 API 默认分配 GPU；与 vLLM 共享同一块 GPU 时保持 1。
     # 无 GPU 主机需改用覆盖文件移除本段，并把 OCR_DEVICE 设为 cpu。
@@ -111,31 +118,7 @@ services:
     ports:
       # 默认只绑定回环，由部署平台的反向代理暴露 TLS 与鉴权。
       - "${API_BIND_ADDRESS:-127.0.0.1}:${API_HOST_PORT:-8309}:8309"
-    volumes:
-      # 与 Java 服务共用同一数据池；模板与资料只读，projects 需要写入。
-      - type: bind
-        source: ${OCR_TEMPLATES_DIR:?请在 docker/prod.env 设置 OCR_TEMPLATES_DIR}
-        target: /app/data/ocr/templates
-        read_only: true
-        bind:
-          create_host_path: false
-      - type: bind
-        source: ${OCR_ADMIN_DIR:?请在 docker/prod.env 设置 OCR_ADMIN_DIR}
-        target: /app/data/ocr/admin
-        read_only: true
-        bind:
-          create_host_path: false
-      - type: bind
-        source: ${OCR_ASSETS_DIR:?请在 docker/prod.env 设置 OCR_ASSETS_DIR}
-        target: /app/data/ocr/assets
-        read_only: true
-        bind:
-          create_host_path: false
-      - type: bind
-        source: ${OCR_PROJECTS_DIR:?请在 docker/prod.env 设置 OCR_PROJECTS_DIR}
-        target: /app/data/ocr/projects
-        bind:
-          create_host_path: false
+    volumes:      
       # OCR 模型由宿主机脚本预置，容器只读挂载；禁止自动创建空目录掩盖配置错误。
       # 缺少模型时 /ocr/* 返回 503，不会在运行时自动联网补齐。
       - type: bind

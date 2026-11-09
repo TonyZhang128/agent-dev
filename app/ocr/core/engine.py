@@ -1,5 +1,7 @@
 """本机 RapidOCR 引擎：单例加载、全局推理锁、模型缺失统一报 OCRModelError（无业务）。"""
 
+import math
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, TypedDict, runtime_checkable
 
@@ -20,6 +22,15 @@ class OCRBox(TypedDict):
     s: str
     box: list[float]
     conf: float
+
+
+@dataclass(frozen=True)
+class TextDetection:
+    """模型返回的文字四点框；顶点顺序沿用检测结果，不退化为外接矩形。"""
+
+    text: str
+    polygon: tuple[tuple[float, float], ...]
+    confidence: float
 
 
 def rapidocr_params(model_root: Path, use_cuda: bool = True) -> dict[str, object]:
@@ -79,7 +90,7 @@ class _OCROutput(Protocol):
     def scores(self) -> object: ...
 
 
-def _output_boxes(result: object) -> list[OCRBox]:
+def _output_detections(result: object) -> list[TextDetection]:
     """校验第三方完整输出；单阶段或不完整结果不能伪装成无文字。"""
     invalid_output = "OCR 模型输出不完整，请检查检测与识别模型的运行状态"
     if not isinstance(result, _OCROutput):
@@ -96,22 +107,25 @@ def _output_boxes(result: object) -> list[OCRBox]:
         or not len(boxes) == len(texts) == len(scores)
     ):
         raise OCRModelError(invalid_output)
-    out: list[OCRBox] = []
+    detections: list[TextDetection] = []
     try:
         for points, text, confidence in zip(boxes, texts, scores, strict=True):
             if not isinstance(text, str):
                 raise ValueError("OCR 文字必须为字符串")
-            xs, ys = [float(p[0]) for p in points], [float(p[1]) for p in points]
-            out.append(
-                {"s": text, "box": [min(xs), min(ys), max(xs), max(ys)], "conf": float(confidence)}
-            )
+            polygon = tuple((float(point[0]), float(point[1])) for point in points)
+            score = float(confidence)
+            if not all(
+                math.isfinite(coordinate) for point in polygon for coordinate in point
+            ) or not math.isfinite(score):
+                raise ValueError("OCR 坐标和置信度必须有限")
+            detections.append(TextDetection(text, polygon, min(max(score, 0.0), 1.0)))
     except (TypeError, ValueError) as exc:
         raise OCRModelError(invalid_output) from exc
-    return out
+    return detections
 
 
-def ocr(img: np.ndarray) -> list[OCRBox]:
-    """单图 OCR → [{s, box:[x0,y0,x1,y1](像素), conf}];模型不可用时抛 OCRModelError。"""
+def detect_text(img: np.ndarray) -> list[TextDetection]:
+    """应用锁内执行一次完整 OCR，验证模型输出并保留多边形。"""
     with get_resources().lock:
         try:
             result = engine()(img)
@@ -119,4 +133,21 @@ def ocr(img: np.ndarray) -> list[OCRBox]:
             raise
         except Exception as exc:  # noqa: BLE001 —— 模型文件缺失或下载失败发生在首次推理时
             raise OCRModelError(MODEL_UNAVAILABLE) from exc
-    return _output_boxes(result)
+    return _output_detections(result)
+
+
+def ocr(img: np.ndarray) -> list[OCRBox]:
+    """兼容原有矩形输出；复用同一次推理，不额外调用模型。"""
+    return [
+        {
+            "s": detection.text,
+            "box": [
+                min(point[0] for point in detection.polygon),
+                min(point[1] for point in detection.polygon),
+                max(point[0] for point in detection.polygon),
+                max(point[1] for point in detection.polygon),
+            ],
+            "conf": detection.confidence,
+        }
+        for detection in detect_text(img)
+    ]

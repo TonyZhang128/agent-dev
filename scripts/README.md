@@ -20,9 +20,7 @@
 | Linux 完整验收 | `bash scripts/prod/verify.sh` | NVIDIA 信息、运行中 API 的业务验收及完整意图、日志评测集、通用真实推理 |
 | 通用业务验收 | `uv run --locked python -m scripts.common.verify_agents` | Mac/Linux；调用运行中的 API，验收完整意图及日志评测集 |
 | 通用推理验收 | `uv run --locked python -m scripts.common.verify_live` | Mac/Linux；直调 Agent、ASGI、TCP；不检查硬件 |
-| OCR 真实验收 | `uv run --locked python -m scripts.common.verify_ocr --photo <数据池相对路径> --form JB12-4.2.2` | 调运行中 API，检查真实识别、简表、填表与 WBS；报告在 verification/ocr |
-| 新版监理日志批量识别 | `uv run --locked python -m scripts.ocr.bench_journal <照片目录或文件>` | 本地批量运行 `app.ocr.journal`，结果写入 `verification/ocr/journal-bench.json` |
-| 监理日志栏目可视化 | `uv run --locked python -m scripts.ocr.draw_journal_fields <照片>` | 不调用 OCR，把 FIELD_SPECS 画到校正页和原照片；默认输出 `verification/ocr/journal-fields-*.png` |
+| OCR 真实验收 | `uv run --locked python -m scripts.common.verify_ocr --photo <数据池相对路径> [--task-id <任务 ID>]` | 调运行中 API，检查新版监理日志识别；报告在 verification/ocr |
 | OpenAPI 草案导出 | `uv run --locked python -m scripts.docs.export_openapi` | 从当前应用导出到 `interfaces/drafts/`，拒绝写入正式契约目录 |
 | 接口评审文档渲染 | `uv run --locked python -m scripts.docs.render_api_markdown` | 把契约渲染为 `interfaces/API.md`；只读视图，不手工维护 |
 | OpenAPI 契约校验 | `uv run --locked python -m scripts.docs.check_openapi` | 比较契约与实现；有正式契约时优先检查正式契约，不写文件 |
@@ -42,7 +40,9 @@ Linux 完整步骤、配置和后台托管见 [部署说明](../docs/deployment-
 
 `scripts/docs/` 只服务于接口契约：`export_openapi` 从 `app.main:app` 生成待确认草案，默认写入 `interfaces/drafts/fastapi.openapi.json`；`render_api_markdown` 把同一契约渲染为 `interfaces/API.md` 评审文档；`check_openapi` 只比较契约与实现并返回非零状态，不覆盖任何契约。正式契约必须由用户批准后人工提升到 `interfaces/openapi/`，详见 [接口文档](../interfaces/README.md) 和 [AGENTS.md 第四节](../AGENTS.md#四接口契约与-api-first-开发流程)。
 
-`scripts/ocr/` 完整迁入 docsvc 的 16 个脚本，并新增新版监理日志批量脚本 `bench_journal` 和栏目可视化脚本 `draw_journal_fields`；统一从仓库根目录以 `uv run --locked python -m scripts.ocr.<名称>` 调用。模板生成会写入配置的模板目录，应先备份；`demo_jianbiao` 会上传到 Java 服务，仅在显式需要演示数据时运行。各脚本用途、参数与资源要求见 [OCR 文档](../docs/ocr.md#辅助脚本)。
+`scripts/ocr/build_journal_template.py` 从指定 PDF 离线构建监理日记模板；`scripts/ocr/inspect_journal.py` 读取指定照片，输出单次 OCR 诊断、字段覆盖图和规则拆分报告，默认不调用 LLM。完整命令见 [模板识别维护](../docs/journal-template-recognition.md)。已删除的旧 docsvc 工具不由本次重构恢复。
+
+容器部署前在开发机预置两类模型，并分别运行 `scripts.models.download_qwen35_gguf --check` 与 `scripts.models.download_ocr_models --check`。完整目录迁移和 SHA256 清单见 [Docker 部署](../docs/docker.md#2-准备权重)。`scripts.common.verify_agents` 只覆盖 Agent；照片 OCR 及 CUDA EP 需要按该文档独立验收，不能从 Agent 回归通过推断 OCR 可用。
 
 真实验收会调用模型，报告写入忽略提交的 `verification/`。业务验收报告 `agents-live-result.json` 的每条 `checks` 记录包含实际请求体 `request` 和 API 输出 `response`。设置 `BUSINESS_API_URL` 可验证其他地址的 API，模型直调仍读取当前进程及根目录 `.env` 的 `LLM_*` 配置，二者需对应同一部署。Linux 验收使用 `--no-sync --no-dev`，避免安装开发工具或在验收时修改环境。
 

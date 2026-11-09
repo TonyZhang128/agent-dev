@@ -1,154 +1,198 @@
-# Docker 生产部署（业务 API + vLLM）
+# Docker 生产部署：Agent + OCR
 
-本说明描述用容器部署生产环境：业务 API 与 vLLM 模型服务是**两个镜像、两个环境**，通过 Compose 编排在同一台 GPU 主机上。业务镜像不含模型权重；构建时通过 `--extra ocr-gpu` 安装 `onnxruntime-gpu`（与 CPU 版 extra `ocr-cpu` 互斥），Compose 默认 `OCR_DEVICE=cuda` 并给 API 容器预留 GPU；无 GPU 主机改为 `cpu` 并移除预留（速度较慢）。模型镜像不含业务依赖。宿主机预置权重，容器只读挂载，构建阶段不下载模型。
+业务 API 与 vLLM 是两个镜像、两个 Python 环境；通过 Compose 内部网络通信。
+本方案面向 Linux x86_64 + NVIDIA GPU，当前目标为 RTX 5090 Laptop GPU、
+Qwen3.5 9B Q4_K_M。LLM 与 OCR 权重提前下载，放在宿主机并只读挂载。
 
-非容器部署方式见 [Linux + NVIDIA 部署](deployment-linux.md)。
+API 镜像基于 `nvidia/cuda:12.9.1-cudnn-runtime-ubuntu24.04`，安装 Python 3.12，
+通过锁文件的 `ocr-gpu` extra 安装 `onnxruntime-gpu==1.24.4`。
+builder/runtime 使用同一基础环境，镜像包含 CUDA 12.9.1 与 cuDNN 9 用户态库。
+宿主机提供 NVIDIA 驱动与 Container Toolkit，无需另行挂载 CUDA 库。
+构建阶段校验 OpenCV、ONNX Runtime 和 CUDA/cuDNN 动态库能否加载，真实 CUDA EP
+初始化仍必须在服务器执行。`ocr-cpu` 与 `ocr-gpu` 不得同时安装。
 
-## 1. 前置条件
+非容器方式见 [Linux 部署](deployment-linux.md)。
 
-- Linux + NVIDIA GPU，驱动可见：`nvidia-smi`。
-- Docker 24+ 与 Compose v2，已安装并验证 [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)：
+## 1. 服务器前置检查
 
-  ```bash
-  docker run --rm --gpus all nvidia/cuda:12.9.1-base-ubuntu24.04 nvidia-smi
-  ```
+```bash
+uname -m
+nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv
+docker version
+docker compose version
+```
 
-- CUDA 12 + cuDNN 9 用户态库：`onnxruntime-gpu` 不自带这些库，当前业务镜像基于 `python:3.12-slim`，也不包含它们；默认 `OCR_DEVICE=cuda` 时需改用带 CUDA 运行库的基础镜像或挂载对应库，否则 `/ocr/*` 返回 503。仅把 GPU 设备挂进容器不足以让 CUDA EP 初始化。
-- 宿主机已准备 Python 3.12 环境仅供**验收脚本**使用；镜像构建本身不需要本机 Python。
+- CPU 架构应为 `x86_64`。Compose 显式使用 `linux/amd64`；当前 GPU wheel 不支持 Linux ARM64。
+- 显存以 `nvidia-smi` 为准，不使用桌面版 RTX 5090 的显存数据估算 Laptop GPU。
+- 安装支持该 GPU、满足 CUDA 12.9 镜像要求的驱动。`nvidia-smi` 的 CUDA Version 是驱动
+  支持的上限，不代表宿主机或容器已经安装对应 Toolkit。
+- 使用当前维护的 Docker Engine 与 Compose 插件。
+  Ubuntu 安装见 [Docker 官方说明](https://docs.docker.com/engine/install/ubuntu/)，
+  GPU 容器支持见 [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)。
+- Blackwell 对应的 CUDA/cuDNN 组合见 [NVIDIA 支持矩阵](https://docs.nvidia.com/deeplearning/cudnn/backend/v9.7.0/reference/support-matrix.html)。
+  ONNX Runtime 的版本要求见 [CUDA EP 文档](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html)。
+
+新装主机安装 Toolkit 后执行；已有容器的主机应在维护窗口重启 Docker：
+
+```bash
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+docker run --rm --gpus all nvidia/cuda:12.9.1-base-ubuntu24.04 nvidia-smi
+```
+
+后续命令在服务器项目根目录执行，除非标为“开发机”。服务器只构建和运行容器时，
+不需要在宿主机安装 Python、uv 或 vLLM。
 
 ## 2. 准备权重
 
-`qwen3.5:9b-q4_K_M` 是 Ollama 风格的标签，vLLM 需要具体的 GGUF 文件或 Hugging Face 仓库。
-
-### 用脚本下载（推荐）
-
-仓库自带下载脚本，只看 ModelScope，不需要 GPU 或 vLLM：
+在已安装项目环境的开发机执行；已有正确文件会复用，不使用 `--force`：
 
 ```bash
-# 在仓库检出目录执行；默认 Q4_K_M，落到 .cache/models/qwen3.5-9b-q4_k_m/
-uv run --locked python -m scripts.models.download_qwen35_gguf
-# 离线校验已有目录（大小、sha256、GGUF 架构、config/tokenizer 是否齐全）
-uv run --locked python -m scripts.models.download_qwen35_gguf --check
-# 查看仓库里的量化版本与体积
-uv run --locked python -m scripts.models.download_qwen35_gguf --list
+uv run --locked --no-sync python -m scripts.models.download_qwen35_gguf
+uv run --locked --no-sync python -m scripts.models.download_qwen35_gguf --check
+uv run --locked --no-sync python -m scripts.models.download_ocr_models
+uv run --locked --no-sync python -m scripts.models.download_ocr_models --check
 ```
 
-脚本下载 `unsloth/Qwen3.5-9B-GGUF` 的 `Qwen3.5-9B-Q4_K_M.gguf`（约 5.3 GiB），再从 `Qwen/Qwen3.5-9B` 补齐 `config.json`、`tokenizer.json`、`tokenizer_config.json`、`vocab.json`、`merges.txt`、`chat_template.jinja` 等文件，逐个比对 ModelScope 给出的 sha256，并写 `MANIFEST.json` 记录来源与提交号。中断后重跑会从 `.part` 续传。
+首次准备开发环境使用 `uv sync --locked --group dev --extra ocr-cpu`。
+下载结果不进 Git，也不打进镜像：
 
-目录内必须是「一个 `.gguf` + config + tokenizer」：
-
-- vLLM 的 GGUF 加载器用 `check_gguf_file()` 判断格式，`--model` 指到**目录**会当成普通 HF 模型加载并失败；
-- 判定为 GGUF 后，vLLM 取 `Path(model).parent` 作为 config/tokenizer 所在目录，所以两者必须与 `.gguf` 同级。
-
-把该目录整体拷到 GPU 主机的 `VLLM_MODEL_DIR` 即可（例如 `rsync -avh .cache/models/qwen3.5-9b-q4_k_m/ gpu-host:/srv/models/qwen3.5-9b-q4_k_m/`）。`--vision` 下载的 `mmproj-F16.gguf` 放在 `vision/` 子目录，文本推理用不到，也不放进模型根目录。
-
-GGUF 只含语言权重。若所用分支把该文件按多模态类 `Qwen3_5ForConditionalGeneration` 加载、因缺少视觉张量报错，按官方 README 的 Text-Only 配方追加 `--language-model-only`；该参数需要分支支持。
-
-### 手工准备
-
-把以下文件放到一个宿主机目录（下称 `VLLM_MODEL_DIR`）：
-
-| 文件 | 说明 |
-| --- | --- |
-| `*.gguf` | Q4_K_M 权重，例如 `Qwen3.5-9B-Q4_K_M.gguf` |
-| `config.json` | 来自生成该 GGUF 的原始 Qwen3.5-9B 仓库 |
-| tokenizer 文件 | `tokenizer.json`、`tokenizer_config.json`、`special_tokens_map.json` 等 |
-
-GGUF 文件与 tokenizer/`config.json` 必须来自同一模型版本。文件名必须与 `VLLM_MODEL_PATH` 一致。权重不提交到 Git，也不打进镜像。
-
-> 部分 GGUF 仓库（例如 `daniloreddy/Qwen3.5-9B_GGUF` 或 `unsloth/Qwen3.5-9B-GGUF`）只发布量化权重；`config.json` 和 tokenizer 需从对应的上游仓库单独获取。使用前确认模型许可证与量化来源。
-
-### 基础镜像与权重格式必须匹配
-
-| 权重 | `VLLM_BASE_IMAGE` | 说明 |
-| --- | --- | --- |
-| Q4_K_M GGUF | `ghcr.io/efschu/shvllm-qwen35-gguf:cu129` | vLLM 已移除内置 GGUF 加载；该分支镜像提供 Qwen3.5 GGUF 支持。第三方镜像，升级前需自行验证 |
-| BF16 / 反量化权重 | `vllm/vllm-openai:v0.32.0`（默认） | 官方镜像。`exolabs/Qwen3.5-9B-Q4KM-dequant-bf16-vllm` 是 Q4_K_M 反量化版本，显存约 18–20GB |
-
-用官方镜像加载 `.gguf` 会失败。若组织内禁止第三方镜像，改用反量化 BF16 权重并把 `VLLM_BASE_IMAGE` 切回官方镜像。
-
-### OCR 模型（RapidOCR）
-
-业务 API 使用 3 个 ONNX 模型：PP-OCRv6 Medium 检测、PP-OCRv6 Medium 识别、PP-OCRv5 Server 方向分类（约 139 MiB）。它们同样不打包进镜像，由仓库脚本按运行时参数下载并校验 sha256：
-
-```bash
-# 下载到仓库 .cache/models/ocr/；已存在且校验通过的文件会跳过
-uv run --locked python -m scripts.models.download_ocr_models
-# 离线校验目标目录，不联网
-uv run --locked python -m scripts.models.download_ocr_models --check --root /srv/models/ocr
-# 直接下载到宿主机部署目录
-uv run --locked python -m scripts.models.download_ocr_models --root /srv/models/ocr
+```text
+.cache/models/
+├── qwen3.5-9b-q4_k_m/
+│   ├── Qwen3.5-9B-Q4_K_M.gguf
+│   ├── config.json
+│   ├── tokenizer.json / tokenizer_config.json
+│   ├── vocab.json / merges.txt / chat_template.jinja
+│   └── LICENSE / MANIFEST.json / 其他配置文件
+└── ocr/
+    ├── PP-OCRv6_det_medium.onnx
+    ├── PP-OCRv6_rec_medium.onnx
+    └── ch_PP-LCNet_x1_0_textline_ori_cls_server.onnx
 ```
 
-把该目录配到 `OCR_MODEL_DIR`，容器只读挂载到 `/app/data/ocr/models`。完全离线的部署可在有网机器下载后整目录拷贝到目标主机，再用 `--check` 校验。目录不存在时 Compose 直接报错；缺少模型时 `/ocr/*` 返回 `503`，其他接口不受影响。不要用 `docker cp` 或命名卷代替挂载，升级、迁移和回滚都以宿主机目录为准。
+GGUF 约 5.3 GiB，OCR 三个模型约 139 MiB。下载脚本按来源 sha256 校验；GGUF 清单记录
+ModelScope 来源和修订。`qwen3.5:9b-q4_K_M` 是 Ollama 标签，vLLM 使用具体 GGUF 文件。
+GGUF 必须与 config/tokenizer 同级。只部署文本模型，不需要 `--vision` 的 mmproj。
 
-## 3. 配置
+校验成功后，在开发机生成迁移清单（Mac 自带 `shasum`）：
 
 ```bash
-cp docker/env.example docker/prod.env
+(cd .cache/models && shasum -a 256 qwen3.5-9b-q4_k_m/* ocr/*.onnx > SHA256SUMS)
+```
+
+此命令面向上述仅含文件的默认目录。若另下载了 `vision/`，应单独为其生成清单。
+
+服务器先创建新的模型目录和数据池，给部署账号授予模型目录写权限。共享已有 Java
+数据池时保留原属主，按现有权限方案授权，不批量重置属主：
+
+```bash
+sudo mkdir -p /srv/models/qwen3.5-9b-q4_k_m /srv/models/ocr
+sudo mkdir -p /srv/highway-agent/data/ocr/{templates,admin,assets,projects}
+# 仅适用于上面新建的独立模型目录：
+sudo chown "$USER:$(id -gn)" /srv/models /srv/models/qwen3.5-9b-q4_k_m /srv/models/ocr
+```
+
+从开发机上传（把 `user@server` 替换为实际 SSH 目标）：
+
+```bash
+rsync -avh .cache/models/qwen3.5-9b-q4_k_m/ user@server:/srv/models/qwen3.5-9b-q4_k_m/
+rsync -avh .cache/models/ocr/ user@server:/srv/models/ocr/
+rsync -avh .cache/models/SHA256SUMS user@server:/srv/models/SHA256SUMS
+```
+
+服务器校验，所有条目必须为 `OK`：
+
+```bash
+cd /srv/models
+sha256sum --check SHA256SUMS
+```
+
+权重齐全只表示可以开始推理验收，不表示识别或分类质量已通过。
+
+## 3. 代码、模板和配置
+
+部署与开发机验收对应的 Git 版本。获取代码后进入仓库根目录：
+
+```bash
+git clone https://github.com/TonyZhang128/agent-dev.git
+cd agent-dev
+git rev-parse --short HEAD
+test -f docker/prod.env || cp docker/env.example docker/prod.env
 chmod 600 docker/prod.env
 ```
 
-至少填写：
+已有 `docker/prod.env` 时保留它并逐项补充，不覆盖真实密钥。
+当前监理日记模板是代码中的 `app/ocr/journal/templates/journal.json`，随镜像发布；
+本地 `data/ocr/resources/` 的源 PDF、照片及业务输出不进镜像。
+`templates/admin/assets` 挂载仍服务于现有诊断；不是新版 journal 的模板来源。
+
+至少核对：
 
 ```dotenv
+VLLM_BASE_IMAGE=ghcr.io/efschu/shvllm-qwen35-gguf:cu129
 VLLM_MODEL_DIR=/srv/models/qwen3.5-9b-q4_k_m
 VLLM_MODEL_PATH=/models/Qwen3.5-9B-Q4_K_M.gguf
-VLLM_API_KEY=<与业务 LLM_API_KEY 相同的随机密钥>
+VLLM_SERVED_MODEL_NAME=highway-agent
+VLLM_API_KEY=替换为随机长密钥
+HF_HUB_OFFLINE=1
+VLLM_GPU_COUNT=1
+VLLM_GPU_MEMORY_UTILIZATION=0.75
+VLLM_MAX_MODEL_LEN=8192
+LLM_CONTEXT_TOKENS=8192
+LLM_REASONING_EFFORT=
+OCR_DEVICE=cuda
+OCR_GPU_COUNT=1
+OCR_MODEL_DIR=/srv/models/ocr
 OCR_TEMPLATES_DIR=/srv/highway-agent/data/ocr/templates
 OCR_ADMIN_DIR=/srv/highway-agent/data/ocr/admin
 OCR_ASSETS_DIR=/srv/highway-agent/data/ocr/assets
 OCR_PROJECTS_DIR=/srv/highway-agent/data/ocr/projects
-OCR_MODEL_DIR=/srv/models/ocr
+API_BIND_ADDRESS=127.0.0.1
+API_HOST_PORT=8309
+MAIN_WORK_SPLIT_TIMEOUT_SECONDS=30
+MAIN_WORK_SPLIT_CONCURRENCY=1
 ```
 
-要点：
-
-- `VLLM_MODEL_DIR` 与五个 `OCR_*_DIR` 必须是**已存在的宿主机绝对路径**；Compose 配置了 `create_host_path: false`，路径不存在会直接报错，而不是静默创建空目录。`OCR_MODEL_DIR` 需先用下载脚本预置。
-- `VLLM_MODEL_PATH` 指向 `.gguf` 文件而不是目录，且必须与 `VLLM_MODEL_DIR` 里的文件名一致；换量化版本（`--quant Q5_K_M` 等）后要同步修改。
-- `VLLM_MAX_MODEL_LEN` 必须与 `LLM_CONTEXT_TOKENS` 一致（默认 8192）。vLLM 默认上下文远大于业务预算，会浪费显存。
-- `LLM_MODEL` 固定为 `VLLM_SERVED_MODEL_NAME`（默认 `highway-agent`），`/ready` 以此校验服务端模型列表。
-- `LLM_REASONING_EFFORT` 留空；思考模式由 `--default-chat-template-kwargs '{"enable_thinking": false}'` 关闭。
-- 业务容器以 UID/GID `10001` 运行。挂载目录需对该用户可读，`OCR_PROJECTS_DIR` 需可写：
-
-  ```bash
-  sudo chown -R 10001:10001 /srv/highway-agent/data/ocr/projects
-  sudo chmod -R a+rX /srv/highway-agent/data/ocr/{templates,admin,assets} /srv/models/ocr
-  ```
-
-- 容器启动时会执行 `scripts/prod/check_config.py`，拒绝 Ollama 地址、`qwen3.5:*` 开发模型名和 `CHANGE_ME`/`ollama` 占位密钥。
-- OCR 模型以只读 bind mount 挂到 `/app/data/ocr/models`，来源是 `OCR_MODEL_DIR`；Compose 已把容器内 `OCR_MODEL_ROOT` 固定为同一路径，容器内目录不可写，也不会在运行时重新下载。缺少模型时 `/ocr/*` 返回 `503`，其他接口不受影响。
+- vLLM 与 OCR 共享单卡时，`0.75` 是保守起始预算，仍需按实际显存和并发调整；它不是
+  显存隔离。若为 24 GiB，vLLM 的初始目标约 18 GiB，余量还需容纳 OCR、桌面及其他进程。
+- `VLLM_MAX_MODEL_LEN` 与 `LLM_CONTEXT_TOKENS` 保持一致。模型思考由服务端 chat template 关闭。
+- API 的 `LLM_MODEL` 自动取 `VLLM_SERVED_MODEL_NAME`，密钥自动取 `VLLM_API_KEY`。
+  容器不读取宿主机根目录 `.env`；只有 Compose 明确转发的变量进入容器。
+- 所有挂载源目录必须已存在；`create_host_path: false` 会拒绝不存在的路径。
+  API 以 UID/GID `10001` 运行，需能遍历目录、读取模型与照片；按共享数据池约定配置写权限。
+- 云端回退默认关闭；只在明确需要时设置 `LLM_FALLBACK_ENABLED=true` 与对应密钥。
+- 当前 GGUF 方案使用第三方插件镜像。标签存在不等于目标 GPU 验收通过，确认后应记录
+  镜像 digest。改用 BF16 权重时才选择对应官方 vLLM 镜像和模型目录。
+  [vLLM GGUF 文档](https://docs.vllm.ai/en/latest/features/quantization/gguf/)说明其插件依赖与限制。
+- 如果 GGUF 加载报缺视觉张量，先核对插件和模型配置，再检查该分支是否支持
+  `--language-model-only`；不要通过下载不匹配的视觉权重掩盖错误。
 
 ## 4. 构建与启动
 
 ```bash
-docker compose -f compose.prod.yml --env-file docker/prod.env build
-docker compose -f compose.prod.yml --env-file docker/prod.env up -d
-docker compose -f compose.prod.yml --env-file docker/prod.env ps
+dc() {
+  docker compose -f compose.prod.yml --env-file docker/prod.env "$@"
+}
+
+dc config --quiet
+dc build
+dc up -d
+dc ps
+dc logs --tail=100 model api
 ```
 
-首次启动需要加载模型，健康检查 `start_period` 默认 15 分钟，按权重体积和磁盘速度调整 `VLLM_START_PERIOD`。
+首次模型加载可能较慢，`VLLM_START_PERIOD` 默认 15 分钟。API 可以提前启动，
+不等待模型健康；模型未就绪前 `/ready` 应失败。使用 `config --quiet` 避免把展开的密钥
+打印到终端记录。构建上下文通过 `.dockerignore` 排除生产变量、模型和业务样本。
 
-查看日志与停止：
+当前机器是 ARM Mac 时只允许进行 `linux/amd64` 仿真构建/CPU 冒烟验证，不在 Mac
+执行整套需要 NVIDIA 的 Compose。服务器完全离线时，还需在联网环境构建对应 amd64
+镜像并用 `docker save` / `docker load` 迁移；只有权重预下载不能让镜像构建离线完成。
 
-```bash
-docker compose -f compose.prod.yml --env-file docker/prod.env logs -f model
-docker compose -f compose.prod.yml --env-file docker/prod.env logs -f api
-docker compose -f compose.prod.yml --env-file docker/prod.env down
-```
+## 5. 分层验收
 
-`down` 不会删除权重或数据池目录（都是宿主机 bind mount）。不要加 `-v`，也不要对宿主机目录做批量清理。
-
-### 只重新部署业务 API
-
-```bash
-docker compose -f compose.prod.yml --env-file docker/prod.env build api
-docker compose -f compose.prod.yml --env-file docker/prod.env up -d --no-deps api
-```
-
-模型服务不随业务代码变更重启。
-
-## 5. 验证
+### 存活、模型就绪与静态诊断
 
 ```bash
 curl -fsS http://127.0.0.1:8309/health
@@ -156,43 +200,92 @@ curl -fsS http://127.0.0.1:8309/ready
 curl -fsS http://127.0.0.1:8309/diagnostics
 ```
 
-`/health` 只表示 API 进程存活；`/ready` 会请求 vLLM 的 `/models`，只有模型已加载且名称一致才返回 200。`/diagnostics` 只做本地静态检查，覆盖运行库、ONNX Runtime 与 `OCR_DEVICE` 一致性、OCR 模板、模型目录和数据池；`data.ok=false` 时仍返回 HTTP 200。
+`/health` 不访问模型，`/ready` 只检查上游模型列表；`/diagnostics` 不初始化引擎，
+即使 `data.ok=false` 也返回 200。缺少旧表样库时诊断可能失败，需逐项判断，不能
+把该结果等同于新版 journal 定位失败，也不能用 provider 名称证明 CUDA 实际初始化。
 
-真实业务验收在仓库检出目录执行，指向容器暴露的 API：
+### OCR CUDA EP 真实初始化（服务器）
 
 ```bash
-BUSINESS_API_URL=http://127.0.0.1:8309 \
-  uv run --locked --no-sync --no-dev python -m scripts.common.verify_agents
+dc exec -T api python - <<'PY'
+import onnxruntime as ort
+from app.config import Settings
+
+settings = Settings()
+assert settings.ocr_device == "cuda", "当前不是 GPU OCR 配置"
+for name in (
+    "PP-OCRv6_det_medium.onnx",
+    "PP-OCRv6_rec_medium.onnx",
+    "ch_PP-LCNet_x1_0_textline_ori_cls_server.onnx",
+):
+    session = ort.InferenceSession(
+        str(settings.ocr_model_root / name), providers=["CUDAExecutionProvider"]
+    )
+    assert session.get_providers()[0] == "CUDAExecutionProvider", name
+    print(name, session.get_providers())
+    del session
+PY
 ```
 
-报告写入 `verification/`。`nvidia-smi` 或容器可见 GPU 只说明驱动正常，是否实际占用显存需结合 vLLM 日志与 `nvidia-smi` 进程查看。
+上述命令分别检查三个实际 ONNX 会话的 CUDA provider；缺库、设备不可见或回退 CPU 都不能算通过。
+排查时可以将 `OCR_DEVICE=cpu` 并重建 API 容器，但必须把这次结果标为 CPU 验证。
+整个 Compose 的 vLLM 服务仍需要 NVIDIA GPU。
 
-## 6. 变量与端口
+### Agent 业务回归（开发机通过 SSH 隧道）
 
-| 变量 | 作用 |
-| --- | --- |
-| `VLLM_MODEL_DIR` / `VLLM_MODEL_PATH` | 宿主机权重目录 / 容器内模型路径 |
-| `VLLM_BASE_IMAGE` | 模型服务基础镜像，需与权重格式匹配 |
-| `VLLM_API_KEY` | vLLM 原生鉴权变量，同时注入业务 API 的 `LLM_API_KEY` |
-| `VLLM_MAX_MODEL_LEN` | vLLM 上下文上限，必须等于 `LLM_CONTEXT_TOKENS` |
-| `VLLM_GPU_COUNT` / `VLLM_GPU_MEMORY_UTILIZATION` | GPU 数量与显存占比 |
-| `OCR_GPU_COUNT` | 分配给业务 API 容器的 GPU 数量，默认 1；与 vLLM 共享同一块 GPU 时需调低 `VLLM_GPU_MEMORY_UTILIZATION` 给 OCR 留显存 |
-| `OCR_DEVICE` | OCR 推理设备，Compose 默认 `cuda`；无 GPU 主机改为 `cpu` |
-| `API_BIND_ADDRESS` / `API_HOST_PORT` | 业务 API 对外绑定，默认仅 `127.0.0.1:8309` |
-| `OCR_*_DIR` | OCR 数据池宿主机路径；`OCR_MODEL_DIR` 为预置的 ONNX 模型目录 |
-| `LANGSMITH_TRACING` / `LANGSMITH_API_KEY` | 默认关闭；开启后追踪可能包含业务输入 |
+开发机保留项目依赖和验收数据，服务器无需为验收额外装开发依赖：
 
-模型服务只在 Compose 内部网络暴露 `8001`，不发布宿主机端口。业务 API 默认只绑定回环地址；对外入口由部署平台的反向代理负责 TLS 与访问控制。**主应用没有自定义身份认证**，`user_id`/`session_id` 不是权限凭据，不要直接把 8309 暴露到公网。
+```bash
+ssh -N -L 18309:127.0.0.1:8309 user@server
+```
 
-## 7. 升级与回滚
+另开开发机终端，在仓库根目录执行：
 
-- 业务代码：重新构建 `api` 镜像并 `up -d --no-deps api`；镜像标签默认取 `APP_VERSION`，建议每次发布显式传 `APP_VERSION=<git describe>` 以便回滚。
-- 模型或 vLLM：修改 `VLLM_BASE_IMAGE`/`VLLM_MODEL_PATH` 后重建 `model` 服务；切换模型名时同步 `VLLM_SERVED_MODEL_NAME`，否则 `/ready` 失败。
-- 回滚到旧镜像：把 `APP_VERSION` 改回旧值并 `up -d`，不要删除旧镜像前先确认新版本验收通过。
+```bash
+BUSINESS_API_URL=http://127.0.0.1:18309 LLM_MODEL=highway-agent \
+  uv run --locked --no-sync python -m scripts.common.verify_agents
+```
 
-## 8. 已知限制
+报告位于 `verification/agents-live-result.json`。该脚本验证 Agent，**不验证照片 OCR**；
+若还运行模型直调验收，其 `LLM_*` 必须同样指向这次服务器部署。
 
-- 当前仓库的配置校验与启动脚本沿用 `scripts/prod/`；容器没有内置真实验收脚本，验收需在仓库检出目录运行。
-- `ghcr.io/efschu/shvllm-qwen35-gguf:cu129` 是社区分支镜像，未经本项目维护者验证；生产使用前应在目标 GPU 与驱动上完成加载、结构化输出和长上下文测试。
-- 本仓库未在 Linux + NVIDIA 实机执行过本 Compose 部署；已执行的验证见交付说明。Mac 上的离线测试不能替代 GPU 验收。
-- 业务镜像按 `API_WORKERS=1` 启动。提高 worker 数会让每个进程各自加载 OCR 引擎，需先评估内存。
+### 真实 OCR 照片与并发验收
+
+把独立标注的同版式照片放到服务器数据池 `projects/acceptance/journal.jpg`，确保 UID
+10001 可读；在服务器执行（开发机则把端口改为 SSH 隧道的 18309）：
+
+```bash
+mkdir -p verification/ocr
+curl --fail-with-body http://127.0.0.1:8309/ocr/daily-logs-new \
+  -H 'Content-Type: application/json' \
+  -d '{"path":"acceptance/journal.jpg","taskId":"deploy-check-001"}' \
+  -o verification/ocr/deploy-check-001.json
+```
+
+逐项核对日期、项目名、编号、数值单位及施工/旁站/巡视内容，不以 HTTP 200 或非空字段
+数量代替内容验收。另测空白纸、错误版式、无效路径和 Agent/OCR 同时请求；记录样本数、
+字段正确率、失败案例、耗时和 `nvidia-smi` 显存峰值。无可用真实标注样本时标记未验证。
+无效表格应返回既有 400，不能全空成功；API 路径必须位于 PROJECTS_ROOT 内。
+
+## 6. 更新、访问与回滚
+
+只更新业务代码：
+
+```bash
+dc build api
+dc up -d --no-deps api
+```
+
+修改 `docker/prod.env` 后使用 `up -d` 重建对应容器；单独 `restart` 不加载新环境变量。
+多个 worker 会各自加载 OCR 模型，默认保持一个。当前应用无身份认证，8309 保留回环
+绑定，对外访问由反向代理提供 TLS 和访问控制；模型 8001 仅在 Compose 内部网络开放。
+
+每次发布使用独立 `APP_VERSION` 并记录模型镜像 digest，确认新版本验收后再处理旧镜像。
+回滚时恢复旧配置与镜像标签，使用 `dc up -d --no-build`，避免重新构建覆盖旧标签。
+`dc down` 停止本项目容器，宿主机 bind mount 中的模型与数据不删除。
+
+## 7. 验证边界
+
+本地检查、amd64 仿真构建、动态库加载和 CPU OCR 都不能替代 RTX 5090 Laptop 的实际
+CUDA 推理、GGUF 模型加载、结构化输出、长上下文及双服务并发验收。每次发布应分别
+记录本地检查与服务器验收结果，不能只根据容器 `healthy` 标记宣布功能可用。
