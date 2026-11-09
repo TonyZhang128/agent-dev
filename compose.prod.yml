@@ -69,7 +69,7 @@ services:
               count: ${VLLM_GPU_COUNT:-1}
               capabilities: [gpu]
 
-  api:
+  docsvc:
     platform: linux/amd64
     build:
       context: .
@@ -118,31 +118,7 @@ services:
     ports:
       # 默认只绑定回环，由部署平台的反向代理暴露 TLS 与鉴权。
       - "${API_BIND_ADDRESS:-127.0.0.1}:${API_HOST_PORT:-8309}:8309"
-    volumes:
-      # 与 Java 服务共用同一数据池；模板与资料只读，projects 需要写入。
-      - type: bind
-        source: ${OCR_TEMPLATES_DIR:?请在 docker/prod.env 设置 OCR_TEMPLATES_DIR}
-        target: /app/data/ocr/templates
-        read_only: true
-        bind:
-          create_host_path: false
-      - type: bind
-        source: ${OCR_ADMIN_DIR:?请在 docker/prod.env 设置 OCR_ADMIN_DIR}
-        target: /app/data/ocr/admin
-        read_only: true
-        bind:
-          create_host_path: false
-      - type: bind
-        source: ${OCR_ASSETS_DIR:?请在 docker/prod.env 设置 OCR_ASSETS_DIR}
-        target: /app/data/ocr/assets
-        read_only: true
-        bind:
-          create_host_path: false
-      - type: bind
-        source: ${OCR_PROJECTS_DIR:?请在 docker/prod.env 设置 OCR_PROJECTS_DIR}
-        target: /app/data/ocr/projects
-        bind:
-          create_host_path: false
+    volumes:      
       # OCR 模型由宿主机脚本预置，容器只读挂载；禁止自动创建空目录掩盖配置错误。
       # 缺少模型时 /ocr/* 返回 503，不会在运行时自动联网补齐。
       - type: bind

@@ -24,10 +24,16 @@ ENV UV_COMPILE_BYTECODE=1 \
 WORKDIR /app
 COPY --from=uv /uv /uvx /bin/
 # 先安装锁定依赖，改业务代码时复用该层；生产不安装 dev 依赖，OCR 使用 GPU CUDA EP。
+
+# Python 依赖镜像源
+ARG PYPI_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-dev --no-install-project --extra ocr-gpu --python /usr/bin/python3.12
-
+    uv sync --locked --no-dev --no-install-project \
+      --extra ocr-gpu \
+      --python /usr/bin/python3.12 \
+      --default-index "${PYPI_INDEX_URL}"
+      
 FROM python-base AS runtime
 
 LABEL org.opencontainers.image.title="highway-agent-api" \

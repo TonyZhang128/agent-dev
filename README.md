@@ -2,7 +2,7 @@
 
 基于 LangChain 1.4.6、FastAPI 和 Pydantic 的公路工程业务智能体开发项目。主要为公路工程数据智采，业务平台，管理平台，归档组卷平台等提供智能体与AI算法服务。
 
-开发环境为 macOS + Ollama + Qwen3.5 9B Q4_K_M，上线环境为 Linux + NVIDIA + 独立 vLLM；业务 API 统一通过 OpenAI 兼容协议调用模型。
+开发环境为 macOS + Ollama + Qwen3.5 9B Q4_K_M，生产环境为 Linux + NVIDIA +  vLLM推理引擎；业务 API 统一通过 OpenAI 兼容协议调用模型。
 
 包版本为 `0.1.0`（`pyproject.toml`）；当前 OpenAPI 标题为“公路工程业务智能体”、版本为 `0.1.0`（`app/main.py`）。两者分别维护项目包元信息与 API 文档元信息。三个智能体均通过 `langchain.agents.create_agent()` 执行，HTTP 层使用按领域组织的 `APIRouter`。
 
