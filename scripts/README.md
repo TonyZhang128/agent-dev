@@ -16,7 +16,7 @@
 | Linux 前台 API | `bash scripts/prod/start-api.sh` | 不同步依赖，拒绝 reload；允许传入其他 uvicorn 参数 |
 | Linux 前台模型服务 | `bash scripts/prod/start-vllm.sh [vLLM 参数]` | NVIDIA 检查、独立 vLLM 环境；不安装驱动或模型 |
 | 模型权重下载 | `uv run --locked python -m scripts.models.download_qwen35_gguf [--quant Q4_K_M\|--vision\|--check\|--list]` | 从 ModelScope 下 GGUF 并补齐 config.json、tokenizer，落到 `.cache/models/`，供 vLLM 挂载 |
-| OCR 模型下载 | `uv run --locked python -m scripts.models.download_ocr_models [--root <目录>\|--check]` | 下载 PP-OCRv6 Medium + PP-OCRv5 Server 三个 ONNX 到 `.cache/models/ocr/`，校验 sha256，供只读挂载 |
+| OCR 模型下载 | `uv run --locked python -m scripts.models.download_ocr_models [--root <目录>\|--check]` | 下载 PP-OCRv6 Medium + PP-OCRv5 Server 三个 ONNX 到 `.cache/models/ocr/`，校验 sha256，供离线预置 |
 | Linux 完整验收 | `bash scripts/prod/verify.sh` | NVIDIA 信息、运行中 API 的业务验收及完整意图、日志评测集、通用真实推理 |
 | 通用业务验收 | `uv run --locked python -m scripts.common.verify_agents` | Mac/Linux；调用运行中的 API，验收完整意图及日志评测集 |
 | 通用推理验收 | `uv run --locked python -m scripts.common.verify_live` | Mac/Linux；直调 Agent、ASGI、TCP；不检查硬件 |
@@ -36,7 +36,7 @@ Linux 完整步骤、配置和后台托管见 [部署说明](../docs/deployment-
 
 `scripts/models/download_qwen35_gguf.py` 只做下载与校验，不需要 GPU 或 vLLM：默认取 `unsloth/Qwen3.5-9B-GGUF` 的 `Qwen3.5-9B-Q4_K_M.gguf`，再从 `Qwen/Qwen3.5-9B` 补齐 `config.json` 与 tokenizer，按 ModelScope 文件列表的 sha256 校验后写入 `.cache/models/qwen3.5-9b-q4_k_m/`。GGUF 不能单独作为 vLLM 模型：GGUF 加载器要求 `--model` 指向 `.gguf` 文件，并按 `Path(model).parent` 读取同目录的 `config.json` 与 tokenizer。`--vision` 才下载 mmproj，且放进 `vision/` 子目录；`--check` 离线校验已有目录；中断后保留 `.part`，重跑即续传。下载结果与容器变量的对应见 [Docker 生产部署](../docs/docker.md#2-准备权重)。
 
-`scripts/models/download_ocr_models.py` 复用运行时的 `rapidocr_params()`，保证预下载的模型与实际识别一致；默认写入 `.cache/models/ocr/`，`--root` 可指向部署目录，`--check` 只做离线文件和 sha256 校验。容器部署通过 `OCR_MODEL_DIR` 只读挂载该目录，容器内不再联网下载；完全离线时在有网机器下载后整目录拷贝过去。下载源与运行时相同，均为 ModelScope 上的 RapidOCR 3.x 模型。
+`scripts/models/download_ocr_models.py` 复用运行时的 `rapidocr_params()`，保证预下载的模型与实际识别一致；默认写入 `.cache/models/ocr/`，`--root` 可指向部署目录，`--check` 只做离线文件和 sha256 校验。容器部署可通过 `OCR_MODEL_DIR` 可读写挂载该目录；留空时使用命名卷，首次 OCR 可自动下载缺失模型；完全离线时在有网机器下载后整目录拷贝过去。下载源与运行时相同，均为 ModelScope 上的 RapidOCR 3.x 模型。
 
 `scripts/docs/` 只服务于接口契约：`export_openapi` 从 `app.main:app` 生成待确认草案，默认写入 `interfaces/drafts/fastapi.openapi.json`；`render_api_markdown` 把同一契约渲染为 `interfaces/API.md` 评审文档；`check_openapi` 只比较契约与实现并返回非零状态，不覆盖任何契约。正式契约必须由用户批准后人工提升到 `interfaces/openapi/`，详见 [接口文档](../interfaces/README.md) 和 [AGENTS.md 第四节](../AGENTS.md#四接口契约与-api-first-开发流程)。
 

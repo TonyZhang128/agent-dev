@@ -23,14 +23,20 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_CACHE_DIR=/root/.cache/uv
 WORKDIR /app
 COPY --from=uv /uv /uvx /bin/
-# 先安装锁定依赖，改业务代码时复用该层；生产不安装 dev 依赖，OCR 使用 GPU CUDA EP。
+# 先安装锁定依赖，改业务代码时复用该层；生产不安装 dev 依赖，OCR 按 OCR_DEVICE 二选一安装。
 
 # Python 依赖镜像源
+ARG OCR_DEVICE=cuda
 ARG PYPI_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-dev --no-install-project \
-      --extra ocr-gpu \
+    case "$OCR_DEVICE" in \
+      cpu) OCR_EXTRA=ocr-cpu ;; \
+      cuda) OCR_EXTRA=ocr-gpu ;; \
+      *) echo "OCR_DEVICE 仅允许 cpu 或 cuda" >&2; exit 1 ;; \
+    esac \
+ && uv sync --locked --no-dev --no-install-project \
+      --extra "$OCR_EXTRA" \
       --python /usr/bin/python3.12 \
       --default-index "${PYPI_INDEX_URL}"
       

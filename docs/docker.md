@@ -2,7 +2,7 @@
 
 业务 API 与 vLLM 是两个镜像、两个 Python 环境；通过 Compose 内部网络通信。
 本方案面向 Linux x86_64 + NVIDIA GPU，当前目标为 RTX 5090 Laptop GPU、
-Qwen3.5 9B Q4_K_M。LLM 与 OCR 权重提前下载，放在宿主机并只读挂载。
+Qwen3.5 9B Q4_K_M。LLM 权重提前下载并从宿主机只读挂载；OCR 权重可预置，也可首次使用时自动下载。
 
 API 镜像基于 `nvidia/cuda:12.9.1-cudnn-runtime-ubuntu24.04`，安装 Python 3.12，
 通过锁文件的 `ocr-gpu` extra 安装 `onnxruntime-gpu==1.24.4`。
@@ -289,3 +289,47 @@ dc up -d --no-deps api
 本地检查、amd64 仿真构建、动态库加载和 CPU OCR 都不能替代 RTX 5090 Laptop 的实际
 CUDA 推理、GGUF 模型加载、结构化输出、长上下文及双服务并发验收。每次发布应分别
 记录本地检查与服务器验收结果，不能只根据容器 `healthy` 标记宣布功能可用。
+
+
+## OCR CPU/CUDA 依赖切换
+
+统一保留 CUDA 12.9.1 + cuDNN 9 基础镜像。`docker/prod.env` 的 `OCR_DEVICE`
+同时传入构建参数和容器环境：`cpu` 仅安装 `ocr-cpu`（onnxruntime），`cuda` 仅安装
+`ocr-gpu`（onnxruntime-gpu）。未设置时默认 cuda，空值或其他值在构建时失败。
+沿用 pyproject.toml 中已有的互斥 extra，不在容器启动时同步或安装依赖。
+
+修改配置后执行：
+
+```bash
+docker compose -f compose.prod.yml --env-file docker/prod.env up -d --build --no-deps docsvc
+```
+
+仅 restart 不会更新依赖或容器环境；不要跳过重新构建。终端导出的 OCR_DEVICE
+优先于 env-file，部署前应确认没有旧值。手动构建使用 --build-arg OCR_DEVICE=cpu
+或 cuda，并确保容器运行环境的 OCR_DEVICE 与构建一致。
+
+CPU 模式也保留 CUDA 库、API 的 GPU reservation 和原镜像标签；它适用于已有 NVIDIA
+部署上切换 OCR 推理设备，不使当前 Compose 成为无 GPU 部署方案。vLLM 配置不变，
+两种模式共用 ONNX 模型文件。目标服务器仍需分别构建镜像并执行真实 OCR 验收。
+
+
+## OCR 权重可选与自动下载
+
+`OCR_MODEL_DIR` 不再必填。留空或删除该配置时，Compose 创建 `ocr-models` 命名卷挂载到
+`/app/data/ocr/models`。镜像中该目录归 UID 10001 所有，空命名卷首次挂载继承目录权限，
+RapidOCR 在首次 OCR 请求时自动下载缺失模型，之后复用缓存；API 启动本身不会下载。
+容器重建保留命名卷，`docker compose down -v` 会删除缓存。
+
+若填写宿主机路径，则以可读写方式挂载并允许 Docker 创建缺失目录。Docker 自动创建的
+宿主机目录可能归 root 所有，因此推荐无预置权重时留空使用命名卷；使用自定义宿主机目录
+时，由部署账号提前创建并按现有权限策略授予容器 UID 10001 写权限，不批量修改已有数据属主。
+已有完整权重直接复用，缺失权重需要目录可写且容器能访问模型下载源。离线部署仍需预置。
+
+```dotenv
+# 自动下载到命名卷，无需宿主机权重目录
+OCR_MODEL_DIR=
+```
+
+修改后执行 `docker compose -f compose.prod.yml --env-file docker/prod.env up -d --no-deps docsvc`
+重建容器挂载；同时修改 OCR_DEVICE 时需追加 `--build`。下载失败沿用现有 OCR 错误处理，
+不影响 `/health` 进程存活检查，首次 OCR 包含下载耗时。

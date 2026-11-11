@@ -93,7 +93,7 @@ test -f .env || cp .env.example .env
 | `ADMIN_ROOT` | `data/ocr/admin` | 管理端资料目录（优先查找 PDF/Excel） |
 | `ASSET_ROOT` | `data/ocr/assets` | 规范 PDF/Excel 资料目录 |
 | `PROJECTS_ROOT` | `data/ocr/projects` | 与 Java 共用的业务数据池，限制文件读写边界 |
-| `OCR_MODEL_ROOT` | `.cache/models/ocr` | RapidOCR ONNX 模型目录；开发环境自动下载，离线部署预置后只读使用 |
+| `OCR_MODEL_ROOT` | `.cache/models/ocr` | RapidOCR ONNX 模型目录；首次使用可自动下载；离线部署需预置模型 |
 | `OCR_DEVICE` | `cpu` | OCR 推理设备：`cpu`（默认，适合无 NVIDIA GPU 的开发/Mac 环境）或 `cuda`（需 CUDA 12 + cuDNN 9，同时通过 `--extra ocr-gpu` 安装 onnxruntime-gpu）；cuda 不可用时接口返回 503 |
 | `OCR_CUDA_ROOT` | `.cache/cuda` | 仅 cuda 模式：Windows 可将 NVIDIA redist 解压到此目录免系统安装，需 CUDA 12 + cuDNN 9 |
 
@@ -111,7 +111,7 @@ LLM_FALLBACK_API_KEY=<云端服务密钥>
 
 开启 LangSmith 时，还需在进程环境提供其凭据；追踪可能包含业务输入和模型输出。项目默认不会上传追踪。
 
-OCR 相对路径均以仓库根目录解析。新版监理日记模板 `app/ocr/journal/templates/journal.json` 随代码和镜像发布；源 PDF、业务照片及识别输出不进镜像。旧模板/资料目录仍用于静态诊断，路径含义见 [OCR 资源与路径](docs/ocr.md#资源与路径)。RapidOCR 的 ONNX 模型开发环境首次识别时自动下载；离线或容器部署用 `uv run --locked python -m scripts.models.download_ocr_models` 预置到 `.cache/models/ocr/` 后只读挂载，详见 [Docker 生产部署](docs/docker.md#2-准备权重)。
+OCR 相对路径均以仓库根目录解析。新版监理日记模板 `app/ocr/journal/templates/journal.json` 随代码和镜像发布；源 PDF、业务照片及识别输出不进镜像。旧模板/资料目录仍用于静态诊断，路径含义见 [OCR 资源与路径](docs/ocr.md#资源与路径)。RapidOCR 的 ONNX 模型首次识别时可自动下载；Docker 的 `OCR_MODEL_DIR` 留空时使用可写命名卷缓存，指定宿主机目录时需允许容器 UID 10001 写入。离线部署用 `uv run --locked python -m scripts.models.download_ocr_models` 预置到 `.cache/models/ocr/` 后挂载，详见 [Docker 生产部署](docs/docker.md#2-准备权重)。
 
 Mac 后台运行：
 
@@ -365,7 +365,7 @@ api_router.include_router(example.router)
 
 开发和上线使用同一份业务代码及 `uv.lock`，通过脚本目录与模型配置区分。Linux 不执行 Homebrew、launchd 或 Ollama 安装；vLLM 独立于业务 `.venv`。脚本清单见 [scripts/README.md](scripts/README.md)，后台托管示例见 [Linux 部署说明](docs/deployment-linux.md)。
 
-容器化部署使用两个镜像（业务 API 与 vLLM 模型服务）和 [compose.prod.yml](compose.prod.yml)，权重由宿主机只读挂载。业务镜像包含 Python 3.12、CUDA 12.9.1 和 cuDNN 9，默认使用 GPU OCR；Compose 面向 Linux x86_64，单卡 vLLM 初始显存预算为 0.75，为 OCR 留出余量，仍需实机验收。RTX 5090 Laptop 的权重预下载、迁移校验、构建及 Agent/OCR 分别验收见 [Docker 生产部署](docs/docker.md)。下文是不使用容器的脚本部署方式。
+容器化部署使用两个镜像（业务 API 与 vLLM 模型服务）和 [compose.prod.yml](compose.prod.yml)，LLM 权重由宿主机只读挂载，OCR 权重可预置或按需下载。业务镜像包含 Python 3.12、CUDA 12.9.1 和 cuDNN 9，默认使用 GPU OCR；`docker/prod.env` 的 `OCR_DEVICE=cpu` 或 `cuda` 同时选择构建时的互斥 OCR extra，切换后需重新构建 API 镜像；Compose 面向 Linux x86_64，单卡 vLLM 初始显存预算为 0.75，为 OCR 留出余量，仍需实机验收。RTX 5090 Laptop 的权重预下载、迁移校验、构建及 Agent/OCR 分别验收见 [Docker 生产部署](docs/docker.md)。下文是不使用容器的脚本部署方式。
 
 先在 Linux 安装 uv，再准备业务环境：
 
