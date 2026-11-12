@@ -78,6 +78,11 @@ OCR_DEVICE=cpu # OCR推理设备，默认cpu，win/linux可选cuda
 
 ### 1.4、Docker 部署
 
+无 GPU 主机、OCR 仅用 CPU 且 LLM 调用云端时，使用独立的
+[Dockerfile.cpu](Dockerfile.cpu)、[compose.cpu.yml](compose.cpu.yml) 和
+[docker/cpu.env.example](docker/cpu.env.example)，步骤见
+[CPU OCR + 云端 LLM](docs/docker.md#10cpu-ocr--云端-llm)。该方案不部署本地 LLM。
+
 生产编排面向 **Linux x86_64 + NVIDIA GPU**，算法服务与模型推理服务分别运行在独立容器中。先按 [Docker 部署说明](docs/docker.md) 准备驱动、Container Toolkit、模型权重和数据目录，再在仓库根目录创建配置：
 
 ```bash

@@ -8,6 +8,7 @@
 .env
 .env.*
 docker/prod.env
+docker/cpu.env
 .secrets/
 
 # 本地环境、缓存、日志和验收输出。

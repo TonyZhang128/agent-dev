@@ -2,6 +2,7 @@
 .env
 # Compose 生产变量文件含真实密钥，只提交模板。
 /docker/prod.env
+/docker/cpu.env
 .cache/
 .logs/
 .models/

@@ -1,5 +1,8 @@
 # Docker 生产部署：Agent + OCR
 
+无 GPU 主机请直接使用[第 10 节：CPU OCR + 云端 LLM](#10cpu-ocr--云端-llm)。
+以下第 1–9 节描述现有 NVIDIA + 本地 vLLM 方案。
+
 算法服务与 vLLM 是两个镜像、两个 Python 环境；通过 Compose 内部网络通信。
 本方案面向 Linux x86_64 + NVIDIA GPU，当前目标为 RTX 5090 Laptop GPU、
 Qwen3.5 9B Q4_K_M。LLM 权重提前下载并从宿主机只读挂载；OCR 权重可预置，也可首次使用时自动下载。
@@ -373,3 +376,66 @@ OCR_MODEL_DIR=
 修改后执行 `docker compose -f compose.prod.yml --env-file docker/prod.env up -d --no-deps agent-service`
 重建容器挂载；同时修改 OCR_DEVICE 时需追加 `--build`。下载失败沿用现有 OCR 错误处理，
 不影响 `/health` 进程存活检查，首次 OCR 包含下载耗时。
+
+## 10、CPU OCR + 云端 LLM
+
+`Dockerfile.cpu` 使用 Python 3.12 slim 多阶段构建，仅安装锁定的 `ocr-cpu` 运行依赖，
+不包含 CUDA/cuDNN、GPU ONNX Runtime 或 LLM 权重。`compose.cpu.yml` 仅启动算法服务，
+不申请 GPU，不需要 NVIDIA 驱动或 Container Toolkit，也不启动 Ollama/vLLM。
+它是独立编排文件，不能与 `compose.prod.yml` 叠加使用。
+
+在仓库根目录执行：
+
+```bash
+test -f docker/cpu.env || cp docker/cpu.env.example docker/cpu.env
+chmod 600 docker/cpu.env
+# 编辑 docker/cpu.env，替换 LLM_BASE_URL、LLM_MODEL、LLM_API_KEY 三个占位值。
+```
+
+`LLM_BASE_URL` 填供应商的 OpenAI 兼容端点，`LLM_MODEL` 填其实际模型 ID，
+`LLM_API_KEY` 填云端密钥；云端是主模型，直接配置 `LLM_*`，无需启用 `LLM_FALLBACK_*`。
+模型需支持 `ProviderStrategy(strict=True)` 使用的原生 JSON Schema 结构化输出；
+仅兼容普通聊天不够。`LLM_REASONING_EFFORT` 默认留空，按供应商支持情况配置。
+按模型实际上下文限制调整 `LLM_CONTEXT_TOKENS` 和输出预算。
+`/ready` 还要求云端提供兼容的模型列表接口并返回配置模型；它不验证结构化输出效果。
+
+```bash
+docker compose -f compose.cpu.yml --env-file docker/cpu.env config --quiet
+docker compose -f compose.cpu.yml --env-file docker/cpu.env build
+docker compose -f compose.cpu.yml --env-file docker/cpu.env up -d
+docker compose -f compose.cpu.yml --env-file docker/cpu.env ps
+curl -fsS http://127.0.0.1:8309/health
+curl -fsS http://127.0.0.1:8309/ready
+curl -fsS http://127.0.0.1:8309/diagnostics
+```
+
+镜像标签为 `agent-service:<APP_VERSION>-cpu`，与 GPU 镜像区分。Compose 固定
+`OCR_DEVICE=cpu`，不会继承终端的 CUDA 设备配置。默认构建宿主机架构；跨架构发布时，
+单独构建示例为 `docker build --platform linux/amd64 -f Dockerfile.cpu -t agent-service:0.1.0-cpu .`，
+在目标架构进行真实验收后再发布。
+
+OCR 权重默认缓存到本方案的 `ocr-models` 命名卷，首次 OCR 请求联网下载；离线使用
+`OCR_MODEL_DIR` 指向预置目录，权限要求和缓存规则同第 9 节。内置 journal 模板随代码发布。
+base64 照片无需宿主机数据池；使用文件路径或写出结果时，需通过额外的 Compose 覆盖文件
+将已有项目数据池挂载到 `/app/data/ocr/projects`，并授予 UID 10001 必要的读写权限。例如：
+
+```yaml
+# compose.cpu.data.yml；source 替换为已有的宿主机项目数据池。
+services:
+  agent-service:
+    volumes:
+      - type: bind
+        source: /srv/highway-agent/data/ocr/projects
+        target: /app/data/ocr/projects
+        bind:
+          create_host_path: false
+```
+
+使用该覆盖文件时，在上述每条 Compose 命令的 `-f compose.cpu.yml` 后追加
+`-f compose.cpu.data.yml`。不要挂载包含 Ollama 开发默认值的根目录 `.env`。
+`docker/cpu.env` 已同时排除 Git 与镜像构建上下文；不要将真实密钥写入 Dockerfile。
+
+默认只绑定回环地址，仍由部署边界提供 TLS 和访问控制。存活检查通过后，按第 5 节和
+[测试与验收](testing.md) 分别执行真实云端 Agent 与 CPU OCR 业务验收；云端请求会携带
+相应业务内容。无可用云端凭据或业务照片时，这两项应记录为未验证，不能用配置解析
+或镜像构建通过代替。

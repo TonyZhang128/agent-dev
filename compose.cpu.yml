@@ -1,0 +1,38 @@
+# 独立 CPU 部署：只运行算法服务，LLM 直接调用云端 OpenAI 兼容端点。
+# 不与 compose.prod.yml 叠加使用，避免继承本地模型服务和 GPU reservation。
+name: highway-agent-cpu
+services:
+  agent-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.cpu
+    image: agent-service:${APP_VERSION:-0.1.0}-cpu
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+    environment:
+      LLM_BASE_URL: ${LLM_BASE_URL:?请设置云端 LLM_BASE_URL}
+      LLM_MODEL: ${LLM_MODEL:?请设置云端 LLM_MODEL}
+      LLM_API_KEY: ${LLM_API_KEY:?请设置云端 LLM_API_KEY}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-180}
+      LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-2048}
+      LLM_CONTEXT_TOKENS: ${LLM_CONTEXT_TOKENS:-8192}
+      LLM_CONTEXT_MARGIN_TOKENS: ${LLM_CONTEXT_MARGIN_TOKENS:-256}
+      CONVERSATION_MAX_INPUT_CHARACTERS: ${CONVERSATION_MAX_INPUT_CHARACTERS:-1000000}
+      # 默认省略 reasoning_effort；仅在供应商支持时设置。
+      LLM_REASONING_EFFORT: ${LLM_REASONING_EFFORT:-}
+      AGENT_RECURSION_LIMIT: ${AGENT_RECURSION_LIMIT:-8}
+      JOURNAL_TIMEOUT_SECONDS: ${JOURNAL_TIMEOUT_SECONDS:-30}
+      JOURNAL_CONCURRENCY: ${JOURNAL_CONCURRENCY:-1}
+      LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
+      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
+      OCR_DEVICE: cpu
+      OCR_MODEL_ROOT: /app/data/ocr/models
+    ports:
+      - "${API_BIND_ADDRESS:-127.0.0.1}:${API_HOST_PORT:-8309}:8309"
+    volumes:
+      # 留空使用命名卷缓存首次下载的 ONNX 权重。
+      - "${OCR_MODEL_DIR:-ocr-models}:/app/data/ocr/models"
+volumes:
+  ocr-models:

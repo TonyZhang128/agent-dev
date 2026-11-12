@@ -1,0 +1,57 @@
+# syntax=docker/dockerfile:1.7
+# CPU OCR + 云端 LLM：不包含 CUDA/cuDNN 或本地模型推理服务。
+# 构建与运行说明见 docs/docker.md。
+ARG PYTHON_IMAGE=python:3.12-slim-bookworm
+ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.11.19
+
+FROM ${UV_IMAGE} AS uv
+
+# builder/runtime 共用解释器路径，确保复制后的 venv 可直接使用。
+FROM ${PYTHON_IMAGE} AS python-base
+RUN apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      ca-certificates libgl1 libglib2.0-0 libgomp1 libsm6 libxext6 curl tini \
+ && rm -rf /var/lib/apt/lists/*
+
+FROM python-base AS builder
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=0 \
+    UV_CACHE_DIR=/root/.cache/uv
+WORKDIR /app
+COPY --from=uv /uv /uvx /bin/
+ARG PYPI_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+COPY pyproject.toml uv.lock ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-dev --no-install-project --extra ocr-cpu \
+      --python /usr/local/bin/python3.12 --default-index "${PYPI_INDEX_URL}"
+
+FROM python-base AS runtime
+LABEL org.opencontainers.image.title="agent-service" \
+      org.opencontainers.image.description="公路工程智能算法服务（CPU OCR，云端 LLM）"
+RUN groupadd --system --gid 10001 app \
+ && useradd --system --uid 10001 --gid app --home-dir /app --shell /usr/sbin/nologin app
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    TMPDIR=/tmp \
+    API_HOST=0.0.0.0 \
+    API_PORT=8309 \
+    OCR_DEVICE=cpu \
+    OCR_MODEL_ROOT=/app/data/ocr/models
+WORKDIR /app
+COPY --from=builder /app/.venv /app/.venv
+# 构建即检查图像处理动态库和 CPU provider，GPU wheel 误入时立即失败。
+RUN python -c 'import cv2, onnxruntime; from importlib.metadata import distributions; assert "CPUExecutionProvider" in onnxruntime.get_available_providers(); assert "onnxruntime-gpu" not in {d.metadata["Name"] for d in distributions()}'
+COPY app ./app
+COPY scripts/prod/check_config.py ./scripts/prod/check_config.py
+COPY docker/entrypoint-api.sh /usr/local/bin/entrypoint-api.sh
+# OCR 模型使用可写缓存；数据池按需挂载，镜像不携带业务数据或密钥。
+RUN chmod 0755 /usr/local/bin/entrypoint-api.sh \
+ && mkdir -p data/ocr/templates data/ocr/admin data/ocr/assets data/ocr/projects data/ocr/models \
+ && chown -R app:app data scripts
+EXPOSE 8309
+USER app
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+  CMD curl -fsS "http://127.0.0.1:${API_PORT}/health" || exit 1
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint-api.sh"]

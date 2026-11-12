@@ -145,3 +145,69 @@ def test_compose_ocr_models_optional(compose_environment, tmp_path, model_direct
         assert models["type"] == "volume"
         assert models["source"] == "ocr-models"
         assert "ocr-models" in configuration["volumes"]
+
+
+def test_cpu_compose_runs_only_api_with_cloud_llm(compose_environment):
+    docker, environment = compose_environment
+    process = subprocess.run(
+        [
+            docker,
+            "compose",
+            "-f",
+            str(ROOT / "compose.cpu.yml"),
+            "--env-file",
+            str(ROOT / "docker/cpu.env.example"),
+            "config",
+            "--format",
+            "json",
+        ],
+        env=environment
+        | {
+            "LLM_BASE_URL": "https://cloud.example.invalid/v1",
+            "LLM_MODEL": "cloud-model",
+            "LLM_API_KEY": "test-cloud-key",
+            "OCR_DEVICE": "cuda",
+        },
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert process.returncode == 0, process.stderr
+    configuration = json.loads(process.stdout)
+    assert set(configuration["services"]) == {"agent-service"}
+    api = configuration["services"]["agent-service"]
+    assert api["build"]["dockerfile"] == "Dockerfile.cpu"
+    assert api["environment"]["OCR_DEVICE"] == "cpu"
+    assert api["environment"]["LLM_BASE_URL"] == "https://cloud.example.invalid/v1"
+    assert api["environment"]["LLM_MODEL"] == "cloud-model"
+    assert api["environment"]["LLM_API_KEY"] == "test-cloud-key"
+    assert not api.get("depends_on")
+    assert not api.get("gpus")
+    assert not api.get("deploy", {}).get("resources", {}).get("reservations", {}).get("devices")
+    assert api["ports"][0]["host_ip"] == "127.0.0.1"
+    models = next(m for m in api["volumes"] if m["target"] == "/app/data/ocr/models")
+    assert models["type"] == "volume"
+    assert models["source"] in configuration["volumes"]
+
+
+@pytest.mark.parametrize("missing", ["LLM_BASE_URL", "LLM_MODEL", "LLM_API_KEY"])
+def test_cpu_compose_rejects_empty_cloud_configuration(compose_environment, missing):
+    docker, environment = compose_environment
+    process = subprocess.run(
+        [
+            docker,
+            "compose",
+            "-f",
+            str(ROOT / "compose.cpu.yml"),
+            "--env-file",
+            str(ROOT / "docker/cpu.env.example"),
+            "config",
+            "--quiet",
+        ],
+        env=environment | {missing: ""},
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert process.returncode != 0
+    assert missing in process.stderr
