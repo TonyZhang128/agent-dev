@@ -77,10 +77,11 @@ case "${1:-status}" in
     ;;
   restart-api)
     restart_api
+    ;    print '请选择 VS Code 的 Debug agent-service (attach) 连接 127.0.0.1:5678。'
     ;;
   debug-api)
     restart_api --debug
-    print '请选择 VS Code 的 Debug API (attach) 连接 127.0.0.1:5678。'
+    print '请选择 VS Code 的 Debug agent-service (attach) 连接 127.0.0.1:5678。'
     ;;
   status)
     for name in ollama agent-service; do
