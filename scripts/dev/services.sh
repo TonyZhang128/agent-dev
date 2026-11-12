@@ -1,13 +1,14 @@
 #!/bin/zsh
 # 用户会话任务在启动它的 Shell 退出后继续运行；不修改登录文件。
-set -euo pipefail
-cd "${0:A:h:h:h}"
+set -euo pipefail # 有错就退出
+cd "${0:A:h:h:h}" # 进入项目根目录
+# 判断macOS
 [[ "$(uname -s)" == Darwin ]] || { print -u2 '此脚本使用 macOS launchd。'; exit 1; }
 root="$PWD"
 mkdir -p .logs
 
 start_job() {
-  local name="$1" script="$2"
+  local name="$1" script="$2" # 函数位置参数
   shift 2
   local label="local.highway-agent.$name"
   if launchctl list "$label" >/dev/null 2>&1; then
@@ -21,6 +22,7 @@ start_job() {
   fi
   # 保持 Ollama 日志名，算法服务日志使用统一程序标识。
   local log_name="${name%-service}-service"
+  # 注册并启动任务
   launchctl submit -l "$label" \
     -o "$root/.logs/$log_name.out.log" -e "$root/.logs/$log_name.err.log" \
     -- /usr/bin/env "${job_env[@]}" /bin/zsh "$root/scripts/dev/$script" "$@"
