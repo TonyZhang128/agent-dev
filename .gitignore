@@ -35,3 +35,8 @@ data/ocr/imgs/
 
 # OCR 本地样例照片与识别输出，不入库。
 data/ocr/resources/
+
+# 本地实施计划和一次性历史报告；长期维护文档继续跟踪。
+/docs/superpowers/plans/
+/docs/apirouter-review-2026-10-31.md
+/docs/docsvc-integration-2026-10-31.md
