@@ -7,7 +7,7 @@
 
 截至 2026-11-12：
 
-- 已实现的 10 个 HTTP 操作全部有文档，没有凭空描述尚未实现的接口。
+- 合并后共 11 个 HTTP 操作，其中 10 个已有正式契约，简表接口仍为待确认草案，没有凭空描述尚未实现的接口。
 - `/agents/*`、`/health`、`/ready` 的既有契约由 `AGENTS.md`、`docs/agents-api.md`、
   `docs/sessions.md` 和自动化测试共同保护，标记为 `confirmed`。
 - 用户于 2026-11-12 批准 `/diagnostics` 完整契约及当前全部 10 个操作的 OpenAPI 基线，均为 `confirmed`。
@@ -15,6 +15,7 @@
   监理日记三个操作仍保留 [正式子契约](openapi/journal.openapi.json)，并独立校验。
 - [API.md](API.md) 由正式契约自动生成，是便于阅读的只读视图，不是独立契约。
 - [drafts/fastapi.openapi.json](drafts/fastapi.openapi.json) 仅是实现导出草案，不得覆盖正式契约或授权未来变更。
+- `POST /ocr/jianbiao` 保留 YJH 的请求、响应与错误语义，暂为 `pending-review`，见草案；未自动扩展已批准的 10 操作正式基线。
 - 三个已发布的固定输出 Schema 仍是对外响应子契约：
   [日志总结](log_summary/README.md)、[业务端意图](intent/README.md)、
   [归档端意图](intent/archive/README.md)。
@@ -83,6 +84,7 @@ interfaces/
 | 监理日记完整处理 | `POST /ocr/journal` | confirmed | [正式子契约](openapi/journal.openapi.json) |
 | 监理日记纯 OCR | `POST /ocr/journal/recognize` | confirmed | [三入口语义](journal/capabilities.md) |
 | 监理日记业务生成 | `POST /ocr/journal/process` | confirmed | [三入口语义](journal/capabilities.md) |
+| 简表照片识别 | `POST /ocr/jianbiao` | pending-review | [OCR 指南](guides/ocr.md)、[简表模块](../app/ocr/jianbiao/README.md) |
 
 监理日记字段以正式子契约为准；其他接口见完整正式 OpenAPI 的 `components/schemas`；本目录的 Markdown 只说明业务流程、
 状态转换、超时、重试、路径限制等 OpenAPI 不易表达的内容，不重复维护字段表。
@@ -99,9 +101,10 @@ interfaces/
     `{"status":200,"data":...}`；`/ocr/journal/recognize` 返回 `{"status":200,"message":"识别完成","data":...}`，data 为识别明细。
     `/ocr/journal` 与 `/ocr/journal/process` 返回 `{"code":200,"message":"success","data":{"jsonData":...}}`，业务字段位于 jsonData。
     `status` 是业务成功标记，不是 HTTP 状态码替代品。
+- 简表 `/ocr/jianbiao` 成功返回 `status/message/data`；`out` 非空时在数据池内写出结果与诊断文件，空则不写。
 - 错误：统一为 `{"detail": ...}`。请求校验失败时 `detail` 是错误数组；上下文超限和
   其余业务/模型错误是字符串。错误响应不回显原始输入、身份、历史、密钥或上游正文。
-- 文件：没有 multipart 上传接口。`/ocr/journal` 和 `/ocr/journal/recognize` 接受数据池相对路径或 base64。
+- 文件：没有 multipart 上传接口。`/ocr/journal` 、`/ocr/journal/recognize` 和 `/ocr/jianbiao` 接受数据池相对路径或 base64。
   输入输出不得越过 `PROJECTS_ROOT`。
 - 分页：当前没有列表分页接口。
 - 异步任务：当前没有任务提交、任务状态、轮询、webhook 或取消接口。所有请求同步完成。

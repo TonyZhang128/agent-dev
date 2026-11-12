@@ -15,3 +15,7 @@ class JournalGenerationError(Exception):
 
 class JournalFrameNotFound(Exception):
     """没有找到通过监理日记模板结构核验的真实表格，不得继续OCR。"""
+
+
+class JianbiaoFrameNotFound(Exception):
+    """没有找到通过简表模板结构核验的真实表格，不得继续OCR。"""

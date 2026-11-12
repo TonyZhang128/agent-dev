@@ -343,6 +343,46 @@
           }
         }
       }
+    },
+    "/ocr/jianbiao": {
+      "post": {
+        "tags": [
+          "ocr"
+        ],
+        "summary": "Jianbiao Recognize",
+        "description": "简表照片识别：模板结构核验、单次整页 OCR 和字段归属；out 非空时写出结果文件。",
+        "operationId": "jianbiao_recognize_ocr_jianbiao_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JianbiaoReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1755,6 +1795,61 @@
           "content"
         ],
         "title": "JournalWork"
+      },
+      "JianbiaoReq": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path",
+            "description": "PROJECTS_ROOT 数据池内的简表照片路径",
+            "default": ""
+          },
+          "img": {
+            "type": "string",
+            "title": "Img",
+            "description": "base64 编码的图片数据；path 与 img 至少提供一个",
+            "default": ""
+          },
+          "form": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Form",
+            "description": "简表模板 ID 或兼容别名，如 subgrade_spot_check（JB12-4.5.2-4）"
+          },
+          "cfg": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Cfg",
+            "description": "预留识别配置，当前版本不使用"
+          },
+          "bound": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Bound",
+            "description": "预留识别范围，当前版本不使用"
+          },
+          "out": {
+            "type": "string",
+            "title": "Out",
+            "description": "数据池内输出目录；非空时写出 response.json、diagnostics.json 和 aligned.png，空则不写文件",
+            "default": ""
+          },
+          "taskId": {
+            "type": "string",
+            "maxLength": 128,
+            "title": "TaskId",
+            "description": "业务任务 ID，仅原样回显到 data.taskId；不传则为 null",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "form"
+        ],
+        "title": "JianbiaoReq",
+        "description": "简表照片识别请求；form 取模板 ID 或兼容别名，out 非空时在数据池内写出结果文件。"
       }
     }
   }

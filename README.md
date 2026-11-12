@@ -132,6 +132,7 @@ docker compose --env-file docker/prod.env -f compose.prod.yml ps
 | 智能体 | 归档端意图识别 | 独立的扁平意图分类，目前使用 A–D 占位分类与 unknown |
 | 智能体 | 自由对话 | 根据调用方提供的历史回答当前问题 |
 | OCR | 监理日记识别 | 从数据池照片或 base64 图片定位表格、整页识别并提取业务字段，基于原始记录生成施工、巡视四项和旁站五项；支持完整处理、纯 OCR 和业务生成三个入口 |
+| OCR | 简表照片识别 | 保留简表模板核验、方向校正、整页 OCR、字段归属与本地 CLI；`POST /ocr/jianbiao` 契约仍待确认，见 [评审稿](interfaces/drafts/API.md) |
 
 监理日记生成配置为 `JOURNAL_TIMEOUT_SECONDS`（默认 30）和 `JOURNAL_CONCURRENCY`（默认 1）；部署时需迁移旧 `MAIN_WORK_SPLIT_*` 配置，本机 `.env` 不自动覆盖。
 

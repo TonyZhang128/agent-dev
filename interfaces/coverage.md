@@ -26,5 +26,7 @@
 历史 `/ocr/daily-logs-new` 已迁移到 `/ocr/journal`；其他已删除的 OCR/WBS 路由不在本轮批准范围，
 恢复这些接口仍需单独设计和审批。移除及迁移记录见 [CHANGELOG](CHANGELOG.md)。
 
+YJH 引入的 `POST /ocr/jianbiao` 为第 11 个操作，保留其简表识别链、模板和输出能力，契约状态为 `pending-review`；详情见 [草案](drafts/fastapi.openapi.json)。
+
 本轮只确立契约基线，不新增认证、持久会话、异步任务、流式响应或外部业务动作。
 调用方历史观察见 [consumers.md](guides/consumers.md)，不能替代外部仓库的实时确认。

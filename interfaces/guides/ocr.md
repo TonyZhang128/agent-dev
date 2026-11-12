@@ -1,6 +1,6 @@
-# 监理日记与本地诊断接口
+# 监理日记、简表与本地诊断接口
 
-当前提供三个监理日记入口，以及系统级 `GET /diagnostics`。监理日记字段和行为以 [正式子契约](../openapi/journal.openapi.json) 及 [三入口语义](../journal/capabilities.md) 为准，完整 OpenAPI 其余待确认部分不因本次批准而变为正式契约。
+当前提供三个监理日记入口，以及系统级 `GET /diagnostics`。监理日记字段和行为以 [正式子契约](../openapi/journal.openapi.json) 及 [三入口语义](../journal/capabilities.md) 为准，既有 10 个操作已纳入正式基线；本次合并的简表接口仍为待确认草案。
 
 | 入口 | 输入 | 输出 |
 | --- | --- | --- |
@@ -38,10 +38,18 @@
 
 一次HTTP请求完成全部处理。CPU/OCR在线程池中执行，共享引擎按应用串行加锁；mainWork模型按已有并发和超时控制。没有异步任务、轮询、webhook、持久会话或multipart上传。
 
-接口只读图片，不写PDF/Excel、模板或固定示例JSON，可以重试；结果仍可能随模型、照片质量、模板版本变化。当前接口没有自定义鉴权，需在既有可信部署边界内使用。
+监理日记接口只读图片，不写PDF/Excel、模板或固定示例JSON，可以重试；结果仍可能随模型、照片质量、模板版本变化。当前接口没有自定义鉴权，需在既有可信部署边界内使用。
 
 ## 4、GET /diagnostics
 
 保留现有静态诊断字段：依赖、运行库、设备provider、模型目录、资料库与数据池。不会初始化OCR引擎、注册CUDA、执行推理、访问网络或写文件；ok=false仍为HTTP200。旧资料库检查项仍属于此存量接口，本次未改变其字段或判定语义，且不参与journal模板匹配。
 
 实现与部署见 [OCR说明](../../docs/ocr.md)，算法及真实验收见 [table模板识别](../../docs/journal-template-recognition.md)。
+
+## 5、POST /ocr/jianbiao（待确认）
+
+- 请求在 `path`/`img` 之外必填 `form`（简表模板 ID 或兼容别名，如 `subgrade_spot_check`、`JB12-4.5.2-4`）；`cfg`、`bound` 为预留字段，当前版本不使用。
+- 识别链：模板行列结构核验（0°/90°/180°/270°）→ 透视校正 → 单次整页 OCR → 字段归属；检测失败不退回整图 OCR，也不做逐格重识。
+- 成功 `data` 固定含 `taskId`、`documentType`、`common`（5 个公共字段）和 `fields.records`（固定 10 行）；空字段、歧义字段和无法完整解析的合格率为 `null`，不补写示例值。
+- `out` 非空时为数据池内输出目录，写出 `response.json`、`diagnostics.json`、`aligned.png`；空则不写文件。路径越界返回 400。
+- 失败语义：400（非法路径、图片无法解码、模板未配置、未检测到通过模板结构核验的简表表格，固定 detail“未检测到简表表格，请重新拍摄”）、422（请求校验失败）、503（OCR 模型不可用）。不调用语言模型。

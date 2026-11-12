@@ -10,6 +10,7 @@ from openai import APIConnectionError, APIStatusError, APITimeoutError
 from app.errors import (
     ConversationInputTooLarge,
     InvalidModelOutput,
+    JianbiaoFrameNotFound,
     JournalFrameNotFound,
     JournalGenerationError,
 )
@@ -22,6 +23,12 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(JournalFrameNotFound)
     async def journal_frame_not_found(request: Request, exc: JournalFrameNotFound) -> JSONResponse:
         return JSONResponse(status_code=400, content={"detail": "未检测到监理日志表格，请重新拍摄"})
+
+    @app.exception_handler(JianbiaoFrameNotFound)
+    async def jianbiao_frame_not_found(
+        request: Request, exc: JianbiaoFrameNotFound
+    ) -> JSONResponse:
+        return JSONResponse(status_code=400, content={"detail": "未检测到简表表格，请重新拍摄"})
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(request: Request, exc: RequestValidationError) -> JSONResponse:

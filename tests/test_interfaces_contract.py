@@ -86,7 +86,7 @@ def test_draft_and_review_states_are_explicit():
             path
             for path, operations in contract["paths"].items()
             if any(op["x-contract-status"] == "pending-review" for op in operations.values())
-        } == set()
+        } == {"/ocr/jianbiao"}
     else:
         assert contract["info"]["x-contract-status"] == "confirmed"
         assert contract["info"]["x-contract-version"] == "0.1.0"
@@ -137,6 +137,18 @@ def test_journal_documents_generation_failure():
     responses = read_contract()["paths"]["/ocr/journal"]["post"]["responses"]
     assert {"200", "400", "422", "502", "503"} <= set(responses)
     assert responses["502"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/ErrorDetail"
+    }
+
+
+def test_jianbiao_documents_the_recognition_errors():
+    # 简表尚未获批，检查草案；既有正式契约一致性断言继续严格检测新增路由。
+    draft = json.loads(DRAFT_PATH.read_text(encoding="utf-8"))
+    assert draft == build_contract()
+    assert draft["paths"]["/ocr/jianbiao"]["post"]["x-contract-status"] == "pending-review"
+    responses = draft["paths"]["/ocr/jianbiao"]["post"]["responses"]
+    assert {"200", "400", "422", "503"} <= set(responses)
+    assert responses["400"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/ErrorDetail"
     }
 

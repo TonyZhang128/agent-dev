@@ -1,4 +1,4 @@
-"""新版监理日志识别接口；OCR 等 CPU 操作由同步路由在线程池执行。"""
+"""OCR 文档加工接口；OCR 等 CPU 操作由同步路由在线程池执行。"""
 
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -15,7 +15,10 @@ from app.ocr.core.resources import (
     OCRResources,
     use_resources,
 )
+from app.ocr.jianbiao import build_recognition_response, recognize_jianbiao
+from app.ocr.jianbiao.output import JianbiaoResponse, export_recognition_outputs
 from app.schemas.ocr import (
+    JianbiaoReq,
     JournalProcessRequest,
     JournalRecognitionResponse,
     JournalReq,
@@ -41,17 +44,22 @@ def document_resources(request: Request) -> Generator[OCRResources, None, None]:
             raise HTTPException(400, "文档处理失败，请检查输入文件及模板资源") from exc
 
 
-def project_path(resources: OCRResources, relative: str) -> Path:
+def pool_path(resources: OCRResources, relative: str, kind: str) -> Path:
     relative = relative.removeprefix("projects/")
     path = (resources.projects / relative).resolve()
     if not relative or Path(relative).is_absolute() or not path.is_relative_to(resources.projects):
-        raise HTTPException(400, "文件路径必须位于 PROJECTS_ROOT 数据池内")
+        raise HTTPException(400, f"{kind}必须位于 PROJECTS_ROOT 数据池内")
+    return path
+
+
+def project_path(resources: OCRResources, relative: str) -> Path:
+    path = pool_path(resources, relative, "文件路径")
     if not path.exists():
         raise HTTPException(400, "数据池内的输入文件不存在")
     return path
 
 
-def photo_input(req: JournalReq, resources: OCRResources) -> tuple[Path | None, str]:
+def photo_input(req: JournalReq | JianbiaoReq, resources: OCRResources) -> tuple[Path | None, str]:
     """base64 图片优先；否则校验并返回数据池内的照片路径。"""
     if req.img:
         return None, req.img
@@ -66,6 +74,21 @@ async def _recognize_photo(req: JournalReq, request: Request) -> journal.Journal
     with document_resources(request) as resources:
         path, img = photo_input(req, resources)
         return await run_in_threadpool(journal.recognize_journal, path, img, req.task_id)
+
+
+@router.post("/ocr/jianbiao", response_model=None)
+async def jianbiao_recognize(req: JianbiaoReq, request: Request) -> JianbiaoResponse:
+    """简表照片识别：模板结构核验、单次整页 OCR 和字段归属；out 非空时写出结果文件。"""
+    with document_resources(request) as resources:
+        path, img = photo_input(req, resources)
+        # 同步 OCR 在线程池执行；文档资源 ContextVar 随线程上下文传入。
+        recognition = await run_in_threadpool(
+            recognize_jianbiao, path, req.form, img=img, task_id=req.task_id
+        )
+        if req.out:
+            directory = pool_path(resources, req.out, "输出路径")
+            await run_in_threadpool(export_recognition_outputs, recognition, directory)
+    return build_recognition_response(recognition)
 
 
 @router.post("/ocr/journal", response_model=JournalResponse)

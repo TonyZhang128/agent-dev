@@ -2,12 +2,49 @@
 
 from dataclasses import dataclass
 from itertools import combinations
+from typing import Protocol
 
 import cv2
 import numpy as np
 
 from app.errors import JournalFrameNotFound
-from app.ocr.journal.template import JournalTemplate
+
+
+class TableLine(Protocol):
+    """表格核验所需的最小线段结构，业务模板可各自定义完整模型。"""
+
+    @property
+    def axis(self) -> str: ...
+
+    @property
+    def position(self) -> float: ...
+
+    @property
+    def start(self) -> float: ...
+
+    @property
+    def end(self) -> float: ...
+
+
+class TableField(Protocol):
+    """反向边界核验所需的字段结构。"""
+
+    @property
+    def rect_in_table(self) -> tuple[float, float, float, float]: ...
+
+    @property
+    def inside_table(self) -> bool: ...
+
+
+class TableTemplate(Protocol):
+    """日志和简表共享表格拓扑检测的结构契约。"""
+
+    @property
+    def lines(self) -> tuple[TableLine, ...]: ...
+
+    @property
+    def fields(self) -> tuple[TableField, ...]: ...
+
 
 # 所有距离随输入或候选table尺度变化，不按样本名称、固定照片坐标调参。
 MIN_CANDIDATE_SEGMENT_PIXELS = 40
@@ -47,17 +84,32 @@ class TableMatch:
     score: float
 
 
-def detect_table(gray: np.ndarray, template: JournalTemplate) -> TableMatch:
+DEFAULT_ASPECT_RANGE = (0.7, 1.8)
+
+
+def detect_table(
+    gray: np.ndarray,
+    template: TableTemplate,
+    *,
+    aspect_range: tuple[float, float] = DEFAULT_ASPECT_RANGE,
+) -> TableMatch:
     """检测任意轻度方向的线段，不用水平/竖直长核先破坏斜表格边。"""
     detected = cv2.createLineSegmentDetector(cv2.LSD_REFINE_STD).detect(gray)[0]
     segments = np.empty((0, 4), np.float32) if detected is None else detected[:, 0]
     return match_table_segments(
-        segments, image_size=(gray.shape[1], gray.shape[0]), template=template
+        segments,
+        image_size=(gray.shape[1], gray.shape[0]),
+        template=template,
+        aspect_range=aspect_range,
     )
 
 
 def match_table_segments(
-    segments: np.ndarray, *, image_size: tuple[int, int], template: JournalTemplate
+    segments: np.ndarray,
+    *,
+    image_size: tuple[int, int],
+    template: TableTemplate,
+    aspect_range: tuple[float, float] = DEFAULT_ASPECT_RANGE,
 ) -> TableMatch:
     """对真实边的组合做模板结构验证；缺失或歧义时抛出受控业务异常。"""
     width, height = image_size
@@ -77,7 +129,7 @@ def match_table_segments(
     accepted: list[TableMatch] = []
     for first, second in combinations(horizontal, 2):
         for third, fourth in combinations(vertical, 2):
-            corners = _candidate_corners(first, second, third, fourth, image_size)
+            corners = _candidate_corners(first, second, third, fourth, image_size, aspect_range)
             if corners is None:
                 continue
             match = _verify_candidate(
@@ -229,6 +281,7 @@ def _candidate_corners(
     third: LineEvidence,
     fourth: LineEvidence,
     image_size: tuple[int, int],
+    aspect_range: tuple[float, float],
 ) -> np.ndarray | None:
     center_x, center_y = image_size[0] / 2, image_size[1] / 2
     top, bottom = sorted((first, second), key=lambda line: _edge_position(line, center_x))
@@ -256,7 +309,7 @@ def _candidate_corners(
     if lengths.min() < TABLE_SIDE_MIN_PIXELS:
         return None
     aspect = float((lengths[1] + lengths[3]) / (lengths[0] + lengths[2]))
-    if not 0.7 <= aspect <= 1.8:
+    if not aspect_range[0] <= aspect <= aspect_range[1]:
         return None
     for index, line in enumerate((top, right, bottom, left)):
         if _edge_coverage(corners[index], corners[(index + 1) % 4], line) < EDGE_COVERAGE_MIN:
@@ -281,7 +334,7 @@ def _line_distance_map(segments: np.ndarray, image_size: tuple[int, int]) -> np.
     return cv2.distanceTransform(255 - mask, cv2.DIST_L2, cv2.DIST_MASK_PRECISE)
 
 
-def _template_samples(template: JournalTemplate) -> tuple[np.ndarray, np.ndarray]:
+def _template_samples(template: TableTemplate) -> tuple[np.ndarray, np.ndarray]:
     positions = np.linspace(0.035, 0.965, LINE_SAMPLE_COUNT)
     positive, forbidden = [], []
     for line in template.lines:
