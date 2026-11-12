@@ -44,7 +44,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    implementation = build_contract()
+    implementation = build_contract(
+        official=(args.contract.resolve() == OFFICIAL_PATH.resolve())
+        if args.contract
+        else OFFICIAL_PATH.is_file()
+    )
     approved_differences = approved_journal_differences(implementation)
     if approved_differences:
         for difference in approved_differences:
@@ -70,9 +74,7 @@ def main(argv: list[str] | None = None) -> int:
         status = "正式契约" if contract_path == OFFICIAL_PATH.resolve() else "待确认草案"
         print(f"契约一致：{contract_path}（{status}）")
         if contract_path != OFFICIAL_PATH.resolve():
-            print(
-                "监理日记三个操作已通过正式子契约校验；完整草案的其他待确认部分仍不能作为变更授权。"
-            )
+            print("监理日记三个操作已通过正式子契约校验；实现导出草案不能作为未来接口变更的授权。")
         return 0
 
     print(f"契约与实现不一致：{contract_path}")

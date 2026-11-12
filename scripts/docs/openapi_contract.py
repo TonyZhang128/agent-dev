@@ -418,7 +418,7 @@ OPERATIONS: dict[str, dict[str, dict[str, Any]]] = {
             "版面、WBS 规则、模型目录和数据池是否可用。不初始化引擎、不访问网络、不写文件；"
             "data.ok 为 false 时仍返回 HTTP 200。",
             summary="检查本地依赖与资源",
-            status="pending-review",
+            status="confirmed",
             source="AGENTS.md 第四节；docs/ocr.md；app/ocr/core/deps.py；tests/test_diagnostics.py",
             side_effects="无持久副作用；只做进程内导入、读取模板 JSON 和目录状态。",
             idempotency="只读，可安全重试。",
@@ -557,8 +557,8 @@ def _prune_unused_schemas(spec: dict[str, Any]) -> None:
             del schemas[name]
 
 
-def build_contract() -> dict[str, Any]:
-    """返回当前应用对应的完整 OpenAPI 草案；每次调用重新生成，不使用缓存。"""
+def build_contract(*, official: bool = False) -> dict[str, Any]:
+    """从实现生成比较投影；正式模式使用已批准元信息，不读取或改写正式文件。"""
     spec = copy.deepcopy(create_app().openapi())
     spec["info"]["description"] = (
         "公路工程智能算法服务的对外 HTTP 契约。当前文件是从实现归纳的"
@@ -572,6 +572,17 @@ def build_contract() -> dict[str, Any]:
     spec["info"]["x-contract-authority"] = (
         "interfaces/openapi/ 中的正式契约（批准后）优先于本草案和运行时自动生成结果。"
     )
+    if official:
+        # 仅固定本次已批准的元信息；路径、字段与约束继续由实际应用生成以检测漂移。
+        spec["info"].update(
+            {
+                "description": "公路工程智能算法服务的对外 HTTP 契约。用户于 2026-11-12 批准当前 10 个操作的完整基线，包括诊断接口、现有响应包装和统一错误语义。接口变更仍须用户明确批准；运行时自动生成结果不得覆盖正式契约。",
+                "x-contract-status": "confirmed",
+                "x-contract-version": "0.1.0",
+                "x-review-status": "approved",
+                "x-contract-authority": "interfaces/openapi/ 中用户已批准的正式契约优先于草案和运行时自动生成结果。",
+            }
+        )
     spec["servers"] = [
         {"url": "http://127.0.0.1:8309", "description": "本机开发默认地址"},
     ]

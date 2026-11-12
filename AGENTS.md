@@ -67,7 +67,7 @@
 ### 4.1、权威来源与目录
 
 - `interfaces/` 是对外接口文档的唯一入口，`interfaces/README.md` 是索引和全局规范。
-- `interfaces/openapi/` 保存用户已批准的正式 OpenAPI 契约，是接口实现的权威依据。当前完整契约尚未批准，只有三个已确认的响应子 Schema 位于 `interfaces/log_summary/`、`interfaces/intent/`。
+- `interfaces/openapi/` 保存用户已批准的正式 OpenAPI 契约，是接口实现的权威依据。用户于 2026-11-12 批准完整基线 `interfaces/openapi/fastapi.openapi.json`（10 个操作），并保留监理日记正式子契约及 `interfaces/log_summary/`、`interfaces/intent/` 的响应子 Schema。
 - `interfaces/drafts/` 保存 AI 归纳或设计的待确认草案，不能作为实现授权。
 - `interfaces/guides/` 保存业务流程、状态、超时、重试、路径和同步/异步语义等 Markdown 说明；不重复 OpenAPI 已包含的字段表。
 - `interfaces/CHANGELOG.md` 记录契约变更；Git 历史保留版本证据。

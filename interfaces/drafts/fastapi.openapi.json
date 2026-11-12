@@ -116,7 +116,7 @@
             }
           }
         },
-        "x-contract-status": "pending-review",
+        "x-contract-status": "confirmed",
         "x-contract-source": "AGENTS.md 第四节；docs/ocr.md；app/ocr/core/deps.py；tests/test_diagnostics.py",
         "x-side-effects": "无持久副作用；只做进程内导入、读取模板 JSON 和目录状态。",
         "x-idempotency": "只读，可安全重试。"

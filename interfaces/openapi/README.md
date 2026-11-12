@@ -4,7 +4,7 @@
 
 ## 1、当前正式契约
 
-当前没有完整的正式 OpenAPI 文件。用户于 2026-11-12 批准了 [监理日记正式子契约](journal.openapi.json)，覆盖 `/ocr/journal`、`/ocr/journal/recognize`、`/ocr/journal/process`。校验脚本独立检查这三个操作和全部可达 Schema，不从实现覆盖正式文件。
+用户于 2026-11-12 批准了完整基线 [fastapi.openapi.json](fastapi.openapi.json)，覆盖当前 10 个操作，契约版本为 `0.1.0`，保留现有响应包装和错误语义。另保留 [监理日记正式子契约](journal.openapi.json)，覆盖 `/ocr/journal`、`/ocr/journal/recognize`、`/ocr/journal/process`。校验脚本独立检查这三个操作和全部可达 Schema，不从实现覆盖正式文件。
 
 其他已确认的对外契约包括：
 
@@ -20,13 +20,12 @@
   [AGENTS.md 第四节](../../AGENTS.md#4接口契约与-api-first-开发流程)、
   [agents-api.md](../../docs/agents-api.md)
 
-完整 OpenAPI 草案见 [drafts/fastapi.openapi.json](../drafts/fastapi.openapi.json)，
-在获得用户批准前不能复制到本目录，也不能视为正式契约。
+实现导出的草案见 [drafts/fastapi.openapi.json](../drafts/fastapi.openapi.json)，不得覆盖正式基线；未来变更仍须单独批准。
 
 ## 2、提升草案的步骤
 
-1. 用户逐项确认 [drafts/README.md](../drafts/README.md) 中的待确认事项。
-2. 复制草案为 `interfaces/openapi/fastapi.openapi.json`。
+1. 在 [drafts/](../drafts/) 提交变更草案，并获得用户明确批准。
+2. 审查完整差异后，人工更新 `interfaces/openapi/fastapi.openapi.json`。
 3. 将 `info.x-contract-status` 和对应操作的 `x-contract-status` 改为 `confirmed`。
 4. 在 [CHANGELOG.md](../CHANGELOG.md) 记录批准日期、版本、批准范围。
 5. 运行：

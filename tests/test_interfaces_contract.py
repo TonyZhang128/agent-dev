@@ -39,7 +39,7 @@ def registered_operations() -> set[tuple[str, str]]:
 
 
 def test_contract_matches_current_application():
-    assert read_contract() == build_contract()
+    assert read_contract() == build_contract(official=contract_path() == OFFICIAL_PATH)
 
 
 def test_generated_review_document_is_current():
@@ -86,9 +86,16 @@ def test_draft_and_review_states_are_explicit():
             path
             for path, operations in contract["paths"].items()
             if any(op["x-contract-status"] == "pending-review" for op in operations.values())
-        } == {
-            "/diagnostics",
-        }
+        } == set()
+    else:
+        assert contract["info"]["x-contract-status"] == "confirmed"
+        assert contract["info"]["x-contract-version"] == "0.1.0"
+        assert contract["info"]["x-review-status"] == "approved"
+        assert all(
+            operation["x-contract-status"] == "confirmed"
+            for methods in contract["paths"].values()
+            for operation in methods.values()
+        )
 
 
 def test_agent_error_semantics_are_documented():

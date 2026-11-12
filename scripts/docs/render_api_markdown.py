@@ -259,7 +259,7 @@ def endpoint_section(
 
 
 def schema_appendix(spec: dict[str, Any]) -> list[str]:
-    lines = ["## 5、Schema 附录", "", "以下是草案中引用的全部组件 Schema。", ""]
+    lines = ["## 5、Schema 附录", "", "以下是契约中引用的全部组件 Schema。", ""]
     for index, (name, schema) in enumerate(
         spec.get("components", {}).get("schemas", {}).items(), start=1
     ):

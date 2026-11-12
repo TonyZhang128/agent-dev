@@ -1,7 +1,7 @@
 # 公路工程智能算法服务
 
 > 本文件由 OpenAPI 契约自动生成，用于评审，不是独立契约，请勿手工编辑。
-> 生成来源：`interfaces/drafts/fastapi.openapi.json`。
+> 生成来源：`interfaces/openapi/fastapi.openapi.json`。
 > 权威字段以 OpenAPI 为准；正式契约批准前，本文件中的 `pending-review` 操作不能作为实现授权。
 
 ## 1、基本信息
@@ -11,11 +11,11 @@
 | 标题 | 公路工程智能算法服务 |
 | OpenAPI 版本 | 3.1.0 |
 | 接口版本 | `0.1.0` |
-| 契约版本 | `0.1.0-review.2` |
-| 契约状态 | `draft-pending-review` |
+| 契约版本 | `0.1.0` |
+| 契约状态 | `confirmed` |
 | 服务地址 | http://127.0.0.1:8309 |
 
-公路工程智能算法服务的对外 HTTP 契约。当前文件是从实现归纳的待确认草案：已实现接口的请求和成功响应来自 FastAPI/Pydantic，补充的响应结构及统一错误响应由 scripts/docs/openapi_contract.py 维护。经用户批准前不得视为正式契约，也不得据此绕过接口变更审批。
+公路工程智能算法服务的对外 HTTP 契约。用户于 2026-11-12 批准当前 10 个操作的完整基线，包括诊断接口、现有响应包装和统一错误语义。接口变更仍须用户明确批准；运行时自动生成结果不得覆盖正式契约。
 
 ## 2、通用错误响应
 
@@ -39,7 +39,7 @@
 | --- | --- | --- | --- |
 | 1 | `GET /health` | 检查进程存活 | `confirmed` |
 | 2 | `GET /ready` | 检查模型就绪 | `confirmed` |
-| 3 | `GET /diagnostics` | 检查本地依赖与资源 | `pending-review` |
+| 3 | `GET /diagnostics` | 检查本地依赖与资源 | `confirmed` |
 | 4 | `POST /agents/log-summary` | 总结并生成工作日志 | `confirmed` |
 | 5 | `POST /agents/intent/business` | 识别业务页面与最小功能意图 | `confirmed` |
 | 6 | `POST /agents/intent/archive` | 识别文件归档系统意图 | `confirmed` |
@@ -120,7 +120,7 @@ Schema：`ReadyResponse`
 | 项目 | 内容 |
 | --- | --- |
 | 摘要 | 检查本地依赖与资源 |
-| 契约状态 | `pending-review` |
+| 契约状态 | `confirmed` |
 | 来源 | AGENTS.md 第四节；docs/ocr.md；app/ocr/core/deps.py；tests/test_diagnostics.py |
 | 副作用 | 无持久副作用；只做进程内导入、读取模板 JSON 和目录状态。 |
 | 幂等/重试 | 只读，可安全重试。 |
@@ -1044,7 +1044,7 @@ Schema：`JournalResponse`
 
 ## 5、Schema 附录
 
-以下是草案中引用的全部组件 Schema。
+以下是契约中引用的全部组件 Schema。
 
 ### 5.1、`ArchiveIntentResult`
 

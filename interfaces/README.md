@@ -10,24 +10,22 @@
 - 已实现的 10 个 HTTP 操作全部有文档，没有凭空描述尚未实现的接口。
 - `/agents/*`、`/health`、`/ready` 的既有契约由 `AGENTS.md`、`docs/agents-api.md`、
   `docs/sessions.md` 和自动化测试共同保护，标记为 `confirmed`。
-- `/diagnostics` 仍标记为 `pending-review`。监理日记三个操作已由用户明确批准，
-  正式子契约位于 [openapi/journal.openapi.json](openapi/journal.openapi.json)。
-  `/diagnostics` 由原 `/health/deps` 更名并提升为一级路由。
-- 完整 OpenAPI 草案位于 [drafts/fastapi.openapi.json](drafts/fastapi.openapi.json)。
-  **它不是正式契约，不能作为接口变更授权。** 用户批准后才能提升到 `openapi/`。
-- 当前评审稿版本为 `0.1.0-review.2`，评审文档位于 [API.md](API.md)，由 OpenAPI 自动生成，
-  便于直接审阅；它不是独立契约，也不能替代 OpenAPI。
+- 用户于 2026-11-12 批准 `/diagnostics` 完整契约及当前全部 10 个操作的 OpenAPI 基线，均为 `confirmed`。
+- 完整正式契约为 [openapi/fastapi.openapi.json](openapi/fastapi.openapi.json)，契约版本 `0.1.0`。
+  监理日记三个操作仍保留 [正式子契约](openapi/journal.openapi.json)，并独立校验。
+- [API.md](API.md) 由正式契约自动生成，是便于阅读的只读视图，不是独立契约。
+- [drafts/fastapi.openapi.json](drafts/fastapi.openapi.json) 仅是实现导出草案，不得覆盖正式契约或授权未来变更。
 - 三个已发布的固定输出 Schema 仍是对外响应子契约：
   [日志总结](log_summary/README.md)、[业务端意图](intent/README.md)、
   [归档端意图](intent/archive/README.md)。
 
 ## 2、权威来源
 
-1. 用户明确批准的正式契约：`interfaces/openapi/` 中的文件；当前有监理日记正式子契约，尚无整包正式契约。
+1. 用户明确批准的正式契约：`interfaces/openapi/` 中的文件；当前有完整正式基线和监理日记正式子契约。
 2. 已确认的响应子契约：`interfaces/log_summary/`、`interfaces/intent/` 下的 JSON Schema。
 3. 新版监理日志已确认的成功响应子契约：
    [journal/response.schema.json](journal/response.schema.json)，依据用户指定的后端响应样例；
-   本次确认不代表整包 OpenAPI 已批准。
+   历史确认依据保留，当前完整 OpenAPI 也已获批准。
 4. 待确认草案：`interfaces/drafts/`。用于评审，不能用于授权实现变更。
 5. 运行时 FastAPI 生成的 `/openapi.json`、`/docs`：实现的投影，便于调试；
    **不得**用自动生成结果覆盖正式契约。
@@ -40,11 +38,12 @@
 ```text
 interfaces/
 ├── README.md                  # 本文件：全局规范、接口清单、使用方式
-├── API.md                     # 由 OpenAPI 自动生成的第一版评审文档
+├── API.md                     # 由正式 OpenAPI 自动生成的只读文档
 ├── coverage.md                # 功能-接口覆盖、调用方和差异清单
 ├── CHANGELOG.md               # 契约变更记录
 ├── openapi/
 │   ├── README.md              # 正式契约索引
+│   ├── fastapi.openapi.json   # 用户批准的完整 10 个操作
 │   └── journal.openapi.json   # 用户批准的监理日记三个操作
 ├── drafts/
 │   ├── README.md              # 待确认事项和批准流程
@@ -74,18 +73,18 @@ interfaces/
 
 | 业务 | 方法与路径 | 状态 | 主要资料 |
 | --- | --- | --- | --- |
-| 进程存活 | `GET /health` | confirmed | [OpenAPI 草案](drafts/fastapi.openapi.json) |
+| 进程存活 | `GET /health` | confirmed | [正式 OpenAPI](openapi/fastapi.openapi.json) |
 | 模型就绪 | `GET /ready` | confirmed | [agents-api](../docs/agents-api.md) |
 | 工程日志总结 | `POST /agents/log-summary` | confirmed | [日志接口](log_summary/README.md) |
 | 业务端意图识别 | `POST /agents/intent/business` | confirmed | [意图接口](intent/README.md)、[智能体指南](guides/agents.md) |
 | 归档端意图识别 | `POST /agents/intent/archive` | confirmed | [归档接口](intent/archive/README.md) |
 | 自由对话 | `POST /agents/chat` | confirmed | [智能体指南](guides/agents.md) |
-| 本地依赖诊断 | `GET /diagnostics` | pending-review | [OCR 指南](guides/ocr.md) |
+| 本地依赖诊断 | `GET /diagnostics` | confirmed | [OCR 指南](guides/ocr.md) |
 | 监理日记完整处理 | `POST /ocr/journal` | confirmed | [正式子契约](openapi/journal.openapi.json) |
 | 监理日记纯 OCR | `POST /ocr/journal/recognize` | confirmed | [三入口语义](journal/capabilities.md) |
 | 监理日记业务生成 | `POST /ocr/journal/process` | confirmed | [三入口语义](journal/capabilities.md) |
 
-监理日记字段以正式子契约为准；其他接口见 OpenAPI 草案的 `components/schemas`；本目录的 Markdown 只说明业务流程、
+监理日记字段以正式子契约为准；其他接口见完整正式 OpenAPI 的 `components/schemas`；本目录的 Markdown 只说明业务流程、
 状态转换、超时、重试、路径限制等 OpenAPI 不易表达的内容，不重复维护字段表。
 
 ## 6、通用约定
@@ -122,10 +121,9 @@ open http://127.0.0.1:8309/redoc
 curl -fsS http://127.0.0.1:8309/openapi.json
 ```
 
-运行时 `/docs` 是实现的投影，不是正式契约。评审正式契约时使用
-`interfaces/drafts/fastapi.openapi.json` 或批准后的
+运行时 `/docs` 是实现的投影，不是正式契约。正式契约使用
 `interfaces/openapi/fastapi.openapi.json`，可用支持 OpenAPI 3.1 的编辑器、Swagger Editor
-或 Redoc 预览。
+或 Redoc 预览。未来变更先在 `interfaces/drafts/` 评审。
 
 ## 8、生成与校验
 

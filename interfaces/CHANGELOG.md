@@ -1,5 +1,14 @@
 # 接口契约变更记录
 
+## 2026-11-12 — 0.1.0 完整 OpenAPI 基线（用户已批准）
+
+- 用户对上一轮明确列出的两项确认事项回复“确认”：批准 `GET /diagnostics` 完整契约，并批准当前 10 个操作的完整 OpenAPI 草案作为正式基线。
+- 将 `drafts/fastapi.openapi.json` 经审阅提升为 `openapi/fastapi.openapi.json`；全部 10 个操作标记为 `confirmed`，契约版本为 `0.1.0`。
+- `/diagnostics` 保留 `status/data` 包装及 `ok/warnings/caps`，检查不通过时仍返回 HTTP 200；不初始化 OCR 引擎、不访问网络、不写文件。
+- 保留所有现有请求、响应、约束、响应包装差异和错误语义，包括 422 的 `detail` 数组或字符串两种形态；不新增、删除或修改运行时接口。
+- 原有监理日记正式子契约继续保留并独立校验；已删除 OCR/WBS 接口不在批准范围。
+- 调用方影响：本次仅确立正式基线，无需迁移；今后对外契约变化仍须另行批准。
+
 ## 1、2026-11-12 监理日记两阶段生成（用户已批准）
 
 - `/ocr/journal/process` 请求改为 `/ocr/journal/recognize` 响应的 `data`；完整 11 个栏目且 key 唯一，以栏目 text 为准，支持人工校对后生成。旧 main_work 请求不再接受。
