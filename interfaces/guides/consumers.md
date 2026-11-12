@@ -47,12 +47,14 @@
 - `/agents/intent/archive`
 - `/agents/chat`
 - `/ocr/daily-logs`
-- `/ocr/daily-logs-new`
+- `/ocr/journal`
 - `/health`、`/ready`（可能由运维或监控调用，未在业务源码中确认）
 
 这些接口仍是本仓库的对外契约，不能因为当前未观察到调用而删除或改变语义。
 
 ## 4、兼容性要求
+
+2026-11-12 已批准监理日记路径迁移：原 `/ocr/daily-logs-new` 删除，改用 `/ocr/journal`；新增 `/ocr/journal/recognize` 和 `/ocr/journal/process`。文本 process 直接返回三个字段，不能套用历史 OCR/WBS 的 status/data 包装假设。外部调用方是否已迁移仍需在其仓库确认。
 
 - OCR/WBS 成功响应不得移除 `status`、`data`，也不得把 `status` 改成布尔值或字符串。
 - 错误响应不得移除 `detail`；Java 读取的是顶层 `message` 或 `detail`。

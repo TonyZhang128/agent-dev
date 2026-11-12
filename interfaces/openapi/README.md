@@ -4,7 +4,9 @@
 
 ## 1、当前正式契约
 
-当前没有完整的正式 OpenAPI 文件。已确认的对外契约包括：
+当前没有完整的正式 OpenAPI 文件。用户于 2026-11-12 批准了 [监理日记正式子契约](journal.openapi.json)，覆盖 `/ocr/journal`、`/ocr/journal/recognize`、`/ocr/journal/process`。校验脚本独立检查这三个操作和全部可达 Schema，不从实现覆盖正式文件。
+
+其他已确认的对外契约包括：
 
 - `POST /agents/log-summary` 的固定六字段响应：
   [response.schema.json](../log_summary/response.schema.json)
@@ -12,7 +14,7 @@
   [response.schema.json](../intent/response.schema.json)
 - `POST /agents/intent/archive` 的固定四字段响应：
   [response.schema.json](../intent/archive/response.schema.json)
-- `POST /ocr/daily-logs-new` 的成功响应（2026-11-06 用户指定后端格式）：
+- `POST /ocr/journal` 的成功响应（2026-11-06 用户指定后端格式）：
   [response.schema.json](../journal/response.schema.json)
 - `/agents/*`、`/health`、`/ready` 的请求路径、方法和既有业务规则：
   [AGENTS.md 第四节](../../AGENTS.md#4接口契约与-api-first-开发流程)、

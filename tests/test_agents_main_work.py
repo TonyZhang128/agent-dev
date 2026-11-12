@@ -110,7 +110,7 @@ def client_for(tmp_path, respond, **overrides):
 def post_journal(client, settings, **kwargs):
     write_photo(settings)
     client.app.state.ocr_resources.engine = kwargs.pop("engine", JournalEngine())
-    return client.post("/ocr/daily-logs-new", json={"path": "journal.png", **kwargs})
+    return client.post("/ocr/journal", json={"path": "journal.png", **kwargs})
 
 
 def test_route_uses_full_text_generation_when_keywords_are_incomplete(tmp_path):

@@ -2,7 +2,7 @@
 
 状态：`confirmed`。用户于2026-11-08明确确认以下三点：允许整理表达、合并断句和去标题，但保留全部业务事实与关键数据，不摘要、不补充事实；先按施工情况、旁站情况、巡视情况关键词规则提取；规则不足时由Agent兜底。
 
-适用 `POST /ocr/daily-logs-new` 的 `data.fields.mainWork`。三个输出字段及其 string/null 类型不变，请求、common、issues、nextDayPlan不变。
+适用 `POST /ocr/journal` 的 `data.fields.mainWork`。三个输出字段及其 string/null 类型不变，请求、common、issues、nextDayPlan不变。
 
 1. 先将mainWork区域中的OCR文字按阅读顺序合并为完整文本，保留必要换行和全部有效内容。不再将每个OCR碎片当作必须独立分类的业务单位。
 2. 优先识别“施工情况”（包含“主要施工情况”）、“旁站情况”“巡视情况”关键词，提取对应正文，允许去标题。规则只有在能够完整、可靠覆盖内容时直接返回；缺少可靠关键词、有未覆盖内容或歧义时，进入Agent。

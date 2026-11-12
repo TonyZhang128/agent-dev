@@ -228,7 +228,13 @@ async def split_main_work(
     readings: Sequence[FieldReading], generator: MainWorkGenerator | None = None
 ) -> SplitOutcome:
     """先规则、后全文生成；无效结果明确失败，不复制整段或补写事实。"""
-    source = merge_main_work(readings)
+    return await process_main_work(merge_main_work(readings), generator)
+
+
+async def process_main_work(
+    source: str, generator: MainWorkGenerator | None = None
+) -> SplitOutcome:
+    """处理完整文本；规则、模型兜底和事实校验与图片入口共享。"""
     if not _has_business_content(source):
         return SplitOutcome(
             MainWorkValues(construction=None, witness=None, patrol=None), "empty", source

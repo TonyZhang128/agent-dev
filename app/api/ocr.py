@@ -15,7 +15,12 @@ from app.ocr.core.resources import (
     OCRResources,
     use_resources,
 )
-from app.schemas.ocr import JournalReq
+from app.schemas.ocr import (
+    JournalProcessRequest,
+    JournalRecognitionResponse,
+    JournalReq,
+    MainWorkValues,
+)
 
 router = APIRouter(tags=["ocr"])
 
@@ -56,15 +61,35 @@ def photo_input(req: JournalReq, resources: OCRResources) -> tuple[Path | None, 
     return path, ""
 
 
-@router.post("/ocr/daily-logs-new", response_model=None)
-async def journal_recognize(req: JournalReq, request: Request) -> dict:
-    """新版监理日志识别：整页OCR后按关键词提取，必要时由Agent基于完整mainWork生成三部分。"""
+async def _recognize_photo(req: JournalReq, request: Request) -> journal.JournalRecognition:
+    """共享图片校验和线程池识别，资源上下文随工作线程传入。"""
     with document_resources(request) as resources:
         path, img = photo_input(req, resources)
-        # 同步 OCR 在线程池执行；文档资源 ContextVar 随线程上下文传入。
-        sheet = await run_in_threadpool(journal.recognize_journal, path, img, req.task_id)
+        return await run_in_threadpool(journal.recognize_journal, path, img, req.task_id)
+
+
+@router.post("/ocr/journal", response_model=None)
+async def journal_recognize(req: JournalReq, request: Request) -> dict:
+    """新版监理日志识别：整页OCR后按关键词提取，必要时由Agent基于完整mainWork生成三部分。"""
+    sheet = await _recognize_photo(req, request)
     outcome = await journal.split_main_work(
         sheet.readings, request.app.state.main_work_agent.generate
     )
     data = journal.build_processed_payload(sheet, outcome.values)
     return {"status": 200, "message": "识别完成", "data": data}
+
+
+@router.post("/ocr/journal/recognize", response_model=JournalRecognitionResponse)
+async def journal_recognize_only(req: JournalReq, request: Request) -> JournalRecognitionResponse:
+    """仅识别：返回完整文字框、原图坐标和拆分前栏目，不调用语言模型。"""
+    sheet = await _recognize_photo(req, request)
+    return journal.build_recognition_response(sheet)
+
+
+@router.post("/ocr/journal/process", response_model=MainWorkValues)
+async def journal_process(req: JournalProcessRequest, request: Request) -> MainWorkValues:
+    """仅处理完整工作内容文本，复用规则、模型兜底与事实校验。"""
+    outcome = await journal.process_main_work(
+        req.main_work, request.app.state.main_work_agent.generate
+    )
+    return outcome.values

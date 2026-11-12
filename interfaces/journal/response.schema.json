@@ -1,6 +1,6 @@
 {
   "title": "JournalResponse",
-  "description": "用户于 2026-11-06 确认的 POST /ocr/daily-logs-new 成功响应；以 data/ocr/resources/daily-logs-output.json 为结构依据。",
+  "description": "用户于 2026-11-06 确认的成功响应；2026-11-12 批准路径更名为 POST /ocr/journal；以 data/ocr/resources/daily-logs-output.json 为结构依据。",
   "type": "object",
   "additionalProperties": false,
   "required": ["status", "message", "data"],

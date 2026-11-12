@@ -25,12 +25,12 @@ def verify(client: httpx.Client, photo: str, task_id: str = "") -> dict:
     checks.append({"path": "/diagnostics", "status": response.status_code})
 
     payload = {"path": photo, "taskId": task_id} if task_id else {"path": photo}
-    response = client.post("/ocr/daily-logs-new", json=payload)
+    response = client.post("/ocr/journal", json=payload)
     response.raise_for_status()
     body = response.json()
     if body.get("status") != 200 or "data" not in body:
-        raise ValueError("/ocr/daily-logs-new 未返回有效监理日志结果")
-    checks.append({"path": "/ocr/daily-logs-new", "status": response.status_code})
+        raise ValueError("/ocr/journal 未返回有效监理日志结果")
+    checks.append({"path": "/ocr/journal", "status": response.status_code})
 
     processed = body["data"]
     if not processed.get("common") and not processed.get("fields"):

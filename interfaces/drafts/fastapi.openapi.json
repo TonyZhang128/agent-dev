@@ -490,14 +490,14 @@
         "x-idempotency": "同一输入可能生成不同回答；重试前应确认业务是否接受。"
       }
     },
-    "/ocr/daily-logs-new": {
+    "/ocr/journal": {
       "post": {
         "tags": [
           "ocr"
         ],
-        "summary": "识别监理日记（新版链路）",
+        "summary": "识别并处理监理日记",
         "description": "新版监理日志识别：按 PDF 构建的模板对齐完整表格，整页一次 OCR 后匹配表内外字段；不进行字段级补充识别。mainWork先合并OCR文字，再按施工情况、旁站情况、巡视情况关键词提取；规则无法完整可靠覆盖时，由Agent基于全文生成construction、witness、patrol。允许整理表达、合并断句和去标题，但保留全部业务事实与关键数据，不摘要、不补充事实；原文没有的类别为 null。成功响应严格遵守已确认的后端格式，顶层只有 status、message、data，业务字段直接位于 data，不返回内部识别详情。mainWork 无法可靠拆分时返回 502。",
-        "operationId": "journal_recognize_ocr_daily_logs_new_post",
+        "operationId": "journal_recognize_ocr_journal_post",
         "requestBody": {
           "content": {
             "application/json": {
@@ -591,10 +591,139 @@
             }
           }
         },
-        "x-contract-status": "pending-review",
-        "x-contract-source": "interfaces/journal/response.schema.json（成功响应已确认）；interfaces/journal/main-work-processing.md（生成语义已确认）；docs/journal-mainwork-split.md；tests/test_ocr_journal.py；tests/test_agents_main_work.py",
+        "x-contract-status": "confirmed",
+        "x-contract-source": "interfaces/openapi/journal.openapi.json（2026-11-12 用户明确批准）；interfaces/journal/response.schema.json（成功响应已确认）；interfaces/journal/main-work-processing.md（生成语义已确认）；docs/journal-mainwork-split.md；tests/test_ocr_journal.py；tests/test_agents_main_work.py",
         "x-side-effects": "只读取数据池照片，不写 PDF/Excel。",
         "x-idempotency": "识别结果可能因模型和照片变化而不同；只读调用可重试。"
+      }
+    },
+    "/ocr/journal/recognize": {
+      "post": {
+        "tags": [
+          "ocr"
+        ],
+        "summary": "仅识别监理日记",
+        "description": "仅执行表格定位、整页一次 OCR 和栏目提取，不执行工作内容拆分或调用语言模型。返回全部原始文字框及拆分前栏目文本；坐标统一为 EXIF 校正后、缩小前的图片像素坐标。",
+        "operationId": "journal_recognize_only_ocr_journal_recognize_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JournalReq"
+              },
+              "example": {
+                "path": "projects/监理日志照片.jpg",
+                "taskId": "example"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "完整文字框和拆分前栏目。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JournalRecognitionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求校验失败，或输入与上下文超过预算。校验失败时 detail 为错误数组；输入超限时为字符串。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestError"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "路径、图片或表格定位失败。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "OCR 模型或资源不可用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-contract-status": "confirmed",
+        "x-contract-source": "interfaces/openapi/journal.openapi.json；interfaces/journal/capabilities.md",
+        "x-side-effects": "不写文件、不持久化会话。",
+        "x-idempotency": "只读，可重试。"
+      }
+    },
+    "/ocr/journal/process": {
+      "post": {
+        "tags": [
+          "ocr"
+        ],
+        "summary": "仅拆分监理工作内容",
+        "description": "仅处理完整 main_work 文本：规则优先、Agent 兜底及关键数据校验。空文本或纯标题返回三个 null；模型路径沿用 4000 字符保护，规则路径不设统一长度上限。处理失败统一 502；不访问 OCR 引擎。",
+        "operationId": "journal_process_ocr_journal_process_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JournalProcessRequest"
+              },
+              "example": {
+                "main_work": "施工情况：K1+100填筑。\n旁站情况：旁站碾压。\n巡视情况：巡视施工现场。"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "三个必填可空的工作内容字段。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MainWorkValues"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求校验失败，或输入与上下文超过预算。校验失败时 detail 为错误数组；输入超限时为字符串。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "主要工作内容无法可靠拆分；模型不可用、超时或结果检查失败。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-contract-status": "confirmed",
+        "x-contract-source": "interfaces/openapi/journal.openapi.json；interfaces/journal/capabilities.md",
+        "x-side-effects": "不写文件、不持久化会话。",
+        "x-idempotency": "只读，可重试；模型路径可能产生不同措辞。"
       }
     }
   },
@@ -1130,6 +1259,254 @@
         ],
         "title": "IntentRequest"
       },
+      "JournalFieldKey": {
+        "type": "string",
+        "enum": [
+          "project",
+          "number",
+          "supervision_org",
+          "recorder",
+          "weather",
+          "position",
+          "date",
+          "reviewer",
+          "main_work",
+          "issues",
+          "next_day_plan"
+        ]
+      },
+      "JournalImageInfo": {
+        "properties": {
+          "width": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Width"
+          },
+          "height": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Height"
+          },
+          "coordinateSpace": {
+            "type": "string",
+            "const": "exif_corrected_original",
+            "title": "Coordinatespace"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "width",
+          "height",
+          "coordinateSpace"
+        ],
+        "title": "JournalImageInfo"
+      },
+      "JournalOCRBox": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "confidence": {
+            "$ref": "#/components/schemas/RecognitionConfidence"
+          },
+          "polygon": {
+            "$ref": "#/components/schemas/JournalPolygon"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "text",
+          "confidence",
+          "polygon"
+        ],
+        "title": "JournalOCRBox"
+      },
+      "JournalOCRField": {
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/JournalFieldKey"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "confidence": {
+            "$ref": "#/components/schemas/RecognitionConfidence"
+          },
+          "polygon": {
+            "$ref": "#/components/schemas/JournalPolygon"
+          },
+          "boxIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Boxids"
+          },
+          "ambiguous": {
+            "type": "boolean",
+            "title": "Ambiguous"
+          },
+          "visibleFraction": {
+            "$ref": "#/components/schemas/RecognitionConfidence"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "text",
+          "confidence",
+          "polygon",
+          "boxIds",
+          "ambiguous",
+          "visibleFraction"
+        ],
+        "title": "JournalOCRField"
+      },
+      "JournalPoint": {
+        "prefixItems": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "number"
+          }
+        ],
+        "type": "array",
+        "maxItems": 2,
+        "minItems": 2
+      },
+      "JournalPolygon": {
+        "prefixItems": [
+          {
+            "$ref": "#/components/schemas/JournalPoint"
+          },
+          {
+            "$ref": "#/components/schemas/JournalPoint"
+          },
+          {
+            "$ref": "#/components/schemas/JournalPoint"
+          },
+          {
+            "$ref": "#/components/schemas/JournalPoint"
+          }
+        ],
+        "type": "array",
+        "maxItems": 4,
+        "minItems": 4
+      },
+      "JournalProcessRequest": {
+        "properties": {
+          "main_work": {
+            "type": "string",
+            "title": "Main Work"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "main_work"
+        ],
+        "title": "JournalProcessRequest",
+        "description": "独立文本处理请求；允许空文本，不引入会话或图片依赖。"
+      },
+      "JournalRecognitionData": {
+        "properties": {
+          "taskId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Taskid"
+          },
+          "documentType": {
+            "type": "string",
+            "const": "supervision_diary",
+            "title": "Documenttype"
+          },
+          "image": {
+            "$ref": "#/components/schemas/JournalImageInfo"
+          },
+          "tablePolygon": {
+            "$ref": "#/components/schemas/JournalPolygon"
+          },
+          "boxes": {
+            "items": {
+              "$ref": "#/components/schemas/JournalOCRBox"
+            },
+            "type": "array",
+            "title": "Boxes"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/JournalOCRField"
+            },
+            "type": "array",
+            "title": "Fields"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "taskId",
+          "documentType",
+          "image",
+          "tablePolygon",
+          "boxes",
+          "fields"
+        ],
+        "title": "JournalRecognitionData"
+      },
+      "JournalRecognitionResponse": {
+        "properties": {
+          "status": {
+            "type": "integer",
+            "const": 200,
+            "title": "Status"
+          },
+          "message": {
+            "type": "string",
+            "const": "识别完成",
+            "title": "Message"
+          },
+          "data": {
+            "$ref": "#/components/schemas/JournalRecognitionData"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "message",
+          "data"
+        ],
+        "title": "JournalRecognitionResponse"
+      },
       "JournalReq": {
         "properties": {
           "path": {
@@ -1273,6 +1650,55 @@
         "title": "LogSummaryRequest",
         "description": "可变结构的工程表单 OCR JSON 或兼容文字，序列化后最多 4000 字符。"
       },
+      "MainWorkValues": {
+        "properties": {
+          "construction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Construction",
+            "description": "施工部位、工序和进展；保留全部事实与关键数据，不摘要"
+          },
+          "witness": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Witness",
+            "description": "旁站活动、过程和检测记录；保留全部事实与关键数据，不摘要"
+          },
+          "patrol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patrol",
+            "description": "巡视检查、现场观察及质量安全状态；保留全部事实与关键数据，不摘要"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "construction",
+          "witness",
+          "patrol"
+        ],
+        "title": "MainWorkValues",
+        "description": "三个字段必须明确返回；不存在的类别为null，内容必须依据原文。"
+      },
       "PendingClarification": {
         "properties": {
           "page": {
@@ -1302,6 +1728,11 @@
         ],
         "title": "PendingClarification",
         "description": "调用方保存的一级意图澄清状态；attempts 是已完成的澄清轮数。"
+      },
+      "RecognitionConfidence": {
+        "type": "number",
+        "maximum": 1.0,
+        "minimum": 0.0
       },
       "ValidationErrorItem": {
         "type": "object",
@@ -1559,7 +1990,7 @@
       },
       "JournalResponse": {
         "title": "JournalResponse",
-        "description": "用户于 2026-11-06 确认的 POST /ocr/daily-logs-new 成功响应；以 data/ocr/resources/daily-logs-output.json 为结构依据。",
+        "description": "用户于 2026-11-06 确认的成功响应；2026-11-12 批准路径更名为 POST /ocr/journal；以 data/ocr/resources/daily-logs-output.json 为结构依据。",
         "type": "object",
         "additionalProperties": false,
         "required": [

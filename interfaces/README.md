@@ -5,13 +5,13 @@
 
 ## 1、当前状态
 
-截至 2026-11-04：
+截至 2026-11-12：
 
-- 已实现的 8 个 HTTP 操作全部有文档，没有凭空描述尚未实现的接口。
+- 已实现的 10 个 HTTP 操作全部有文档，没有凭空描述尚未实现的接口。
 - `/agents/*`、`/health`、`/ready` 的既有契约由 `AGENTS.md`、`docs/agents-api.md`、
   `docs/sessions.md` 和自动化测试共同保护，标记为 `confirmed`。
-- `/diagnostics`、`/ocr/daily-logs-new` 已有实现和专题文档，但此前没有机器可读的完整
-  响应/错误契约；本次归纳为 **待确认草案**，标记为 `pending-review`。
+- `/diagnostics` 仍标记为 `pending-review`。监理日记三个操作已由用户明确批准，
+  正式子契约位于 [openapi/journal.openapi.json](openapi/journal.openapi.json)。
   `/diagnostics` 由原 `/health/deps` 更名并提升为一级路由。
 - 完整 OpenAPI 草案位于 [drafts/fastapi.openapi.json](drafts/fastapi.openapi.json)。
   **它不是正式契约，不能作为接口变更授权。** 用户批准后才能提升到 `openapi/`。
@@ -23,7 +23,7 @@
 
 ## 2、权威来源
 
-1. 用户明确批准的正式契约：`interfaces/openapi/` 中的文件（当前尚无整包正式契约）。
+1. 用户明确批准的正式契约：`interfaces/openapi/` 中的文件；当前有监理日记正式子契约，尚无整包正式契约。
 2. 已确认的响应子契约：`interfaces/log_summary/`、`interfaces/intent/` 下的 JSON Schema。
 3. 新版监理日志已确认的成功响应子契约：
    [journal/response.schema.json](journal/response.schema.json)，依据用户指定的后端响应样例；
@@ -44,7 +44,8 @@ interfaces/
 ├── coverage.md                # 功能-接口覆盖、调用方和差异清单
 ├── CHANGELOG.md               # 契约变更记录
 ├── openapi/
-│   └── README.md              # 正式契约目录；批准后放 fastapi.openapi.json
+│   ├── README.md              # 正式契约索引
+│   └── journal.openapi.json   # 用户批准的监理日记三个操作
 ├── drafts/
 │   ├── README.md              # 待确认事项和批准流程
 │   └── fastapi.openapi.json   # 从当前实现归纳的完整 OpenAPI 草案
@@ -80,9 +81,11 @@ interfaces/
 | 归档端意图识别 | `POST /agents/intent/archive` | confirmed | [归档接口](intent/archive/README.md) |
 | 自由对话 | `POST /agents/chat` | confirmed | [智能体指南](guides/agents.md) |
 | 本地依赖诊断 | `GET /diagnostics` | pending-review | [OCR 指南](guides/ocr.md) |
-| 监理日志识别（新版链路） | `POST /ocr/daily-logs-new` | pending-review | [OCR 指南](guides/ocr.md) |
+| 监理日记完整处理 | `POST /ocr/journal` | confirmed | [正式子契约](openapi/journal.openapi.json) |
+| 监理日记纯 OCR | `POST /ocr/journal/recognize` | confirmed | [三入口语义](journal/capabilities.md) |
+| 监理工作文本拆分 | `POST /ocr/journal/process` | confirmed | [三入口语义](journal/capabilities.md) |
 
-完整字段以 OpenAPI 草案的 `components/schemas` 为准；本目录的 Markdown 只说明业务流程、
+监理日记字段以正式子契约为准；其他接口见 OpenAPI 草案的 `components/schemas`；本目录的 Markdown 只说明业务流程、
 状态转换、超时、重试、路径限制等 OpenAPI 不易表达的内容，不重复维护字段表。
 
 ## 6、通用约定
@@ -94,12 +97,13 @@ interfaces/
   - `/agents/*` 直接返回业务对象，没有 `data` 包装。
   - `/health`、`/ready` 返回 `{"status":"ok"}` / `{"status":"ready"}`。
   - `/diagnostics` 返回
-    `{"status":200,"data":...}`；其中 `/ocr/daily-logs-new` 严格返回
+    `{"status":200,"data":...}`；其中 `/ocr/journal` 严格返回
     `{"status":200,"message":"识别完成","data":...}`，`data` 为业务字段对象。
+    `/ocr/journal/recognize` 使用相同包装，data 为识别明细；`/ocr/journal/process` 直接返回三个工作字段。
     `status` 是业务成功标记，不是 HTTP 状态码替代品。
 - 错误：统一为 `{"detail": ...}`。请求校验失败时 `detail` 是错误数组；上下文超限和
   其余业务/模型错误是字符串。错误响应不回显原始输入、身份、历史、密钥或上游正文。
-- 文件：没有 multipart 上传接口。`/ocr/daily-logs-new` 接受数据池相对路径或 base64。
+- 文件：没有 multipart 上传接口。`/ocr/journal` 和 `/ocr/journal/recognize` 接受数据池相对路径或 base64。
   输入输出不得越过 `PROJECTS_ROOT`。
 - 分页：当前没有列表分页接口。
 - 异步任务：当前没有任务提交、任务状态、轮询、webhook 或取消接口。所有请求同步完成。

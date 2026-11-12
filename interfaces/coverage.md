@@ -1,5 +1,9 @@
 # 功能与接口覆盖清单
 
+当前更新（2026-11-12）：应用共 10 个操作。六个既有智能体/系统操作、`/diagnostics` 和三个监理日记操作；后三者的正式子契约见 [journal.openapi.json](openapi/journal.openapi.json)。纯 OCR 返回完整框与拆分前内容，文本入口独立处理 main_work。旧 `/ocr/daily-logs-new` 已更名为 `/ocr/journal`，另增 `/ocr/journal/recognize`、`/ocr/journal/process`。
+
+以下为 2026-11-02 历史清单，含已移除接口，不代表当前可用能力。
+
 统计时间：2026-11-02。依据：`app/main.py`、`app/api/`、`app/schemas/`、`app/ocr/`、
 `docs/`、`tests/` 以及运行时 `create_app().openapi()`。不包含本仓库外的 Java/前端源码。
 

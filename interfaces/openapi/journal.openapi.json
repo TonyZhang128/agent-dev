@@ -1,0 +1,914 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "监理日记三入口正式子契约",
+    "version": "1.0.0",
+    "x-contract-status": "confirmed",
+    "description": "用户于 2026-11-12 明确批准；仅覆盖本文件三个操作，不批准其他接口的完整草案。旧 /ocr/daily-logs-new 被 /ocr/journal 替代，不保留旧路由。几何、原文、置信度及框关联语义见 interfaces/journal/capabilities.md。"
+  },
+  "paths": {
+    "/ocr/journal": {
+      "post": {
+        "tags": [
+          "ocr"
+        ],
+        "summary": "识别并处理监理日记",
+        "description": "新版监理日志识别：按 PDF 构建的模板对齐完整表格，整页一次 OCR 后匹配表内外字段；不进行字段级补充识别。mainWork先合并OCR文字，再按施工情况、旁站情况、巡视情况关键词提取；规则无法完整可靠覆盖时，由Agent基于全文生成construction、witness、patrol。允许整理表达、合并断句和去标题，但保留全部业务事实与关键数据，不摘要、不补充事实；原文没有的类别为 null。成功响应严格遵守已确认的后端格式，顶层只有 status、message、data，业务字段直接位于 data，不返回内部识别详情。mainWork 无法可靠拆分时返回 502。",
+        "operationId": "journal_recognize_ocr_journal_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JournalReq"
+              },
+              "example": {
+                "path": "projects/监理日志照片.jpg",
+                "taskId": "123456789012345678"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "监理日志业务字段；成功响应结构已由用户确认，不含额外信息。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JournalResponse"
+                },
+                "example": {
+                  "status": 200,
+                  "message": "识别完成",
+                  "data": {
+                    "taskId": "123456789012345678",
+                    "documentType": "supervision_diary",
+                    "common": {
+                      "projectName": "测试高速公路项目",
+                      "documentNo": null,
+                      "supervisionOrg": null,
+                      "recorderName": null,
+                      "recorderPosition": "专业监理工程师",
+                      "weather": null,
+                      "logDate": "2026-10-03",
+                      "reviewerName": null
+                    },
+                    "fields": {
+                      "mainWork": {
+                        "construction": "K3+280段路基填筑",
+                        "witness": "旁站路基碾压",
+                        "patrol": "巡视挡土墙砌筑"
+                      },
+                      "issues": null,
+                      "nextDayPlan": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求校验失败，或输入与上下文超过预算。校验失败时 detail 为错误数组；输入超限时为字符串。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestError"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "路径越界、文件不存在/不是文件、图片无法解码、未检测到通过模板结构核验的监理日志表格，或文档处理失败。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "mainWork无法可靠处理：关键词规则无法完整提取，且Agent不可用、超时或生成结果未通过结构/关键数据检查。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "OCR 模型不可用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-contract-status": "confirmed",
+        "x-contract-source": "用户于 2026-11-12 明确批准三入口方案；interfaces/drafts/journal-capabilities.md；interfaces/openapi/journal.openapi.json",
+        "x-side-effects": "只读取数据池照片，不写 PDF/Excel。",
+        "x-idempotency": "识别结果可能因模型和照片变化而不同；只读调用可重试。"
+      }
+    },
+    "/ocr/journal/recognize": {
+      "post": {
+        "tags": [
+          "ocr"
+        ],
+        "summary": "仅识别监理日记",
+        "description": "仅执行表格定位、整页一次 OCR 和栏目提取，不执行工作内容拆分或调用语言模型。返回全部原始文字框及拆分前栏目文本；坐标统一为 EXIF 校正后、缩小前的图片像素坐标。",
+        "operationId": "journal_recognize_only_ocr_journal_recognize_post",
+        "x-contract-status": "confirmed",
+        "x-contract-source": "用户于 2026-11-12 明确批准三入口方案；interfaces/drafts/journal-capabilities.md；interfaces/openapi/journal.openapi.json",
+        "x-side-effects": "不写文件、不持久化会话。",
+        "x-idempotency": "只读，可重试。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JournalReq"
+              },
+              "example": {
+                "path": "projects/监理日志照片.jpg",
+                "taskId": "example"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JournalRecognitionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "路径、图片或表格定位失败。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求校验失败。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "OCR 模型或资源不可用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ocr/journal/process": {
+      "post": {
+        "tags": [
+          "ocr"
+        ],
+        "summary": "仅拆分监理工作内容",
+        "description": "仅处理完整 main_work 文本：规则优先、Agent 兜底及关键数据校验。空文本或纯标题返回三个 null。规则路径不设统一 4000 字符上限；模型路径沿用 4000 字符保护。处理失败统一 502，保留既有超时、并发和模型回退策略；不访问 OCR 引擎。",
+        "operationId": "journal_process_ocr_journal_process_post",
+        "x-contract-status": "confirmed",
+        "x-contract-source": "用户于 2026-11-12 明确批准三入口方案；interfaces/drafts/journal-capabilities.md；interfaces/openapi/journal.openapi.json",
+        "x-side-effects": "不写文件、不持久化会话。",
+        "x-idempotency": "只读，可重试；模型路径可能产生不同措辞。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JournalProcessRequest"
+              },
+              "example": {
+                "main_work": "施工情况：K1+100填筑。\n旁站情况：旁站碾压。\n巡视情况：巡视施工现场。"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MainWorkValues"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求校验失败。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "主要工作内容无法可靠拆分；包括模型不可用、超时、超出模型输入保护或生成结果校验失败。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "JournalReq": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path",
+            "description": "PROJECTS_ROOT 数据池内的监理日志照片路径",
+            "default": ""
+          },
+          "img": {
+            "type": "string",
+            "title": "Img",
+            "description": "base64 编码的图片数据；path 与 img 至少提供一个",
+            "default": ""
+          },
+          "taskId": {
+            "type": "string",
+            "maxLength": 128,
+            "title": "TaskId",
+            "description": "业务任务 ID，仅原样回显到 processed.taskId；不传则为 null",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "JournalReq",
+        "description": "新版监理日志识别请求；与旧接口字段一致，实现链独立。"
+      },
+      "JournalResponse": {
+        "title": "JournalResponse",
+        "description": "用户于 2026-11-06 确认的成功响应；2026-11-12 批准路径更名为 POST /ocr/journal；以 data/ocr/resources/daily-logs-output.json 为结构依据。",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "message",
+          "data"
+        ],
+        "properties": {
+          "status": {
+            "type": "integer",
+            "const": 200
+          },
+          "message": {
+            "type": "string",
+            "const": "识别完成"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "taskId",
+              "documentType",
+              "common",
+              "fields"
+            ],
+            "properties": {
+              "taskId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "documentType": {
+                "type": "string",
+                "const": "supervision_diary"
+              },
+              "common": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "projectName",
+                  "documentNo",
+                  "supervisionOrg",
+                  "recorderName",
+                  "recorderPosition",
+                  "weather",
+                  "logDate",
+                  "reviewerName"
+                ],
+                "properties": {
+                  "projectName": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "documentNo": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "supervisionOrg": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "recorderName": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "recorderPosition": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "weather": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "logDate": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "reviewerName": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              "fields": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "mainWork",
+                  "issues",
+                  "nextDayPlan"
+                ],
+                "properties": {
+                  "mainWork": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "construction",
+                      "witness",
+                      "patrol"
+                    ],
+                    "properties": {
+                      "construction": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "witness": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "patrol": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    }
+                  },
+                  "issues": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "nextDayPlan": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "JournalImageInfo": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "width",
+          "height",
+          "coordinateSpace"
+        ],
+        "properties": {
+          "width": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          },
+          "height": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          },
+          "coordinateSpace": {
+            "type": "string",
+            "const": "exif_corrected_original"
+          }
+        }
+      },
+      "JournalOCRBox": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "text",
+          "confidence",
+          "polygon"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "polygon": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "minItems": 2,
+                "maxItems": 2
+              },
+              {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "minItems": 2,
+                "maxItems": 2
+              },
+              {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "minItems": 2,
+                "maxItems": 2
+              },
+              {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "minItems": 2,
+                "maxItems": 2
+              }
+            ],
+            "minItems": 4,
+            "maxItems": 4
+          }
+        }
+      },
+      "JournalOCRField": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "label",
+          "text",
+          "confidence",
+          "polygon",
+          "boxIds",
+          "ambiguous",
+          "visibleFraction"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "enum": [
+              "project",
+              "number",
+              "supervision_org",
+              "recorder",
+              "weather",
+              "position",
+              "date",
+              "reviewer",
+              "main_work",
+              "issues",
+              "next_day_plan"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "polygon": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "minItems": 2,
+                "maxItems": 2
+              },
+              {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "minItems": 2,
+                "maxItems": 2
+              },
+              {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "minItems": 2,
+                "maxItems": 2
+              },
+              {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "minItems": 2,
+                "maxItems": 2
+              }
+            ],
+            "minItems": 4,
+            "maxItems": 4
+          },
+          "boxIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "ambiguous": {
+            "type": "boolean"
+          },
+          "visibleFraction": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      },
+      "JournalRecognitionData": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "taskId",
+          "documentType",
+          "image",
+          "tablePolygon",
+          "boxes",
+          "fields"
+        ],
+        "properties": {
+          "taskId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "documentType": {
+            "type": "string",
+            "const": "supervision_diary"
+          },
+          "image": {
+            "$ref": "#/components/schemas/JournalImageInfo"
+          },
+          "tablePolygon": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "minItems": 2,
+                "maxItems": 2
+              },
+              {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "minItems": 2,
+                "maxItems": 2
+              },
+              {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "minItems": 2,
+                "maxItems": 2
+              },
+              {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "minItems": 2,
+                "maxItems": 2
+              }
+            ],
+            "minItems": 4,
+            "maxItems": 4
+          },
+          "boxes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JournalOCRBox"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JournalOCRField"
+            }
+          }
+        }
+      },
+      "JournalRecognitionResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "message",
+          "data"
+        ],
+        "properties": {
+          "status": {
+            "type": "integer",
+            "const": 200
+          },
+          "message": {
+            "type": "string",
+            "const": "识别完成"
+          },
+          "data": {
+            "$ref": "#/components/schemas/JournalRecognitionData"
+          }
+        }
+      },
+      "JournalProcessRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "main_work"
+        ],
+        "properties": {
+          "main_work": {
+            "type": "string"
+          }
+        }
+      },
+      "MainWorkValues": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "construction",
+          "witness",
+          "patrol"
+        ],
+        "properties": {
+          "construction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "witness": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "patrol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ErrorDetail": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "detail"
+        ],
+        "properties": {
+          "detail": {
+            "type": "string",
+            "description": "脱敏后的错误说明，不包含密钥、原始输入、身份、历史或上游错误正文。"
+          }
+        },
+        "description": "非校验类错误响应。"
+      },
+      "RequestError": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "detail"
+        ],
+        "properties": {
+          "detail": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ValidationErrorItem"
+                }
+              }
+            ],
+            "description": "请求校验失败时为错误数组；输入或上下文超限时为字符串。"
+          }
+        },
+        "description": "422 统一错误响应。"
+      },
+      "ValidationErrorItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "loc",
+          "msg"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Pydantic 错误类型。"
+          },
+          "loc": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "description": "错误位置，例如 body、history、0、role。"
+          },
+          "msg": {
+            "type": "string",
+            "description": "可公开的错误说明。"
+          }
+        },
+        "description": "校验错误项。实际响应省略 input 与 ctx，避免回显原始身份、历史和输入。"
+      }
+    }
+  }
+}

@@ -218,14 +218,14 @@
         }
       }
     },
-    "/ocr/daily-logs-new": {
+    "/ocr/journal": {
       "post": {
         "tags": [
           "ocr"
         ],
         "summary": "Journal Recognize",
         "description": "新版监理日志识别：整页OCR后按关键词提取，必要时由Agent基于完整mainWork生成三部分。",
-        "operationId": "journal_recognize_ocr_daily_logs_new_post",
+        "operationId": "journal_recognize_ocr_journal_post",
         "requestBody": {
           "content": {
             "application/json": {
@@ -242,6 +242,90 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ocr/journal/recognize": {
+      "post": {
+        "tags": [
+          "ocr"
+        ],
+        "summary": "Journal Recognize Only",
+        "description": "仅识别：返回完整文字框、原图坐标和拆分前栏目，不调用语言模型。",
+        "operationId": "journal_recognize_only_ocr_journal_recognize_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JournalReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JournalRecognitionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ocr/journal/process": {
+      "post": {
+        "tags": [
+          "ocr"
+        ],
+        "summary": "Journal Process",
+        "description": "仅处理完整工作内容文本，复用规则、模型兜底与事实校验。",
+        "operationId": "journal_process_ocr_journal_process_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JournalProcessRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MainWorkValues"
+                }
               }
             }
           },
@@ -1010,6 +1094,308 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "JournalFieldKey": {
+        "type": "string",
+        "enum": [
+          "project",
+          "number",
+          "supervision_org",
+          "recorder",
+          "weather",
+          "position",
+          "date",
+          "reviewer",
+          "main_work",
+          "issues",
+          "next_day_plan"
+        ]
+      },
+      "JournalImageInfo": {
+        "properties": {
+          "width": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Width"
+          },
+          "height": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Height"
+          },
+          "coordinateSpace": {
+            "type": "string",
+            "const": "exif_corrected_original",
+            "title": "Coordinatespace"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "width",
+          "height",
+          "coordinateSpace"
+        ],
+        "title": "JournalImageInfo"
+      },
+      "JournalOCRField": {
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/JournalFieldKey"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "confidence": {
+            "$ref": "#/components/schemas/RecognitionConfidence"
+          },
+          "polygon": {
+            "$ref": "#/components/schemas/JournalPolygon"
+          },
+          "boxIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Boxids"
+          },
+          "ambiguous": {
+            "type": "boolean",
+            "title": "Ambiguous"
+          },
+          "visibleFraction": {
+            "$ref": "#/components/schemas/RecognitionConfidence"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "text",
+          "confidence",
+          "polygon",
+          "boxIds",
+          "ambiguous",
+          "visibleFraction"
+        ],
+        "title": "JournalOCRField"
+      },
+      "JournalRecognitionData": {
+        "properties": {
+          "taskId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Taskid"
+          },
+          "documentType": {
+            "type": "string",
+            "const": "supervision_diary",
+            "title": "Documenttype"
+          },
+          "image": {
+            "$ref": "#/components/schemas/JournalImageInfo"
+          },
+          "tablePolygon": {
+            "$ref": "#/components/schemas/JournalPolygon"
+          },
+          "boxes": {
+            "items": {
+              "$ref": "#/components/schemas/JournalOCRBox"
+            },
+            "type": "array",
+            "title": "Boxes"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/JournalOCRField"
+            },
+            "type": "array",
+            "title": "Fields"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "taskId",
+          "documentType",
+          "image",
+          "tablePolygon",
+          "boxes",
+          "fields"
+        ],
+        "title": "JournalRecognitionData"
+      },
+      "JournalProcessRequest": {
+        "properties": {
+          "main_work": {
+            "type": "string",
+            "title": "Main Work"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "main_work"
+        ],
+        "title": "JournalProcessRequest",
+        "description": "独立文本处理请求；允许空文本，不引入会话或图片依赖。"
+      },
+      "JournalRecognitionResponse": {
+        "properties": {
+          "status": {
+            "type": "integer",
+            "const": 200,
+            "title": "Status"
+          },
+          "message": {
+            "type": "string",
+            "const": "识别完成",
+            "title": "Message"
+          },
+          "data": {
+            "$ref": "#/components/schemas/JournalRecognitionData"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "message",
+          "data"
+        ],
+        "title": "JournalRecognitionResponse"
+      },
+      "RecognitionConfidence": {
+        "type": "number",
+        "maximum": 1.0,
+        "minimum": 0.0
+      },
+      "JournalOCRBox": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "confidence": {
+            "$ref": "#/components/schemas/RecognitionConfidence"
+          },
+          "polygon": {
+            "$ref": "#/components/schemas/JournalPolygon"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "text",
+          "confidence",
+          "polygon"
+        ],
+        "title": "JournalOCRBox"
+      },
+      "JournalPoint": {
+        "prefixItems": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "number"
+          }
+        ],
+        "type": "array",
+        "maxItems": 2,
+        "minItems": 2
+      },
+      "JournalPolygon": {
+        "prefixItems": [
+          {
+            "$ref": "#/components/schemas/JournalPoint"
+          },
+          {
+            "$ref": "#/components/schemas/JournalPoint"
+          },
+          {
+            "$ref": "#/components/schemas/JournalPoint"
+          },
+          {
+            "$ref": "#/components/schemas/JournalPoint"
+          }
+        ],
+        "type": "array",
+        "maxItems": 4,
+        "minItems": 4
+      },
+      "MainWorkValues": {
+        "properties": {
+          "construction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Construction",
+            "description": "施工部位、工序和进展；保留全部事实与关键数据，不摘要"
+          },
+          "witness": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Witness",
+            "description": "旁站活动、过程和检测记录；保留全部事实与关键数据，不摘要"
+          },
+          "patrol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patrol",
+            "description": "巡视检查、现场观察及质量安全状态；保留全部事实与关键数据，不摘要"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "construction",
+          "witness",
+          "patrol"
+        ],
+        "title": "MainWorkValues",
+        "description": "三个字段必须明确返回；不存在的类别为null，内容必须依据原文。"
       }
     }
   }

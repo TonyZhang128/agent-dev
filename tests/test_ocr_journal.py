@@ -158,7 +158,7 @@ def test_new_route_reads_one_page_and_maps_fields(client, settings):
     engine = PageEngine()
     client.app.state.ocr_resources.engine = engine
 
-    response = client.post("/ocr/daily-logs-new", json={"path": "journal.png", "taskId": " 42 "})
+    response = client.post("/ocr/journal", json={"path": "journal.png", "taskId": " 42 "})
 
     assert response.status_code == 200
     assert engine.calls == 1
@@ -196,7 +196,7 @@ def test_new_route_keeps_null_fields_and_matches_backend_contract(client, settin
     write_photo(settings)
     client.app.state.ocr_resources.engine = lambda picture: ocr_result()
 
-    response = client.post("/ocr/daily-logs-new", json={"path": "journal.png"})
+    response = client.post("/ocr/journal", json={"path": "journal.png"})
 
     assert response.status_code == 200
     payload = response.json()
@@ -241,7 +241,7 @@ def test_empty_field_does_not_repeat_ocr(client, settings):
     engine = PageEngine(skip="reviewer", fallback="审核人：王梦瑶")
     client.app.state.ocr_resources.engine = engine
 
-    response = client.post("/ocr/daily-logs-new", json={"path": "journal.png"})
+    response = client.post("/ocr/journal", json={"path": "journal.png"})
 
     data = response.json()["data"]
     assert response.status_code == 200
@@ -461,7 +461,7 @@ def test_new_route_accepts_base64_and_prefers_it(client, settings):
     client.app.state.ocr_resources.engine = PageEngine()
 
     response = client.post(
-        "/ocr/daily-logs-new",
+        "/ocr/journal",
         json={"path": "missing.png", "img": encoded},
     )
 
@@ -469,9 +469,10 @@ def test_new_route_accepts_base64_and_prefers_it(client, settings):
     assert response.json()["data"]["common"]["projectName"] == "成乐高速公路扩容建设"
 
 
-def test_new_route_maps_invalid_image_and_model_failure(client, settings):
+@pytest.mark.parametrize("route", ["/ocr/journal", "/ocr/journal/recognize"])
+def test_new_route_maps_invalid_image_and_model_failure(client, settings, route):
     (settings.projects_root / "invalid.png").write_bytes(b"not an image")
-    invalid = client.post("/ocr/daily-logs-new", json={"path": "invalid.png"})
+    invalid = client.post(route, json={"path": "invalid.png"})
     assert invalid.status_code == 400
     assert set(invalid.json()) == {"detail"}
 
@@ -481,11 +482,12 @@ def test_new_route_maps_invalid_image_and_model_failure(client, settings):
         raise RuntimeError("model download failed")
 
     client.app.state.ocr_resources.engine = broken
-    failed = client.post("/ocr/daily-logs-new", json={"path": "journal.png"})
+    failed = client.post(route, json={"path": "journal.png"})
     assert failed.status_code == 503
     assert "model download failed" not in failed.json()["detail"]
 
 
 @pytest.mark.parametrize("payload", [{}, {"path": "  "}, {"img": "\n"}])
-def test_new_route_requires_a_photo_source(client, payload):
-    assert client.post("/ocr/daily-logs-new", json=payload).status_code == 422
+@pytest.mark.parametrize("route", ["/ocr/journal", "/ocr/journal/recognize"])
+def test_new_route_requires_a_photo_source(client, payload, route):
+    assert client.post(route, json=payload).status_code == 422

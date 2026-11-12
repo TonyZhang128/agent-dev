@@ -256,7 +256,7 @@ BUSINESS_API_URL=http://127.0.0.1:18309 LLM_MODEL=highway-agent \
 
 ```bash
 mkdir -p verification/ocr
-curl --fail-with-body http://127.0.0.1:8309/ocr/daily-logs-new \
+curl --fail-with-body http://127.0.0.1:8309/ocr/journal \
   -H 'Content-Type: application/json' \
   -d '{"path":"acceptance/journal.jpg","taskId":"deploy-check-001"}' \
   -o verification/ocr/deploy-check-001.json

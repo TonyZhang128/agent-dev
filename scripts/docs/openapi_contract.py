@@ -17,12 +17,15 @@ from app.schemas.agents import BusinessIntentResult
 ROOT = Path(__file__).resolve().parents[2]
 DRAFT_PATH = ROOT / "interfaces/drafts/fastapi.openapi.json"
 OFFICIAL_PATH = ROOT / "interfaces/openapi/fastapi.openapi.json"
+JOURNAL_CONTRACT_PATH = ROOT / "interfaces/openapi/journal.openapi.json"
 
 JSON_MEDIA_TYPE = "application/json"
 
 VALIDATION_ERROR_ITEM = "ValidationErrorItem"
 REQUEST_ERROR = "RequestError"
 ERROR_DETAIL = "ErrorDetail"
+# 这些既有入口未声明成功 response_model，需要文档补全；其他入口必须保留运行时 Schema。
+SCHEMALESS_SUCCESS_PATHS = frozenset({"/health", "/ready", "/diagnostics", "/ocr/journal"})
 
 
 def ref(name: str) -> dict[str, str]:
@@ -447,7 +450,7 @@ OPERATIONS: dict[str, dict[str, dict[str, Any]]] = {
             },
         )
     },
-    "/ocr/daily-logs-new": {
+    "/ocr/journal": {
         "post": _operation(
             description="新版监理日志识别：按 PDF 构建的模板对齐完整表格，整页一次 OCR 后匹配"
             "表内外字段；不进行字段级补充识别。mainWork先合并OCR文字，再按施工情况、旁站情况、巡视情况关键词提取；"
@@ -456,9 +459,10 @@ OPERATIONS: dict[str, dict[str, dict[str, Any]]] = {
             "原文没有的类别为 null。成功响应严格遵守已确认的后端格式，顶层只有 status、"
             "message、data，业务字段直接位于 data，不返回内部识别详情。"
             "mainWork 无法可靠拆分时返回 502。",
-            summary="识别监理日记（新版链路）",
-            status="pending-review",
-            source="interfaces/journal/response.schema.json（成功响应已确认）；"
+            summary="识别并处理监理日记",
+            status="confirmed",
+            source="interfaces/openapi/journal.openapi.json（2026-11-12 用户明确批准）；"
+            "interfaces/journal/response.schema.json（成功响应已确认）；"
             "interfaces/journal/main-work-processing.md（生成语义已确认）；docs/journal-mainwork-split.md；"
             "tests/test_ocr_journal.py；tests/test_agents_main_work.py",
             side_effects="只读取数据池照片，不写 PDF/Excel。",
@@ -510,6 +514,48 @@ OPERATIONS: dict[str, dict[str, dict[str, Any]]] = {
             },
         )
     },
+    "/ocr/journal/recognize": {
+        "post": _operation(
+            description="仅执行表格定位、整页一次 OCR 和栏目提取，不执行工作内容拆分或调用语言模型。"
+            "返回全部原始文字框及拆分前栏目文本；坐标统一为 EXIF 校正后、缩小前的图片像素坐标。",
+            summary="仅识别监理日记",
+            status="confirmed",
+            source="interfaces/openapi/journal.openapi.json；interfaces/journal/capabilities.md",
+            side_effects="不写文件、不持久化会话。",
+            idempotency="只读，可重试。",
+            request_example={"path": "projects/监理日志照片.jpg", "taskId": "example"},
+            responses={
+                "200": _json_response(
+                    "完整文字框和拆分前栏目。", ref("JournalRecognitionResponse")
+                ),
+                "400": _error_response("路径、图片或表格定位失败。"),
+                "422": REQUEST_ERROR_RESPONSE,
+                "503": _error_response("OCR 模型或资源不可用。"),
+            },
+        )
+    },
+    "/ocr/journal/process": {
+        "post": _operation(
+            description="仅处理完整 main_work 文本：规则优先、Agent 兜底及关键数据校验。"
+            "空文本或纯标题返回三个 null；模型路径沿用 4000 字符保护，规则路径不设统一长度上限。"
+            "处理失败统一 502；不访问 OCR 引擎。",
+            summary="仅拆分监理工作内容",
+            status="confirmed",
+            source="interfaces/openapi/journal.openapi.json；interfaces/journal/capabilities.md",
+            side_effects="不写文件、不持久化会话。",
+            idempotency="只读，可重试；模型路径可能产生不同措辞。",
+            request_example={
+                "main_work": "施工情况：K1+100填筑。\n旁站情况：旁站碾压。\n巡视情况：巡视施工现场。"
+            },
+            responses={
+                "200": _json_response("三个必填可空的工作内容字段。", ref("MainWorkValues")),
+                "422": REQUEST_ERROR_RESPONSE,
+                "502": _error_response(
+                    "主要工作内容无法可靠拆分；模型不可用、超时或结果检查失败。"
+                ),
+            },
+        )
+    },
 }
 
 
@@ -520,7 +566,19 @@ def _apply_operations(spec: dict[str, Any]) -> None:
                 continue
             operation = spec["paths"][path][method]
             operation.update(copy.deepcopy(meta["operation"]))
-            operation["responses"].update(copy.deepcopy(meta["responses"]))
+            for code, response in copy.deepcopy(meta["responses"]).items():
+                # 文档增强只能补充成功响应说明，不能覆盖路由实际声明的非空 Schema。
+                # 否则 response_model 漂移会被手写 $ref 掩盖，正式子契约检查将误报通过。
+                actual_schema = (
+                    operation["responses"]
+                    .get(code, {})
+                    .get("content", {})
+                    .get(JSON_MEDIA_TYPE, {})
+                    .get("schema")
+                )
+                if code == "200" and (actual_schema or path not in SCHEMALESS_SUCCESS_PATHS):
+                    response["content"][JSON_MEDIA_TYPE]["schema"] = actual_schema or {}
+                operation["responses"][code] = response
             if meta.get("request_example") is not None:
                 media = operation.setdefault("requestBody", {}).setdefault("content", {})
                 media.setdefault(JSON_MEDIA_TYPE, {})["example"] = copy.deepcopy(
@@ -620,3 +678,81 @@ def build_contract() -> dict[str, Any]:
 def contract_json() -> str:
     """稳定的 JSON 文本；用于导出和校验。"""
     return json.dumps(build_contract(), ensure_ascii=False, indent=2, sort_keys=False) + "\n"
+
+
+def _validation_shape(schema: Any) -> Any:
+    """忽略 Schema 展示注解，保留全部校验规则及业务属性名。"""
+    if isinstance(schema, list):
+        return [_validation_shape(item) for item in schema]
+    if not isinstance(schema, dict):
+        return schema
+    annotations = {"title", "description", "examples", "example"}
+    normalized = {}
+    for key, item in schema.items():
+        if key in annotations:
+            continue
+        if key in {"properties", "$defs", "patternProperties"}:
+            normalized[key] = {name: _validation_shape(prop) for name, prop in item.items()}
+        elif key == "required" and isinstance(item, list):
+            normalized[key] = sorted(item)
+        else:
+            normalized[key] = _validation_shape(item)
+    return normalized
+
+
+def _resolve_schema_refs(
+    node: Any, schemas: dict[str, Any], seen: frozenset[str] = frozenset()
+) -> Any:
+    """展开组件引用，使共享类型别名与内联 Schema 按相同校验规则比较。"""
+    if isinstance(node, list):
+        return [_resolve_schema_refs(item, schemas, seen) for item in node]
+    if not isinstance(node, dict):
+        return node
+    reference = node.get("$ref")
+    if isinstance(reference, str) and reference.startswith("#/components/schemas/"):
+        name = reference.rsplit("/", 1)[-1]
+        if name not in seen and name in schemas:
+            expanded = {
+                **schemas[name],
+                **{key: item for key, item in node.items() if key != "$ref"},
+            }
+            return _resolve_schema_refs(expanded, schemas, seen | {name})
+    return {key: _resolve_schema_refs(item, schemas, seen) for key, item in node.items()}
+
+
+def _operation_shape(operation: dict[str, Any], schemas: dict[str, Any]) -> dict[str, Any]:
+    """对正式子契约比较调用行为，文案由完整评审文档另行保护。"""
+    return _validation_shape(
+        _resolve_schema_refs(
+            {
+                "operationId": operation.get("operationId"),
+                "parameters": _validation_shape(operation.get("parameters", [])),
+                "requestBody": _validation_shape(operation.get("requestBody", {})),
+                "responses": _validation_shape(operation.get("responses", {})),
+                "security": operation.get("security", []),
+            },
+            schemas,
+        )
+    )
+
+
+def approved_journal_differences(spec: dict[str, Any]) -> list[str]:
+    """独立比较已批准的三个操作及可达 Schema，不从实现覆盖正式子契约。"""
+    approved = json.loads(JOURNAL_CONTRACT_PATH.read_text(encoding="utf-8"))
+    expected_schemas = approved["components"]["schemas"]
+    actual_schemas = spec["components"]["schemas"]
+    differences = []
+    for path, methods in approved["paths"].items():
+        for method, operation in methods.items():
+            actual = spec["paths"].get(path, {}).get(method)
+            if actual is None or _operation_shape(actual, actual_schemas) != _operation_shape(
+                operation, expected_schemas
+            ):
+                differences.append(f"正式子契约操作不一致：{method.upper()} {path}")
+    for name, schema in expected_schemas.items():
+        actual = actual_schemas.get(name)
+        expected_shape = _validation_shape(_resolve_schema_refs(schema, expected_schemas))
+        actual_shape = _validation_shape(_resolve_schema_refs(actual, actual_schemas))
+        if actual is None or actual_shape != expected_shape:
+            differences.append(f"正式子契约 Schema 不一致：{name}")
+    return differences

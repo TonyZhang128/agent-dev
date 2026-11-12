@@ -10,5 +10,5 @@ def test_journal_route_exists_without_changing_agent_liveness(tmp_path):
     settings = Settings(_env_file=None, templates_root=tmp_path / "missing")
     with TestClient(create_app(settings=settings)) as client:
         assert client.get("/health").json() == {"status": "ok"}
-        assert client.post("/ocr/daily-logs-new", json={}).status_code == 422
+        assert client.post("/ocr/journal", json={}).status_code == 422
         assert client.post("/agents/chat", json={}).status_code == 422

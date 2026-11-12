@@ -1,6 +1,8 @@
 """文档加工请求；保留 docsvc 字段和空输出语义。"""
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from typing import Annotated, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_validator, model_validator
 
 
 class JournalReq(BaseModel):
@@ -55,3 +57,73 @@ class MainWorkValues(BaseModel):
     @classmethod
     def trim_content(cls, text: str | None) -> str | None:
         return text.strip() or None if text is not None else None
+
+
+class JournalProcessRequest(BaseModel):
+    """独立文本处理请求；允许空文本，不引入会话或图片依赖。"""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+    main_work: str
+
+
+type JournalPoint = tuple[FiniteFloat, FiniteFloat]
+type JournalPolygon = tuple[JournalPoint, JournalPoint, JournalPoint, JournalPoint]
+type RecognitionConfidence = Annotated[FiniteFloat, Field(ge=0, le=1)]
+type JournalFieldKey = Literal[
+    "project",
+    "number",
+    "supervision_org",
+    "recorder",
+    "weather",
+    "position",
+    "date",
+    "reviewer",
+    "main_work",
+    "issues",
+    "next_day_plan",
+]
+
+
+class JournalOutput(BaseModel):
+    """识别结果拒绝额外字段，不向 HTTP 暴露内部图像和矩阵。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class JournalImageInfo(JournalOutput):
+    width: int = Field(gt=0)
+    height: int = Field(gt=0)
+    coordinateSpace: Literal["exif_corrected_original"]
+
+
+class JournalOCRBox(JournalOutput):
+    id: str
+    text: str
+    confidence: RecognitionConfidence
+    polygon: JournalPolygon
+
+
+class JournalOCRField(JournalOutput):
+    key: JournalFieldKey
+    label: str
+    text: str | None
+    confidence: RecognitionConfidence
+    polygon: JournalPolygon
+    boxIds: list[str]
+    ambiguous: bool
+    visibleFraction: RecognitionConfidence
+
+
+class JournalRecognitionData(JournalOutput):
+    taskId: str | None
+    documentType: Literal["supervision_diary"]
+    image: JournalImageInfo
+    tablePolygon: JournalPolygon
+    boxes: list[JournalOCRBox]
+    fields: list[JournalOCRField]
+
+
+class JournalRecognitionResponse(JournalOutput):
+    status: Literal[200]
+    message: Literal["识别完成"]
+    data: JournalRecognitionData

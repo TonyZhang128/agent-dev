@@ -101,7 +101,7 @@ def test_ocr_model_failure_returns_503(settings):
 
     with TestClient(app) as client:
         app.state.ocr_resources.engine = broken_engine
-        response = client.post("/ocr/daily-logs-new", json={"path": "projects/照片.png"})
+        response = client.post("/ocr/journal", json={"path": "projects/照片.png"})
     assert response.status_code == 503
     assert "model download failed" not in response.json()["detail"]
 

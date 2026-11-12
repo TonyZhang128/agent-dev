@@ -63,7 +63,7 @@ uv run --locked python -m scripts.intent.compile_catalog --check
 
 ## 5、OCR 与 mainWork
 
-当前 OCR HTTP 入口仅为 `/ocr/daily-logs-new`，不将已移除的旧照片、简表、填表和 WBS 接口列为可用能力。识别过程使用随代码发布的 journal 模板，定位与对齐后整页 OCR，再匹配业务栏目。
+当前 OCR HTTP 入口为组合处理 `/ocr/journal`、纯 OCR `/ocr/journal/recognize` 和纯文本拆分 `/ocr/journal/process`，不将已移除的旧照片、简表、填表和 WBS 接口列为可用能力。识别过程使用随代码发布的 journal 模板，定位与对齐后整页 OCR，再匹配业务栏目。
 
 mainWork 优先按可靠的施工、旁站、巡视标题提取，规则不足时交给 MainWorkAgent 基于完整原文生成三个字段，再检查关键数据。生成有独立的总预算和并发限制，失败时返回受控错误，不能伪造成功或改变事实。
 

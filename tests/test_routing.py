@@ -24,7 +24,7 @@ def test_full_openapi_matches_contract_snapshot():
     # OpenAPI 会合并重复路径，因此除文档外还要检查实际注册。
     routes = [route for route in app.routes if isinstance(route, APIRoute)]
     operations = [(method, route.path) for route in routes for method in route.methods]
-    assert len(operations) == len(set(operations)) == 8
+    assert len(operations) == len(set(operations)) == 10
 
 
 def test_aggregate_router_can_be_mounted_in_another_application():
@@ -50,7 +50,9 @@ def test_aggregate_router_can_be_mounted_in_another_application():
             "/agents/intent/archive",
             "/agents/chat",
             "/diagnostics",
-            "/ocr/daily-logs-new",
+            "/ocr/journal",
+            "/ocr/journal/recognize",
+            "/ocr/journal/process",
         }
 
 

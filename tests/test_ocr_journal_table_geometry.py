@@ -119,7 +119,7 @@ def test_no_table_returns_approved_400_without_ocr(tmp_path):
     encoded = base64.b64encode(cv2.imencode(".png", blank)[1]).decode("ascii")
     with TestClient(create_app(settings=make_ocr_settings(tmp_path))) as client:
         client.app.state.ocr_resources.engine = unexpected_engine
-        response = client.post("/ocr/daily-logs-new", json={"img": encoded})
+        response = client.post("/ocr/journal", json={"img": encoded})
     assert response.status_code == 400
     assert response.json() == {"detail": "未检测到监理日志表格，请重新拍摄"}
     assert not calls

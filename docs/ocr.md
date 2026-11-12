@@ -1,6 +1,8 @@
 # OCR与本地依赖诊断
 
-当前文档业务仅保留 `POST /ocr/daily-logs-new` 监理日记识别，以及系统级 `GET /diagnostics`。旧照片、简表、填表、表样和WBS入口已删除，不再作为可用能力介绍。
+当前提供 `POST /ocr/journal` 完整业务处理、`POST /ocr/journal/recognize` 纯 OCR、`POST /ocr/journal/process` 纯文本拆分，以及系统级 `GET /diagnostics`。旧照片、简表、填表、表样和WBS入口已删除，不再作为可用能力介绍。
+
+三个入口直接复用内部函数；纯 OCR 保留全部原始文字框、置信度和拆分前栏目，坐标统一为 EXIF 校正后、缩小前的图片像素坐标。纯文本入口不访问 OCR 引擎。正式定义见 [三入口契约](../interfaces/openapi/journal.openapi.json)。
 
 接口流程、请求及失败语义以 [接口指南](../interfaces/guides/ocr.md) 为准；table模板构建、算法、命名和真实验收见 [监理日记模板识别](journal-template-recognition.md)。
 

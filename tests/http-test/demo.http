@@ -69,7 +69,7 @@ Content-Type: application/json
 
 ### OCR recognize：base64 图片（path 与 img 至少提供一个）
 # 日记
-POST {{baseUrl}}/ocr/daily-logs-new
+POST {{baseUrl}}/ocr/journal
 Content-Type: application/json
 
 {
@@ -96,3 +96,15 @@ GET {{baseUrl}}/ocr/blank/JB12-4.2.2.png
 
 ### OCR sheet：可填栏位及页面比例坐标（kind=layout 表头字段 + kind=grid 空格子）
 GET {{baseUrl}}/ocr/sheet/JB12-4.2.2
+
+### 监理日记纯 OCR：完整框、原图坐标、置信度及拆分前文字
+POST {{baseUrl}}/ocr/journal/recognize
+Content-Type: application/json
+
+{"path":"projects/监理日志照片.jpg","taskId":"example"}
+
+### 监理工作纯文本拆分：不执行 OCR
+POST {{baseUrl}}/ocr/journal/process
+Content-Type: application/json
+
+{"main_work":"施工情况：K1+100填筑。\n旁站情况：旁站碾压。\n巡视情况：巡视施工现场。"}

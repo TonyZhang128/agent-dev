@@ -14,6 +14,7 @@ from pathlib import Path
 from scripts.docs.openapi_contract import (
     DRAFT_PATH,
     OFFICIAL_PATH,
+    approved_journal_differences,
     build_contract,
 )
 
@@ -43,6 +44,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    implementation = build_contract()
+    approved_differences = approved_journal_differences(implementation)
+    if approved_differences:
+        for difference in approved_differences:
+            print(difference)
+        print("正式监理日记子契约漂移；禁止用实现覆盖已批准定义。")
+        return 1
+
     if args.contract:
         contract_path = args.contract.resolve()
     elif OFFICIAL_PATH.is_file():
@@ -55,13 +64,15 @@ def main(argv: list[str] | None = None) -> int:
         print("请先运行：uv run --locked python -m scripts.docs.export_openapi")
         return 1
 
-    expected = _normalized(build_contract())
+    expected = _normalized(implementation)
     actual = _normalized(_load(contract_path))
     if actual == expected:
         status = "正式契约" if contract_path == OFFICIAL_PATH.resolve() else "待确认草案"
         print(f"契约一致：{contract_path}（{status}）")
         if contract_path != OFFICIAL_PATH.resolve():
-            print("提示：该草案尚未获得用户批准，不能作为接口变更授权。")
+            print(
+                "监理日记三个操作已通过正式子契约校验；完整草案的其他待确认部分仍不能作为变更授权。"
+            )
         return 0
 
     print(f"契约与实现不一致：{contract_path}")

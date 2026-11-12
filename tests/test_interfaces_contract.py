@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 
+import pytest
 from fastapi.routing import APIRoute
 
 from app.main import create_app
@@ -55,7 +56,7 @@ def test_contract_covers_exactly_the_registered_operations():
         for method in operations
     }
     assert documented == registered_operations()
-    assert len(documented) == 8
+    assert len(documented) == 10
 
 
 def test_operation_ids_are_unique():
@@ -87,7 +88,6 @@ def test_draft_and_review_states_are_explicit():
             if any(op["x-contract-status"] == "pending-review" for op in operations.values())
         } == {
             "/diagnostics",
-            "/ocr/daily-logs-new",
         }
 
 
@@ -117,7 +117,7 @@ def test_post_operations_have_request_examples():
 def test_document_endpoints_declare_envelope_and_errors():
     paths = read_contract()["paths"]
     for path in (
-        "/ocr/daily-logs-new",
+        "/ocr/journal",
         "/diagnostics",
     ):
         method = "get" if path == "/diagnostics" else "post"
@@ -127,7 +127,7 @@ def test_document_endpoints_declare_envelope_and_errors():
 
 
 def test_journal_documents_the_main_work_split_failure():
-    responses = read_contract()["paths"]["/ocr/daily-logs-new"]["post"]["responses"]
+    responses = read_contract()["paths"]["/ocr/journal"]["post"]["responses"]
     assert {"200", "400", "422", "502", "503"} <= set(responses)
     assert responses["502"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/ErrorDetail"
@@ -152,7 +152,49 @@ def test_fixed_output_schemas_are_still_the_published_contracts():
         (ROOT / "interfaces/journal/response.schema.json").read_text(encoding="utf-8")
     )
     assert schemas["JournalResponse"] == journal
-    response = read_contract()["paths"]["/ocr/daily-logs-new"]["post"]["responses"]["200"]
+    response = read_contract()["paths"]["/ocr/journal"]["post"]["responses"]["200"]
     assert response["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/JournalResponse"
     }
+
+
+def test_approved_journal_contract_matches_and_detects_validation_drift():
+    from scripts.docs import openapi_contract
+
+    spec = build_contract()
+    assert openapi_contract.approved_journal_differences(spec) == []
+    spec["components"]["schemas"]["JournalOCRBox"]["properties"]["confidence"]["maximum"] = 0.5
+    differences = openapi_contract.approved_journal_differences(spec)
+    assert differences and any("JournalOCRBox" in item for item in differences)
+
+
+def test_approved_journal_contract_detects_request_and_route_drift():
+    from scripts.docs import openapi_contract
+
+    spec = build_contract()
+    spec["components"]["schemas"]["JournalProcessRequest"]["required"] = []
+    assert any(
+        "JournalProcessRequest" in item
+        for item in openapi_contract.approved_journal_differences(spec)
+    )
+    del spec["paths"]["/ocr/journal/process"]
+    assert any(
+        "/ocr/journal/process" in item
+        for item in openapi_contract.approved_journal_differences(spec)
+    )
+
+
+@pytest.mark.parametrize("schema", [{"type": "string"}, {}])
+def test_approved_contract_detects_raw_response_drift_before_documentation_override(
+    monkeypatch, schema
+):
+    from scripts.docs import openapi_contract
+
+    app = create_app()
+    spec = app.openapi()
+    spec["paths"]["/ocr/journal/recognize"]["post"]["responses"]["200"]["content"][
+        "application/json"
+    ]["schema"] = schema
+    monkeypatch.setattr(openapi_contract, "create_app", lambda: app)
+    differences = openapi_contract.approved_journal_differences(openapi_contract.build_contract())
+    assert differences and any("/ocr/journal/recognize" in item for item in differences)

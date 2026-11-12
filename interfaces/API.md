@@ -44,7 +44,9 @@
 | 5 | `POST /agents/intent/business` | 识别业务页面与最小功能意图 | `confirmed` |
 | 6 | `POST /agents/intent/archive` | 识别文件归档系统意图 | `confirmed` |
 | 7 | `POST /agents/chat` | 自由对话 | `confirmed` |
-| 8 | `POST /ocr/daily-logs-new` | 识别监理日记（新版链路） | `pending-review` |
+| 8 | `POST /ocr/journal` | 识别并处理监理日记 | `confirmed` |
+| 9 | `POST /ocr/journal/recognize` | 仅识别监理日记 | `confirmed` |
+| 10 | `POST /ocr/journal/process` | 仅拆分监理工作内容 | `confirmed` |
 
 ## 4、接口详情
 
@@ -457,13 +459,13 @@ Schema：`ChatRequest`
 
 Schema：`ChatResponse`
 
-### 4.8、`POST /ocr/daily-logs-new`
+### 4.8、`POST /ocr/journal`
 
 | 项目 | 内容 |
 | --- | --- |
-| 摘要 | 识别监理日记（新版链路） |
-| 契约状态 | `pending-review` |
-| 来源 | interfaces/journal/response.schema.json（成功响应已确认）；interfaces/journal/main-work-processing.md（生成语义已确认）；docs/journal-mainwork-split.md；tests/test_ocr_journal.py；tests/test_agents_main_work.py |
+| 摘要 | 识别并处理监理日记 |
+| 契约状态 | `confirmed` |
+| 来源 | interfaces/openapi/journal.openapi.json（2026-11-12 用户明确批准）；interfaces/journal/response.schema.json（成功响应已确认）；interfaces/journal/main-work-processing.md（生成语义已确认）；docs/journal-mainwork-split.md；tests/test_ocr_journal.py；tests/test_agents_main_work.py |
 | 副作用 | 只读取数据池照片，不写 PDF/Excel。 |
 | 幂等/重试 | 识别结果可能因模型和照片变化而不同；只读调用可重试。 |
 
@@ -546,6 +548,113 @@ Schema：`JournalReq`
 | `fields` | object | 是 |  |  |  |
 
 Schema：`JournalResponse`
+
+### 4.9、`POST /ocr/journal/recognize`
+
+| 项目 | 内容 |
+| --- | --- |
+| 摘要 | 仅识别监理日记 |
+| 契约状态 | `confirmed` |
+| 来源 | interfaces/openapi/journal.openapi.json；interfaces/journal/capabilities.md |
+| 副作用 | 不写文件、不持久化会话。 |
+| 幂等/重试 | 只读，可重试。 |
+
+仅执行表格定位、整页一次 OCR 和栏目提取，不执行工作内容拆分或调用语言模型。返回全部原始文字框及拆分前栏目文本；坐标统一为 EXIF 校正后、缩小前的图片像素坐标。
+
+**请求体**
+
+```json
+{
+  "path": "projects/监理日志照片.jpg",
+  "taskId": "example"
+}
+```
+
+**请求字段**
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `path` | string | 否 | `""` |  | PROJECTS_ROOT 数据池内的监理日志照片路径 |
+| `img` | string | 否 | `""` |  | base64 编码的图片数据；path 与 img 至少提供一个 |
+| `taskId` | string | 否 | `""` | maxLength=128 | 业务任务 ID，仅原样回显到 processed.taskId；不传则为 null |
+
+Schema：`JournalReq`
+
+**响应**
+
+- `200`：完整文字框和拆分前栏目。
+- `400`：路径、图片或表格定位失败。
+- `422`：请求校验失败，或输入与上下文超过预算。校验失败时 detail 为错误数组；输入超限时为字符串。
+- `503`：OCR 模型或资源不可用。
+
+**200 响应体**
+
+**响应字段**
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `status` | const `200` | 是 |  |  |  |
+| `message` | const `识别完成` | 是 |  |  |  |
+| `data` | `JournalRecognitionData` | 是 |  |  |  |
+
+**`data` 字段**
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `taskId` | string 或 null | 是 |  |  |  |
+| `documentType` | const `supervision_diary` | 是 |  |  |  |
+| `image` | `JournalImageInfo` | 是 |  |  |  |
+| `tablePolygon` | `JournalPolygon` | 是 |  | minItems=4，maxItems=4 |  |
+| `boxes` | array<`JournalOCRBox`> | 是 |  |  |  |
+| `fields` | array<`JournalOCRField`> | 是 |  |  |  |
+
+Schema：`JournalRecognitionResponse`
+
+### 4.10、`POST /ocr/journal/process`
+
+| 项目 | 内容 |
+| --- | --- |
+| 摘要 | 仅拆分监理工作内容 |
+| 契约状态 | `confirmed` |
+| 来源 | interfaces/openapi/journal.openapi.json；interfaces/journal/capabilities.md |
+| 副作用 | 不写文件、不持久化会话。 |
+| 幂等/重试 | 只读，可重试；模型路径可能产生不同措辞。 |
+
+仅处理完整 main_work 文本：规则优先、Agent 兜底及关键数据校验。空文本或纯标题返回三个 null；模型路径沿用 4000 字符保护，规则路径不设统一长度上限。处理失败统一 502；不访问 OCR 引擎。
+
+**请求体**
+
+```json
+{
+  "main_work": "施工情况：K1+100填筑。\n旁站情况：旁站碾压。\n巡视情况：巡视施工现场。"
+}
+```
+
+**请求字段**
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `main_work` | string | 是 |  |  |  |
+
+Schema：`JournalProcessRequest`
+
+**响应**
+
+- `200`：三个必填可空的工作内容字段。
+- `422`：请求校验失败，或输入与上下文超过预算。校验失败时 detail 为错误数组；输入超限时为字符串。
+- `502`：主要工作内容无法可靠拆分；模型不可用、超时或结果检查失败。
+
+**200 响应体**
+
+**响应字段**
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `construction` | string 或 null | 是 |  |  | 施工部位、工序和进展；保留全部事实与关键数据，不摘要 |
+| `witness` | string 或 null | 是 |  |  | 旁站活动、过程和检测记录；保留全部事实与关键数据，不摘要 |
+| `patrol` | string 或 null | 是 |  |  | 巡视检查、现场观察及质量安全状态；保留全部事实与关键数据，不摘要 |
+
+Schema：`MainWorkValues`
 
 ## 5、Schema 附录
 
@@ -633,7 +742,76 @@ Schema：`JournalResponse`
 | `text` | string | 是 |  | minLength=1，maxLength=2000 | 待识别的归档业务内容 |
 | `intents` | array<`JsonValue`> | 否 |  | maxItems=0 | 仅为兼容保留，必须省略或为[]；不支持调用方自定义分类 |
 
-### 5.9、`JournalReq`
+### 5.9、`JournalFieldKey`
+
+类型：enum（`project`、`number`、`supervision_org`、`recorder`、`weather`、`position`、`date`、`reviewer`、`main_work`、`issues`、`next_day_plan`）
+
+### 5.10、`JournalImageInfo`
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `width` | integer | 是 |  | exclusiveMinimum=0.0 |  |
+| `height` | integer | 是 |  | exclusiveMinimum=0.0 |  |
+| `coordinateSpace` | const `exif_corrected_original` | 是 |  |  |  |
+
+### 5.11、`JournalOCRBox`
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | string | 是 |  |  |  |
+| `text` | string | 是 |  |  |  |
+| `confidence` | `RecognitionConfidence` | 是 |  | minimum=0.0，maximum=1.0 |  |
+| `polygon` | `JournalPolygon` | 是 |  | minItems=4，maxItems=4 |  |
+
+### 5.12、`JournalOCRField`
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `key` | `JournalFieldKey` | 是 |  |  |  |
+| `label` | string | 是 |  |  |  |
+| `text` | string 或 null | 是 |  |  |  |
+| `confidence` | `RecognitionConfidence` | 是 |  | minimum=0.0，maximum=1.0 |  |
+| `polygon` | `JournalPolygon` | 是 |  | minItems=4，maxItems=4 |  |
+| `boxIds` | array<string> | 是 |  |  |  |
+| `ambiguous` | boolean | 是 |  |  |  |
+| `visibleFraction` | `RecognitionConfidence` | 是 |  | minimum=0.0，maximum=1.0 |  |
+
+### 5.13、`JournalPoint`
+
+类型：array<any>
+
+### 5.14、`JournalPolygon`
+
+类型：array<any>
+
+### 5.15、`JournalProcessRequest`
+
+独立文本处理请求；允许空文本，不引入会话或图片依赖。
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `main_work` | string | 是 |  |  |  |
+
+### 5.16、`JournalRecognitionData`
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `taskId` | string 或 null | 是 |  |  |  |
+| `documentType` | const `supervision_diary` | 是 |  |  |  |
+| `image` | `JournalImageInfo` | 是 |  |  |  |
+| `tablePolygon` | `JournalPolygon` | 是 |  | minItems=4，maxItems=4 |  |
+| `boxes` | array<`JournalOCRBox`> | 是 |  |  |  |
+| `fields` | array<`JournalOCRField`> | 是 |  |  |  |
+
+### 5.17、`JournalRecognitionResponse`
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `status` | const `200` | 是 |  |  |  |
+| `message` | const `识别完成` | 是 |  |  |  |
+| `data` | `JournalRecognitionData` | 是 |  |  |  |
+
+### 5.18、`JournalReq`
 
 新版监理日志识别请求；与旧接口字段一致，实现链独立。
 
@@ -643,11 +821,11 @@ Schema：`JournalResponse`
 | `img` | string | 否 | `""` |  | base64 编码的图片数据；path 与 img 至少提供一个 |
 | `taskId` | string | 否 | `""` | maxLength=128 | 业务任务 ID，仅原样回显到 processed.taskId；不传则为 null |
 
-### 5.10、`JsonValue`
+### 5.19、`JsonValue`
 
 类型：any
 
-### 5.11、`LogSummary`
+### 5.20、`LogSummary`
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
@@ -658,7 +836,7 @@ Schema：`JournalResponse`
 | `pending_items` | array<string> | 是 |  | maxItems=8 | 仅输入明确的待办或进行中事项；空值及未记录合格率不产生待办，无则[]。 |
 | `issues` | array<string> | 是 |  | maxItems=8 | 输入原表明确的不合格结论、问题、风险或矛盾，必须保留；例如结论为宽度不合格则列出宽度不合格；未填合格率不属于质量问题，无则[]。 |
 
-### 5.12、`LogSummaryRequest`
+### 5.21、`LogSummaryRequest`
 
 可变结构的工程表单 OCR JSON 或兼容文字，序列化后最多 4000 字符。
 
@@ -668,7 +846,17 @@ Schema：`JournalResponse`
 | `session_id` | string | 是 |  | minLength=1，maxLength=128 |  |
 | `content` | string 或 object | 是 |  |  | 工程表单 OCR 识别对象，内部字段和层级可变化；兼容通用日志文字或对象。非空，按 json.dumps(ensure_ascii=False) 序列化后最多4000字符；顶层不接受数组。 |
 
-### 5.13、`PendingClarification`
+### 5.22、`MainWorkValues`
+
+三个字段必须明确返回；不存在的类别为null，内容必须依据原文。
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `construction` | string 或 null | 是 |  |  | 施工部位、工序和进展；保留全部事实与关键数据，不摘要 |
+| `witness` | string 或 null | 是 |  |  | 旁站活动、过程和检测记录；保留全部事实与关键数据，不摘要 |
+| `patrol` | string 或 null | 是 |  |  | 巡视检查、现场观察及质量安全状态；保留全部事实与关键数据，不摘要 |
+
+### 5.23、`PendingClarification`
 
 调用方保存的一级意图澄清状态；attempts 是已完成的澄清轮数。
 
@@ -677,7 +865,11 @@ Schema：`JournalResponse`
 | `page` | enum（`supervision_diary`、`work_list`、`image_library`、`recognition_platform`、`business_management`、`workbench`） | 是 |  |  |  |
 | `attempts` | integer | 是 |  | minimum=0.0，maximum=10.0 |  |
 
-### 5.14、`ValidationErrorItem`
+### 5.24、`RecognitionConfidence`
+
+类型：number
+
+### 5.25、`ValidationErrorItem`
 
 校验错误项。实际响应省略 input 与 ctx，避免回显原始身份、历史和输入。
 
@@ -687,7 +879,7 @@ Schema：`JournalResponse`
 | `loc` | array<string 或 integer> | 是 |  |  | 错误位置，例如 body、history、0、role。 |
 | `msg` | string | 是 |  |  | 可公开的错误说明。 |
 
-### 5.15、`RequestError`
+### 5.26、`RequestError`
 
 422 统一错误响应。
 
@@ -695,7 +887,7 @@ Schema：`JournalResponse`
 | --- | --- | --- | --- | --- | --- |
 | `detail` | string 或 array<`ValidationErrorItem`> | 是 |  |  | 请求校验失败时为错误数组；输入或上下文超限时为字符串。 |
 
-### 5.16、`ErrorDetail`
+### 5.27、`ErrorDetail`
 
 非校验类错误响应。
 
@@ -703,19 +895,19 @@ Schema：`JournalResponse`
 | --- | --- | --- | --- | --- | --- |
 | `detail` | string | 是 |  |  | 脱敏后的错误说明，不包含密钥、原始输入、身份、历史或上游错误正文。 |
 
-### 5.17、`HealthResponse`
+### 5.28、`HealthResponse`
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
 | `status` | const `ok` | 是 |  |  | 进程存活标记。 |
 
-### 5.18、`ReadyResponse`
+### 5.29、`ReadyResponse`
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
 | `status` | const `ready` | 是 |  |  | 配置模型已出现在上游模型列表。 |
 
-### 5.19、`DependencyStatus`
+### 5.30、`DependencyStatus`
 
 单个依赖的导入检查结果。
 
@@ -726,7 +918,7 @@ Schema：`JournalResponse`
 | `version` | string | 否 |  |  |  |
 | `error` | string | 否 |  |  |  |
 
-### 5.20、`CapabilityStatus`
+### 5.31、`CapabilityStatus`
 
 按能力分组的检查结果；不同能力的字段不完全相同。
 
@@ -750,7 +942,7 @@ Schema：`JournalResponse`
 | `assets` | object | 否 |  |  |  |
 | `error` | string | 否 |  |  |  |
 
-### 5.21、`DiagnosticsData`
+### 5.32、`DiagnosticsData`
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
@@ -758,7 +950,7 @@ Schema：`JournalResponse`
 | `warnings` | array<string> | 是 |  |  | 非致命问题，例如模型目录为空但可写、表样目录缺失。 |
 | `caps` | object | 是 |  |  | 能力名 → 检查结果。能力名包括 PDF、Excel、图像、文字识别、模型推理、OpenCV 特征、推理设备和 OCR 资源。 |
 
-### 5.22、`DiagnosticsResponse`
+### 5.33、`DiagnosticsResponse`
 
 本地依赖与资源诊断成功响应。
 
@@ -767,9 +959,9 @@ Schema：`JournalResponse`
 | `status` | const `200` | 是 |  |  | 业务成功状态，与 HTTP 200 一致；不是 HTTP 状态码的替代品。 |
 | `data` | `DiagnosticsData` | 是 |  |  |  |
 
-### 5.23、`JournalResponse`
+### 5.34、`JournalResponse`
 
-用户于 2026-11-06 确认的 POST /ocr/daily-logs-new 成功响应；以 data/ocr/resources/daily-logs-output.json 为结构依据。
+用户于 2026-11-06 确认的成功响应；2026-11-12 批准路径更名为 POST /ocr/journal；以 data/ocr/resources/daily-logs-output.json 为结构依据。
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |

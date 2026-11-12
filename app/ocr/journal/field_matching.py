@@ -37,8 +37,19 @@ def extract_fields(
     valid_mask: np.ndarray | None = None,
 ) -> list[FieldReading]:
     """一次整页 OCR 后按栏目取值；空字段和歧义字段不触发重复识别。"""
+    return match_fields(canvas, layouts, table_rect, reader(canvas), valid_mask=valid_mask)
+
+
+def match_fields(
+    canvas: np.ndarray,
+    layouts: tuple[FieldLayout, ...],
+    table_rect: tuple[float, float, float, float],
+    ocr_results: list[OcrTextBox],
+    *,
+    valid_mask: np.ndarray | None = None,
+) -> list[FieldReading]:
+    """复用本次全部检测框完成栏目归属，不消耗或修改原始检测结果。"""
     height, width = canvas.shape[:2]
-    ocr_results = reader(canvas)
     groups, ambiguous = _assign_boxes_to_fields(ocr_results, layouts, (width, height), table_rect)
     readings: dict[str, FieldReading] = {}
     for layout in layouts:
@@ -91,7 +102,8 @@ def _assign_boxes_to_fields(
     table_height = (table_rect[3] - table_rect[1]) * height
     groups: dict[str, list[OcrTextBox]] = {layout.key: [] for layout in layouts}
     ambiguous: set[str] = set()
-    for box in _deduplicate_boxes(boxes):
+    # 调试输出保留空文字检测框，栏目归属仍沿用旧行为，不接受空白框。
+    for box in _deduplicate_boxes([box for box in boxes if box.text.strip()]):
         scored: list[tuple[float, float, str, bool]] = []
         for layout in layouts:
             x0, y0, x1, y1 = field_bounds_on_canvas(layout, canvas_size, table_rect)

@@ -1,5 +1,7 @@
 # 待确认接口草案
 
+2026-11-12 更新：完整草案当前有 10 个操作；监理日记三个操作已获批准，正式子契约见 [journal.openapi.json](../openapi/journal.openapi.json)，只有 `/diagnostics` 仍待确认。原监理日记评审记录见 [journal-capabilities.md](journal-capabilities.md)。以下旧评审清单为历史背景，不能当作现有路由清单。
+
 本目录保存 AI 根据当前实现归纳、但尚未获得用户批准的接口契约。
 
 ## 1、当前评审稿（0.1.0-review.2）

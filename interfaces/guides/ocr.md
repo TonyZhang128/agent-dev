@@ -1,6 +1,14 @@
 # 监理日记与本地诊断接口
 
-当前仅保留 `POST /ocr/daily-logs-new` 和系统级 `GET /diagnostics`。字段以 [OpenAPI草案](../drafts/fastapi.openapi.json) 为准；已确认成功结构和表格失败响应分别见 [成功子契约](../journal/response.schema.json)、[无表格子契约](../journal/table-not-found.schema.json)。完整OpenAPI仍为待确认，不能据此扩展接口。
+当前提供三个监理日记入口，以及系统级 `GET /diagnostics`。监理日记字段和行为以 [正式子契约](../openapi/journal.openapi.json) 及 [三入口语义](../journal/capabilities.md) 为准，完整 OpenAPI 其余待确认部分不因本次批准而变为正式契约。
+
+| 入口 | 输入 | 输出 |
+| --- | --- | --- |
+| `POST /ocr/journal` | path/img、可选 taskId | 既有完整业务结果；OCR 后拆分 mainWork |
+| `POST /ocr/journal/recognize` | 同上 | 全部文字框、四点原图坐标、置信度、11 个拆分前栏目 |
+| `POST /ocr/journal/process` | 必填 string main_work，可为空 | construction、witness、patrol，三个字段必填可空 |
+
+旧 `/ocr/daily-logs-new` 已删除，不重定向；调用方必须更新路径。
 
 ## 1、图片输入与处理
 
@@ -13,7 +21,7 @@
 
 ## 2、响应与失败
 
-成功严格为 `{"status":200,"message":"识别完成","data":...}`，data包含taskId、documentType、common、fields。只有真实合法空白表格可以成功返回空字段，不能把定位失败包装为空值200。
+组合入口成功严格为 `{"status":200,"message":"识别完成","data":...}`，data包含taskId、documentType、common、fields。只有真实合法空白表格可以成功返回空字段，不能把定位失败包装为空值200。
 
 | HTTP | 场景 |
 | --- | --- |
@@ -22,7 +30,9 @@
 | 502 | mainWork无法可靠拆分，保持既有固定detail |
 | 503 | OCR模型不可用等既有资源失败 |
 
-错误响应统一detail，不回显原始图片、OCR正文、密钥或上游正文。成功子Schema不增加诊断字段；逐线支持率、来源覆盖mask、定位图仅在内部和本地工具中使用。HTTP200、非空数量和OCR置信度不是准确率保证。
+纯 OCR 使用同样成功包装，data 结构见正式子契约；它不执行工作内容拆分、不会产生模型拆分 502。文本入口直接返回三个字段，仅有 422 校验失败和受控 502 处理失败，不读取图片。
+
+错误响应统一detail，不回显原始图片、OCR正文、密钥或上游正文。组合成功子Schema不增加诊断字段；纯 OCR 新增公开识别明细，逐线支持率、来源覆盖mask、定位图仅在内部和本地工具中使用。HTTP200、非空数量和OCR置信度不是准确率保证。
 
 ## 3、同步、重试与副作用
 

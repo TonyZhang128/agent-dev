@@ -11,8 +11,6 @@ def detect_text_boxes(image: np.ndarray) -> list[OcrTextBox]:
     boxes: list[OcrTextBox] = []
     for detection in detect_text(image):
         text = detection.text
-        if not text.strip():
-            continue
         x0, y0 = (min(point[axis] for point in detection.polygon) for axis in (0, 1))
         x1, y1 = (max(point[axis] for point in detection.polygon) for axis in (0, 1))
         boxes.append(

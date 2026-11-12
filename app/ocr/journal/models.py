@@ -117,3 +117,4 @@ class JournalRecognition:
     alignment: CanvasAlignment
     readings: tuple[FieldReading, ...]
     task_id: str = ""
+    boxes: tuple[OcrTextBox, ...] = ()
