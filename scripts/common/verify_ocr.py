@@ -7,6 +7,7 @@ import os
 import httpx
 
 from app.config import ROOT
+from app.schemas.ocr import JournalRecognitionResponse, JournalResponse
 
 
 def verify(client: httpx.Client, photo: str, task_id: str = "") -> dict:
@@ -25,21 +26,37 @@ def verify(client: httpx.Client, photo: str, task_id: str = "") -> dict:
     checks.append({"path": "/diagnostics", "status": response.status_code})
 
     payload = {"path": photo, "taskId": task_id} if task_id else {"path": photo}
+    response = client.post("/ocr/journal/recognize", json=payload)
+    response.raise_for_status()
+    recognized = JournalRecognitionResponse.model_validate(response.json())
+    checks.append({"path": "/ocr/journal/recognize", "status": response.status_code})
+
+    response = client.post("/ocr/journal/process", json=recognized.data.model_dump(mode="json"))
+    response.raise_for_status()
+    processed = JournalResponse.model_validate(response.json()).data.jsonData
+    checks.append({"path": "/ocr/journal/process", "status": response.status_code})
+
     response = client.post("/ocr/journal", json=payload)
     response.raise_for_status()
-    body = response.json()
-    if body.get("status") != 200 or "data" not in body:
-        raise ValueError("/ocr/journal 未返回有效监理日志结果")
+    combined = JournalResponse.model_validate(response.json()).data.jsonData
     checks.append({"path": "/ocr/journal", "status": response.status_code})
-
-    processed = body["data"]
-    if not processed.get("common") and not processed.get("fields"):
-        raise ValueError("监理日志未返回业务字段")
+    # 模型措辞可能不同，普通栏目和原文回显必须一致；内容质量仍需独立人工核对。
+    if (
+        combined.common != processed.common
+        or combined.fields.issues != processed.fields.issues
+        or combined.fields.nextDayPlan != processed.fields.nextDayPlan
+        or combined.fields.mainWork.content != processed.fields.mainWork.content
+    ):
+        raise ValueError("两阶段与组合入口的业务栏目或工作原文不一致")
+    source = next(field.text for field in recognized.data.fields if field.key == "main_work")
+    if processed.fields.mainWork.content != (source or ""):
+        raise ValueError("业务生成未原样保留工作原文")
     return {
         "passed": True,
         "checks": checks,
-        "task_id": processed.get("taskId"),
-        "document_type": processed.get("documentType"),
+        "task_id": recognized.data.taskId,
+        "document_type": recognized.data.documentType,
+        "content_quality": "requires_human_review",
     }
 
 

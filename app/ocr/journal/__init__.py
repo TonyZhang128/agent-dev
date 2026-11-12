@@ -1,16 +1,13 @@
-"""监理日记仅保留当前生产入口，不提供旧名称和旧结果包装。"""
+"""监理日记图片识别与业务生成两个阶段。"""
 
-from app.ocr.journal.main_work_split import MAX_SPLIT_CHARACTERS, process_main_work, split_main_work
+from app.ocr.journal.generation import generate_journal
 from app.ocr.journal.models import JournalRecognition
-from app.ocr.journal.output import build_processed_payload, build_recognition_response
+from app.ocr.journal.output import build_recognition_response
 from app.ocr.journal.pipeline import recognize_journal
 
 __all__ = [
-    "MAX_SPLIT_CHARACTERS",
     "JournalRecognition",
     "recognize_journal",
-    "build_processed_payload",
-    "split_main_work",
-    "process_main_work",
+    "generate_journal",
     "build_recognition_response",
 ]

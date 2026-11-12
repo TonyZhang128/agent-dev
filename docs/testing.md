@@ -77,7 +77,7 @@ uv run --locked python -m scripts.common.verify_ocr --photo <数据池相对路�
 
 该脚本检查存活、静态诊断和响应业务结构，不能代替逐字段准确性验收。需对独立于调试样本的典型、困难照片，人工比对原图、OCR 文本和业务输出；分别记录字段正确率、失败案例、耗时，以及 mainWork 三类内容的事实与关键数据保真。
 
-CUDA EP 必须在目标 GPU 主机真实初始化并执行识别，`nvidia-smi` 或 `/diagnostics` 成功不证明 OCR 已使用 GPU。模板与图像诊断命令见 [模板维护](journal-template-recognition.md)，mainWork 规则与生成验证见 [专题](journal-mainwork-split.md)。
+CUDA EP 必须在目标 GPU 主机真实初始化并执行识别，`nvidia-smi` 或 `/diagnostics` 成功不证明 OCR 已使用 GPU。模板与图像诊断命令见 [模板维护](journal-template-recognition.md)，监理日记业务生成验证见 [专题](journal-generation.md)。
 
 ## 5、报告与完成判定
 

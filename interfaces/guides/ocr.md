@@ -4,9 +4,9 @@
 
 | 入口 | 输入 | 输出 |
 | --- | --- | --- |
-| `POST /ocr/journal` | path/img、可选 taskId | 既有完整业务结果；OCR 后拆分 mainWork |
+| `POST /ocr/journal` | path/img、可选 taskId | 内部串联识别与生成，输出完整业务结果 |
 | `POST /ocr/journal/recognize` | 同上 | 全部文字框、四点原图坐标、置信度、11 个拆分前栏目 |
-| `POST /ocr/journal/process` | 必填 string main_work，可为空 | construction、witness、patrol，三个字段必填可空 |
+| `POST /ocr/journal/process` | recognize 响应的完整 data | 完整业务结果，与 journal 格式一致 |
 
 旧 `/ocr/daily-logs-new` 已删除，不重定向；调用方必须更新路径。
 
@@ -14,14 +14,14 @@
 
 - `path`、`img`至少一个非空；同时提供时img优先。img支持base64及data URI。
 - path必须是PROJECTS_ROOT内文件，兼容projects/前缀；拒绝绝对路径、穿越及越界符号链接。
-- taskId去除首尾空白后回显，缺省为null；不生成服务端任务。
+- taskId在 recognize 结果中去除首尾空白后回显，缺省为null；最终业务格式不包含它；不生成服务端任务。
 - 定位阶段只接受通过模板行列/合并结构核验的真实table。字段及标签以table为坐标基准，包含表外项目名称、编号、审核人。
 - 成功定位后整图一次OCR；字段名漏识别不妨碍可靠几何定位。文字框不强行跨栏分配，缺失不补写。
-- mainWork先合并OCR文本，按施工情况、旁站情况、巡视情况关键词规则提取；不足时Agent基于全文生成三个字段。允许整理表达、合并断句、去标题，保留全部事实和关键数据，不摘要不补充；没有对应内容为null。失败保持502。正式语义见 [mainWork处理](../journal/main-work-processing.md)。
+- 工作原文由 JournalAgent 生成施工、巡视四项和旁站五项；允许基于原文补全表达，不编造事实或数据，无依据的子项为 null。正式语义见 [工作内容生成](../journal/main-work-processing.md)。
 
 ## 2、响应与失败
 
-组合入口成功严格为 `{"status":200,"message":"识别完成","data":...}`，data包含taskId、documentType、common、fields。只有真实合法空白表格可以成功返回空字段，不能把定位失败包装为空值200。
+组合和业务生成入口成功严格为 `{"code":200,"message":"success","data":{"jsonData":...}}`，jsonData 包含 common 和 fields。只有真实合法空白表格可以成功返回空字段，不能把定位失败包装为空值200。
 
 | HTTP | 场景 |
 | --- | --- |
@@ -30,7 +30,7 @@
 | 502 | mainWork无法可靠拆分，保持既有固定detail |
 | 503 | OCR模型不可用等既有资源失败 |
 
-纯 OCR 使用同样成功包装，data 结构见正式子契约；它不执行工作内容拆分、不会产生模型拆分 502。文本入口直接返回三个字段，仅有 422 校验失败和受控 502 处理失败，不读取图片。
+纯 OCR 使用 `status/message/data` 包装，data 结构保持原契约；不调用语言模型。process 接收这个 data，返回最终业务格式，不读取图片；请求无效 422，生成失败 502。
 
 错误响应统一detail，不回显原始图片、OCR正文、密钥或上游正文。组合成功子Schema不增加诊断字段；纯 OCR 新增公开识别明细，逐线支持率、来源覆盖mask、定位图仅在内部和本地工具中使用。HTTP200、非空数量和OCR置信度不是准确率保证。
 

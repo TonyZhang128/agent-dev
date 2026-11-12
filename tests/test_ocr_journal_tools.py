@@ -21,12 +21,12 @@ def test_build_cli_writes_template_and_overlay(tmp_path):
         assert rendered.height > 842
 
 
-def test_inspection_removes_previous_success_when_next_photo_needs_agent(tmp_path, monkeypatch):
+def test_inspection_exports_raw_ocr_and_removes_previous_business_response(tmp_path, monkeypatch):
     import rapidocr
 
     from scripts.ocr import inspect_journal
+    from tests.journal_helpers import MIXED_MAIN_WORK_PARTS, JournalEngine
     from tests.ocr_helpers import make_ocr_settings
-    from tests.test_agents_main_work import MIXED_MAIN_WORK_PARTS, JournalEngine
     from tests.test_ocr_journal import write_photo
 
     settings = make_ocr_settings(tmp_path)
@@ -35,12 +35,15 @@ def test_inspection_removes_previous_success_when_next_photo_needs_agent(tmp_pat
     monkeypatch.setattr(rapidocr, "RapidOCR", lambda **kwargs: JournalEngine())
     output = tmp_path / "inspection"
     photo = settings.projects_root / "journal.png"
+    output.mkdir()
+    (output / "response.json").write_text("旧业务结果")
     inspect_journal.inspect_photo(photo, output)
-    assert (output / "response.json").exists()
+    assert (output / "recognition.json").exists()
+    assert not (output / "response.json").exists()
     monkeypatch.setattr(
         rapidocr, "RapidOCR", lambda **kwargs: JournalEngine(parts=MIXED_MAIN_WORK_PARTS)
     )
     report = inspect_journal.inspect_photo(photo, output)
-    assert report["split_strategy"] == "requires_model"
-    assert report["response"] is None
+    assert report["generation_required"] is True
+    assert report["recognition"]["data"]["fields"]
     assert not (output / "response.json").exists()

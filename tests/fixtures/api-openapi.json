@@ -224,7 +224,7 @@
           "ocr"
         ],
         "summary": "Journal Recognize",
-        "description": "新版监理日志识别：整页OCR后按关键词提取，必要时由Agent基于完整mainWork生成三部分。",
+        "description": "顺序执行图片识别与业务生成，复用两个独立入口的同一处理阶段。",
         "operationId": "journal_recognize_ocr_journal_post",
         "requestBody": {
           "content": {
@@ -241,7 +241,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/JournalResponse"
+                }
               }
             }
           },
@@ -306,7 +308,7 @@
           "ocr"
         ],
         "summary": "Journal Process",
-        "description": "仅处理完整工作内容文本，复用规则、模型兜底与事实校验。",
+        "description": "基于完整 OCR 栏目生成业务日记，不重新识别图片。",
         "operationId": "journal_process_ocr_journal_process_post",
         "requestBody": {
           "content": {
@@ -324,7 +326,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MainWorkValues"
+                  "$ref": "#/components/schemas/JournalResponse"
                 }
               }
             }
@@ -1246,18 +1248,57 @@
       },
       "JournalProcessRequest": {
         "properties": {
-          "main_work": {
+          "taskId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Taskid"
+          },
+          "documentType": {
             "type": "string",
-            "title": "Main Work"
+            "const": "supervision_diary",
+            "title": "Documenttype"
+          },
+          "image": {
+            "$ref": "#/components/schemas/JournalImageInfo"
+          },
+          "tablePolygon": {
+            "$ref": "#/components/schemas/JournalPolygon"
+          },
+          "boxes": {
+            "items": {
+              "$ref": "#/components/schemas/JournalOCRBox"
+            },
+            "type": "array",
+            "title": "Boxes"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/JournalOCRField"
+            },
+            "type": "array",
+            "maxItems": 11,
+            "minItems": 11,
+            "title": "Fields"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "main_work"
+          "taskId",
+          "documentType",
+          "image",
+          "tablePolygon",
+          "boxes",
+          "fields"
         ],
         "title": "JournalProcessRequest",
-        "description": "独立文本处理请求；允许空文本，不引入会话或图片依赖。"
+        "description": "接收完整识别结果；同一栏目必须恰好出现一次，避免静默丢失或覆盖。"
       },
       "JournalRecognitionResponse": {
         "properties": {
@@ -1348,7 +1389,339 @@
         "maxItems": 4,
         "minItems": 4
       },
-      "MainWorkValues": {
+      "JournalCommon": {
+        "properties": {
+          "projectName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Projectname"
+          },
+          "documentNo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Documentno"
+          },
+          "supervisionOrg": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supervisionorg"
+          },
+          "recorderName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recordername"
+          },
+          "recorderPosition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorderposition"
+          },
+          "weather": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weather"
+          },
+          "logDate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logdate"
+          },
+          "reviewerName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewername"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "projectName",
+          "documentNo",
+          "supervisionOrg",
+          "recorderName",
+          "recorderPosition",
+          "weather",
+          "logDate",
+          "reviewerName"
+        ],
+        "title": "JournalCommon"
+      },
+      "JournalData": {
+        "properties": {
+          "common": {
+            "$ref": "#/components/schemas/JournalCommon"
+          },
+          "fields": {
+            "$ref": "#/components/schemas/JournalFields"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "common",
+          "fields"
+        ],
+        "title": "JournalData"
+      },
+      "JournalFields": {
+        "properties": {
+          "mainWork": {
+            "$ref": "#/components/schemas/JournalWork"
+          },
+          "issues": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issues"
+          },
+          "nextDayPlan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextdayplan"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mainWork",
+          "issues",
+          "nextDayPlan"
+        ],
+        "title": "JournalFields"
+      },
+      "JournalPatrol": {
+        "properties": {
+          "inspectionScope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inspectionscope",
+            "description": "巡视范围；无依据时为 null"
+          },
+          "mainConstruction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mainconstruction",
+            "description": "巡视所见主要施工情况"
+          },
+          "qualitySafetyEnvironment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qualitysafetyenvironment",
+            "description": "已记录的质量、安全、环保情况"
+          },
+          "problemsAndActions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problemsandactions",
+            "description": "发现的问题及处理意见，不编造整改动作"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "inspectionScope",
+          "mainConstruction",
+          "qualitySafetyEnvironment",
+          "problemsAndActions"
+        ],
+        "title": "JournalPatrol"
+      },
+      "JournalResponse": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "const": 200,
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "const": "success",
+            "title": "Message"
+          },
+          "data": {
+            "$ref": "#/components/schemas/JournalResponseData"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "data"
+        ],
+        "title": "JournalResponse"
+      },
+      "JournalResponseData": {
+        "properties": {
+          "jsonData": {
+            "$ref": "#/components/schemas/JournalData"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "jsonData"
+        ],
+        "title": "JournalResponseData"
+      },
+      "JournalWitness": {
+        "properties": {
+          "supervisionProject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supervisionproject",
+            "description": "旁站项目或明确未开展旁站的记录"
+          },
+          "constructionProcess": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Constructionprocess",
+            "description": "旁站施工过程简述"
+          },
+          "supervisionWork": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supervisionwork",
+            "description": "实际旁站工作，不编造检查和取样"
+          },
+          "mainDataRecords": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maindatarecords",
+            "description": "原文中的主要数据、指标及单位"
+          },
+          "problemsAndResults": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problemsandresults",
+            "description": "发现的问题及处理结果，不推测完成状态"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "supervisionProject",
+          "constructionProcess",
+          "supervisionWork",
+          "mainDataRecords",
+          "problemsAndResults"
+        ],
+        "title": "JournalWitness"
+      },
+      "JournalWork": {
         "properties": {
           "construction": {
             "anyOf": [
@@ -1360,42 +1733,28 @@
               }
             ],
             "title": "Construction",
-            "description": "施工部位、工序和进展；保留全部事实与关键数据，不摘要"
-          },
-          "witness": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Witness",
-            "description": "旁站活动、过程和检测记录；保留全部事实与关键数据，不摘要"
+            "description": "主要施工情况，保留关键事实与数据"
           },
           "patrol": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Patrol",
-            "description": "巡视检查、现场观察及质量安全状态；保留全部事实与关键数据，不摘要"
+            "$ref": "#/components/schemas/JournalPatrol"
+          },
+          "witness": {
+            "$ref": "#/components/schemas/JournalWitness"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
           "construction",
+          "patrol",
           "witness",
-          "patrol"
+          "content"
         ],
-        "title": "MainWorkValues",
-        "description": "三个字段必须明确返回；不存在的类别为null，内容必须依据原文。"
+        "title": "JournalWork"
       }
     }
   }

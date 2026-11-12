@@ -45,7 +45,7 @@ uv run --locked python -m scripts.ocr.inspect_journal \
 
 成功仍为 `{"status":200,"message":"识别完成","data":...}`，请求及业务字段不变。用户已明确批准：无通过结构核验的table或候选歧义时，返回400和 `{"detail":"未检测到监理日志表格，请重新拍摄"}`，不执行OCR或mainWork分类。合法空白表格仍可成功返回空字段。
 
-mainWork先合并文字，再按施工情况、旁站情况、巡视情况关键词提取；规则不足时由Agent基于全文直接生成三个字段。允许整理表达、合并断句和去标题，但保留全部业务事实与关键数据，不摘要、不补充事实。失败仍为既有502。详见 [规则与生成](journal-mainwork-split.md)。
+mainWork 原文合并后由 JournalAgent 生成施工、巡视四项和旁站五项；允许基于原文补全表达，禁止新增事实与关键数据。失败仍为既有502。详见 [规则与生成](journal-generation.md)。
 
 ## 6、保留与删除
 
@@ -58,7 +58,7 @@ mainWork先合并文字，再按施工情况、旁站情况、巡视情况关键
 | `alignment.py` | table落点、包含表外区域的画布及来源mask |
 | `photo.py` / `ocr_adapter.py` | 图片解码、EXIF、共享模型四点框适配 |
 | `field_matching.py` | table坐标换算、框归属、阅读顺序、原文片段 |
-| `main_work_split.py` | 关键词规则、全文生成兜底与关键数据检查 |
+| `generation.py` | 业务生成、关键数据检查和最终结果组装 |
 | `pipeline.py` / `output.py` | 编排与既有成功结构映射 |
 
 ## 7、验收与回归

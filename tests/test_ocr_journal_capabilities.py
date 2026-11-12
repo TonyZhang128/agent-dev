@@ -19,9 +19,10 @@ from app.ocr.journal.models import (
     OcrTextBox,
 )
 from app.ocr.journal.template import FIELD_KEYS
+from tests.journal_helpers import GENERATED, client_for, completion
 from tests.ocr_helpers import ocr_result
-from tests.test_agents_main_work import GENERATED, client_for, completion
 from tests.test_ocr_journal import PageEngine, full_page_items, table_photo, write_photo
+from tests.test_ocr_journal_generation import recognition_input
 
 
 class CompleteEngine:
@@ -43,7 +44,7 @@ class CompleteEngine:
         return ocr_result(*self.items)
 
 
-def test_recognize_returns_all_boxes_and_unsplit_text_without_model(tmp_path):
+def test_recognize_returns_all_boxes_and_original_text_without_model(tmp_path):
     calls = []
 
     def unavailable(request):
@@ -89,35 +90,30 @@ def test_recognize_returns_all_boxes_and_unsplit_text_without_model(tmp_path):
         assert references <= {box["id"] for box in boxes}
         assert boxes[-1]["id"] not in references  # 重复框仅保留原始记录，不重复归属
         assert boxes[-2]["id"] not in references  # 表外框仍可诊断
-        split = client.post("/ocr/journal/process", json={"main_work": main_work["text"]})
-        assert split.status_code == 200
-        assert split.json() == {**GENERATED, "patrol": "挡土墙错缝砌筑"}
-        assert engine.calls == 1
-        assert calls == []
 
 
 def test_journal_is_renamed_without_legacy_alias(tmp_path):
-    settings, client = client_for(tmp_path, lambda request: pytest.fail("规则不应调用模型"))
+    settings, client = client_for(tmp_path, lambda request: completion(json.dumps(GENERATED)))
     with client:
         write_photo(settings)
         client.app.state.ocr_resources.engine = PageEngine()
         assert client.post("/ocr/daily-logs-new", json={"path": "journal.png"}).status_code == 404
         response = client.post("/ocr/journal", json={"path": "journal.png"})
         assert response.status_code == 200
-        assert response.json()["data"]["fields"]["mainWork"] == {
-            **GENERATED,
-            "patrol": "挡土墙错缝砌筑",
-        }
+        assert (
+            response.json()["data"]["jsonData"]["fields"]["mainWork"]["construction"]
+            == "K3+280段路基填筑"
+        )
 
 
-@pytest.mark.parametrize("text", ["", " \n", "施工情况：\n旁站情况：\n巡视情况："])
+@pytest.mark.parametrize("text", ["", " \n"])
 def test_process_accepts_empty_content_without_ocr_or_model(tmp_path, text):
     settings, client = client_for(tmp_path, lambda request: pytest.fail("空文本不应调用模型"))
     with client:
         client.app.state.ocr_resources.engine = lambda picture: pytest.fail("不能调用 OCR")
-        response = client.post("/ocr/journal/process", json={"main_work": text})
+        response = client.post("/ocr/journal/process", json=recognition_input(text))
         assert response.status_code == 200
-        assert response.json() == dict.fromkeys(("construction", "witness", "patrol"))
+        assert response.json()["data"]["jsonData"]["fields"]["mainWork"]["construction"] is None
 
 
 def test_process_uses_real_agent_and_checks_facts(tmp_path):
@@ -131,11 +127,14 @@ def test_process_uses_real_agent_and_checks_facts(tmp_path):
     source = "K3+280段路基填筑\n旁站路基碾压\n巡视挡土墙砌筑"
     with client:
         client.app.state.ocr_resources.engine = lambda picture: pytest.fail("不能调用 OCR")
-        response = client.post("/ocr/journal/process", json={"main_work": source})
+        response = client.post("/ocr/journal/process", json=recognition_input(source))
         assert response.status_code == 200
-        assert response.json() == GENERATED
+        assert response.json()["data"]["jsonData"]["fields"]["mainWork"] == {
+            "content": source,
+            **GENERATED,
+        }
     assert len(requests) == 1
-    assert json.loads(requests[0]["messages"][-1]["content"]) == {"main_work": source}
+    assert json.loads(requests[0]["messages"][-1]["content"]) == {"content": source}
 
 
 @pytest.mark.parametrize(
@@ -152,15 +151,14 @@ def test_process_rejects_invalid_requests(tmp_path, payload):
 def test_process_rejects_changed_facts_and_preserves_length_policy(tmp_path):
     _, client = client_for(tmp_path, lambda request: completion(json.dumps(GENERATED)))
     with client:
-        bad = client.post("/ocr/journal/process", json={"main_work": "K3+281段路基填筑"})
+        bad = client.post("/ocr/journal/process", json=recognition_input("K3+281段路基填筑"))
         assert bad.status_code == 502
         assert bad.json() == {"detail": "监理日志主要工作情况无法可靠拆分，请核对照片后重试"}
-        long = client.post("/ocr/journal/process", json={"main_work": "正文" * 2001})
+        long = client.post("/ocr/journal/process", json=recognition_input("正文" * 2001))
         assert long.status_code == 502
         source = "施工情况：" + "填筑。" * 1400 + "\n旁站情况：旁站。\n巡视情况：巡视。"
-        ruled = client.post("/ocr/journal/process", json={"main_work": source})
-        assert ruled.status_code == 200
-        assert ruled.json()["construction"] == "填筑。" * 1400
+        generated = client.post("/ocr/journal/process", json=recognition_input(source))
+        assert generated.status_code == 502
 
 
 def test_recognize_preserves_empty_columns(tmp_path):
@@ -301,7 +299,7 @@ def test_process_returns_controlled_model_failures(tmp_path, scenario):
 
     _, client = client_for(tmp_path, respond)
     with client:
-        response = client.post("/ocr/journal/process", json={"main_work": "K1+100填筑。"})
+        response = client.post("/ocr/journal/process", json=recognition_input("K1+100填筑。"))
         assert response.status_code == 502
         assert response.json() == {"detail": "监理日志主要工作情况无法可靠拆分，请核对照片后重试"}
 

@@ -126,7 +126,7 @@ def test_document_endpoints_declare_envelope_and_errors():
         assert schema["$ref"].endswith("Response")
 
 
-def test_journal_documents_the_main_work_split_failure():
+def test_journal_documents_generation_failure():
     responses = read_contract()["paths"]["/ocr/journal"]["post"]["responses"]
     assert {"200", "400", "422", "502", "503"} <= set(responses)
     assert responses["502"]["content"]["application/json"]["schema"] == {
@@ -151,7 +151,29 @@ def test_fixed_output_schemas_are_still_the_published_contracts():
     journal = json.loads(
         (ROOT / "interfaces/journal/response.schema.json").read_text(encoding="utf-8")
     )
-    assert schemas["JournalResponse"] == journal
+    from scripts.docs.openapi_contract import _resolve_schema_refs, _validation_shape
+
+    def component_refs(node):
+        if isinstance(node, dict):
+            return {
+                key: (
+                    item.replace("#/$defs/", "#/components/schemas/")
+                    if key == "$ref"
+                    else component_refs(item)
+                )
+                for key, item in node.items()
+                if key != "$defs"
+            }
+        if isinstance(node, list):
+            return [component_refs(item) for item in node]
+        return node
+
+    expected_components = {
+        name: component_refs(schema) for name, schema in journal["$defs"].items()
+    }
+    assert _validation_shape(
+        _resolve_schema_refs(schemas["JournalResponse"], schemas)
+    ) == _validation_shape(_resolve_schema_refs(component_refs(journal), expected_components))
     response = read_contract()["paths"]["/ocr/journal"]["post"]["responses"]["200"]
     assert response["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/JournalResponse"

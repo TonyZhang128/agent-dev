@@ -11,7 +11,7 @@ from app.errors import (
     ConversationInputTooLarge,
     InvalidModelOutput,
     JournalFrameNotFound,
-    MainWorkSplitError,
+    JournalGenerationError,
 )
 
 # 保留既有日志通道，兼容按 HTTP 错误日志过滤的部署。
@@ -60,8 +60,10 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def invalid_output(request: Request, exc: InvalidModelOutput) -> JSONResponse:
         return JSONResponse(status_code=502, content={"detail": "模型未返回完整且符合约定的结果"})
 
-    @app.exception_handler(MainWorkSplitError)
-    async def main_work_not_split(request: Request, exc: MainWorkSplitError) -> JSONResponse:
+    @app.exception_handler(JournalGenerationError)
+    async def journal_generation_failed(
+        request: Request, exc: JournalGenerationError
+    ) -> JSONResponse:
         # 固定文案；不回显原文、OCR 内容、单元 ID 或上游错误正文。
         return JSONResponse(
             status_code=502,

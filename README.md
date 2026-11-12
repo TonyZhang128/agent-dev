@@ -108,7 +108,7 @@ docker compose --env-file docker/prod.env -f compose.prod.yml ps
     │       └── LangChain → OpenAI 兼容模型推理服务
     └── OCR：表格定位 / 模板对齐 / 整页识别 / 字段提取
             ├── RapidOCR + ONNX Runtime
-            └── 必要时调用 MainWorkAgent 生成三类工作内容
+            └── JournalAgent 生成施工、巡视和旁站分栏记录
 ```
 
 - 运行环境：Python 3.12，使用 uv 和 `uv.lock` 管理依赖。
@@ -126,7 +126,9 @@ docker compose --env-file docker/prod.env -f compose.prod.yml ps
 | 智能体 | 业务端意图识别 | 根据消息、当前页面和上下文识别页面／功能，支持澄清与聊天分流 |
 | 智能体 | 归档端意图识别 | 独立的扁平意图分类，目前使用 A–D 占位分类与 unknown |
 | 智能体 | 自由对话 | 根据调用方提供的历史回答当前问题 |
-| OCR | 监理日记识别 | 从数据池照片或 base64 图片定位表格、整页识别并提取业务字段，将主要工作拆分为施工、旁站和巡视内容；支持完整处理、纯 OCR 和纯文本拆分三个入口 |
+| OCR | 监理日记识别 | 从数据池照片或 base64 图片定位表格、整页识别并提取业务字段，基于原始记录生成施工、巡视四项和旁站五项；支持完整处理、纯 OCR 和业务生成三个入口 |
+
+监理日记生成配置为 `JOURNAL_TIMEOUT_SECONDS`（默认 30）和 `JOURNAL_CONCURRENCY`（默认 1）；部署时需迁移旧 `MAIN_WORK_SPLIT_*` 配置，本机 `.env` 不自动覆盖。
 
 接口清单、请求响应与契约状态统一见 [接口文档](interfaces/README.md)。
 

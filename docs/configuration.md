@@ -32,8 +32,8 @@ Docker 使用 `docker/prod.env` 与 Compose 向容器传入环境，并包含宿
 | `CONVERSATION_MAX_INPUT_CHARACTERS` | `1000000` | 历史及序列化当前输入总字符上限，超出返回422 |
 | `LLM_REASONING_EFFORT` | `none` | 关闭当前 Qwen 服务的思考输出；不支持的服务可设为空 |
 | `AGENT_RECURSION_LIMIT` | `8` | Agent 运行步数上限，包含工具调用循环 |
-| `MAIN_WORK_SPLIT_TIMEOUT_SECONDS` | `30` | 新版监理日志 `mainWork` 规则不足后全文生成的总预算（含并发排队），超时返回受控 `502` |
-| `MAIN_WORK_SPLIT_CONCURRENCY` | `1` | `mainWork` 生成的并发上限；OCR 推理仍按应用串行加锁 |
+| `JOURNAL_TIMEOUT_SECONDS` | `30` | 新版监理日志 `mainWork` 业务生成的总预算（含并发排队），超时返回受控 `502` |
+| `JOURNAL_CONCURRENCY` | `1` | `mainWork` 生成的并发上限；OCR 推理仍按应用串行加锁 |
 
 **云端回退**
 
@@ -129,7 +129,7 @@ LLM_FALLBACK_API_KEY=<云端服务密钥>
 
 本地模型调用连接失败、超时或上游 HTTP 错误时，允许回退的 Agent 尝试云端模型一次。总预算为 `LLM_TIMEOUT_SECONDS + LLM_FALLBACK_TIMEOUT_SECONDS`；关闭后仅使用本地预算。回退不重试已返回但未通过 Schema 校验的输出，`/ready` 仍只检查本地模型。
 
-当前 DeepSeek 适配将严格 `json_schema` 请求转换为 JSON 模式，再由 Pydantic 校验结构化结果；不使用宽松文本解析。业务专属预算仍可能更短，例如 `MAIN_WORK_SPLIT_TIMEOUT_SECONDS` 包含排队和生成时间；mainWork 生成失败或超时返回受控 502，见 [mainWork 处理](journal-mainwork-split.md)。
+当前 DeepSeek 适配将严格 `json_schema` 请求转换为 JSON 模式，再由 Pydantic 校验结构化结果；不使用宽松文本解析。业务专属预算仍可能更短，例如 `JOURNAL_TIMEOUT_SECONDS` 包含排队和生成时间；mainWork 生成失败或超时返回受控 502，见 [mainWork 处理](journal-generation.md)。
 
 启用回退会将本次业务输入发送到云端，应按业务数据要求决定是否启用。已有部署若仅配置回退密钥，升级后需补充开关。Mac/Linux 修改部署根目录 `.env` 后重启算法服务。
 

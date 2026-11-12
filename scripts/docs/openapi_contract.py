@@ -25,7 +25,7 @@ VALIDATION_ERROR_ITEM = "ValidationErrorItem"
 REQUEST_ERROR = "RequestError"
 ERROR_DETAIL = "ErrorDetail"
 # 这些既有入口未声明成功 response_model，需要文档补全；其他入口必须保留运行时 Schema。
-SCHEMALESS_SUCCESS_PATHS = frozenset({"/health", "/ready", "/diagnostics", "/ocr/journal"})
+SCHEMALESS_SUCCESS_PATHS = frozenset({"/health", "/ready", "/diagnostics"})
 
 
 def ref(name: str) -> dict[str, str]:
@@ -450,113 +450,30 @@ OPERATIONS: dict[str, dict[str, dict[str, Any]]] = {
             },
         )
     },
-    "/ocr/journal": {
-        "post": _operation(
-            description="新版监理日志识别：按 PDF 构建的模板对齐完整表格，整页一次 OCR 后匹配"
-            "表内外字段；不进行字段级补充识别。mainWork先合并OCR文字，再按施工情况、旁站情况、巡视情况关键词提取；"
-            "规则无法完整可靠覆盖时，由Agent基于全文生成construction、witness、patrol。"
-            "允许整理表达、合并断句和去标题，但保留全部业务事实与关键数据，不摘要、不补充事实；"
-            "原文没有的类别为 null。成功响应严格遵守已确认的后端格式，顶层只有 status、"
-            "message、data，业务字段直接位于 data，不返回内部识别详情。"
-            "mainWork 无法可靠拆分时返回 502。",
-            summary="识别并处理监理日记",
-            status="confirmed",
-            source="interfaces/openapi/journal.openapi.json（2026-11-12 用户明确批准）；"
-            "interfaces/journal/response.schema.json（成功响应已确认）；"
-            "interfaces/journal/main-work-processing.md（生成语义已确认）；docs/journal-mainwork-split.md；"
-            "tests/test_ocr_journal.py；tests/test_agents_main_work.py",
-            side_effects="只读取数据池照片，不写 PDF/Excel。",
-            idempotency="识别结果可能因模型和照片变化而不同；只读调用可重试。",
-            request_example={
-                "path": "projects/监理日志照片.jpg",
-                "taskId": "123456789012345678",
-            },
-            responses={
-                "200": _json_response(
-                    "监理日志业务字段；成功响应结构已由用户确认，不含额外信息。",
-                    ref("JournalResponse"),
-                    example={
-                        "status": 200,
-                        "message": "识别完成",
-                        "data": {
-                            "taskId": "123456789012345678",
-                            "documentType": "supervision_diary",
-                            "common": {
-                                "projectName": "测试高速公路项目",
-                                "documentNo": None,
-                                "supervisionOrg": None,
-                                "recorderName": None,
-                                "recorderPosition": "专业监理工程师",
-                                "weather": None,
-                                "logDate": "2026-10-03",
-                                "reviewerName": None,
-                            },
-                            "fields": {
-                                "mainWork": {
-                                    "construction": "K3+280段路基填筑",
-                                    "witness": "旁站路基碾压",
-                                    "patrol": "巡视挡土墙砌筑",
-                                },
-                                "issues": None,
-                                "nextDayPlan": None,
-                            },
-                        },
-                    },
-                ),
-                "400": _error_response(
-                    "路径越界、文件不存在/不是文件、图片无法解码、未检测到通过模板结构核验的监理日志表格，或文档处理失败。"
-                ),
-                "422": REQUEST_ERROR_RESPONSE,
-                "502": _error_response(
-                    "mainWork无法可靠处理：关键词规则无法完整提取，且Agent不可用、超时或生成结果未通过结构/关键数据检查。"
-                ),
-                "503": _error_response("OCR 模型不可用。"),
-            },
-        )
-    },
-    "/ocr/journal/recognize": {
-        "post": _operation(
-            description="仅执行表格定位、整页一次 OCR 和栏目提取，不执行工作内容拆分或调用语言模型。"
-            "返回全部原始文字框及拆分前栏目文本；坐标统一为 EXIF 校正后、缩小前的图片像素坐标。",
-            summary="仅识别监理日记",
-            status="confirmed",
-            source="interfaces/openapi/journal.openapi.json；interfaces/journal/capabilities.md",
-            side_effects="不写文件、不持久化会话。",
-            idempotency="只读，可重试。",
-            request_example={"path": "projects/监理日志照片.jpg", "taskId": "example"},
-            responses={
-                "200": _json_response(
-                    "完整文字框和拆分前栏目。", ref("JournalRecognitionResponse")
-                ),
-                "400": _error_response("路径、图片或表格定位失败。"),
-                "422": REQUEST_ERROR_RESPONSE,
-                "503": _error_response("OCR 模型或资源不可用。"),
-            },
-        )
-    },
-    "/ocr/journal/process": {
-        "post": _operation(
-            description="仅处理完整 main_work 文本：规则优先、Agent 兜底及关键数据校验。"
-            "空文本或纯标题返回三个 null；模型路径沿用 4000 字符保护，规则路径不设统一长度上限。"
-            "处理失败统一 502；不访问 OCR 引擎。",
-            summary="仅拆分监理工作内容",
-            status="confirmed",
-            source="interfaces/openapi/journal.openapi.json；interfaces/journal/capabilities.md",
-            side_effects="不写文件、不持久化会话。",
-            idempotency="只读，可重试；模型路径可能产生不同措辞。",
-            request_example={
-                "main_work": "施工情况：K1+100填筑。\n旁站情况：旁站碾压。\n巡视情况：巡视施工现场。"
-            },
-            responses={
-                "200": _json_response("三个必填可空的工作内容字段。", ref("MainWorkValues")),
-                "422": REQUEST_ERROR_RESPONSE,
-                "502": _error_response(
-                    "主要工作内容无法可靠拆分；模型不可用、超时或结果检查失败。"
-                ),
-            },
-        )
-    },
 }
+
+# 三个操作的说明和示例以已批准契约为准；Schema 始终取实际应用，避免隐藏实现漂移。
+for _path, _methods in json.loads(JOURNAL_CONTRACT_PATH.read_text(encoding="utf-8"))[
+    "paths"
+].items():
+    for _method, _approved in _methods.items():
+        _metadata = {
+            key: copy.deepcopy(item)
+            for key, item in _approved.items()
+            if key not in {"operationId", "requestBody", "responses", "tags"}
+        }
+        OPERATIONS[_path] = {
+            _method: {
+                "operation": _metadata,
+                "responses": copy.deepcopy(_approved["responses"]),
+                "request_example": copy.deepcopy(
+                    _approved.get("requestBody", {})
+                    .get("content", {})
+                    .get(JSON_MEDIA_TYPE, {})
+                    .get("example")
+                ),
+            }
+        }
 
 
 def _apply_operations(spec: dict[str, Any]) -> None:
@@ -665,10 +582,6 @@ def build_contract() -> dict[str, Any]:
     spec.setdefault("components", {}).setdefault("schemas", {}).update(copy.deepcopy(SCHEMAS))
     # 业务意图使用自包含的 $defs；与已发布 JSON Schema 保持逐字一致。
     spec["components"]["schemas"]["BusinessIntentResult"] = BusinessIntentResult.model_json_schema()
-    # 新版监理日志成功响应由用户指定的后端结构确认，不从内部诊断结果推导。
-    spec["components"]["schemas"]["JournalResponse"] = json.loads(
-        (ROOT / "interfaces/journal/response.schema.json").read_text(encoding="utf-8")
-    )
     _apply_component_descriptions(spec)
     _apply_operations(spec)
     _prune_unused_schemas(spec)

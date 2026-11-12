@@ -9,8 +9,8 @@ class ConversationInputTooLarge(Exception):
     """固定输入无法放入预算，或未裁剪的请求超过大小上限。"""
 
 
-class MainWorkSplitError(Exception):
-    """监理日志 mainWork 无法可靠拆分；HTTP 层返回受控 502。"""
+class JournalGenerationError(Exception):
+    """监理日记工作内容无法可靠生成；HTTP 层返回受控 502。"""
 
 
 class JournalFrameNotFound(Exception):

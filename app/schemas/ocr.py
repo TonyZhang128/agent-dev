@@ -2,7 +2,15 @@
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    FiniteFloat,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 
 class JournalReq(BaseModel):
@@ -28,42 +36,6 @@ class JournalReq(BaseModel):
         if not self.path and not self.img:
             raise ValueError("path 与 img 至少提供一个")
         return self
-
-
-class MainWorkRequest(BaseModel):
-    """Agent输入合并后的完整mainWork，不再输入碎片ID和预判类别。"""
-
-    model_config = ConfigDict(extra="forbid")
-    main_work: str = Field(
-        min_length=1, description="按阅读顺序合并的全部OCR文字，换行不是强制业务边界"
-    )
-
-
-class MainWorkValues(BaseModel):
-    """三个字段必须明确返回；不存在的类别为null，内容必须依据原文。"""
-
-    model_config = ConfigDict(extra="forbid")
-    construction: str | None = Field(
-        description="施工部位、工序和进展；保留全部事实与关键数据，不摘要"
-    )
-    witness: str | None = Field(
-        description="旁站活动、过程和检测记录；保留全部事实与关键数据，不摘要"
-    )
-    patrol: str | None = Field(
-        description="巡视检查、现场观察及质量安全状态；保留全部事实与关键数据，不摘要"
-    )
-
-    @field_validator("construction", "witness", "patrol")
-    @classmethod
-    def trim_content(cls, text: str | None) -> str | None:
-        return text.strip() or None if text is not None else None
-
-
-class JournalProcessRequest(BaseModel):
-    """独立文本处理请求；允许空文本，不引入会话或图片依赖。"""
-
-    model_config = ConfigDict(extra="forbid", strict=True)
-    main_work: str
 
 
 type JournalPoint = tuple[FiniteFloat, FiniteFloat]
@@ -127,3 +99,102 @@ class JournalRecognitionResponse(JournalOutput):
     status: Literal[200]
     message: Literal["识别完成"]
     data: JournalRecognitionData
+
+
+class JournalProcessRequest(JournalRecognitionData):
+    """接收完整识别结果；同一栏目必须恰好出现一次，避免静默丢失或覆盖。"""
+
+    fields: list[JournalOCRField] = Field(min_length=11, max_length=11)
+
+    @model_validator(mode="after")
+    def validate_fields(self) -> "JournalProcessRequest":
+        expected = {
+            "project",
+            "number",
+            "supervision_org",
+            "recorder",
+            "weather",
+            "position",
+            "date",
+            "reviewer",
+            "main_work",
+            "issues",
+            "next_day_plan",
+        }
+        if {field.key for field in self.fields} != expected:
+            raise ValueError("识别结果必须完整包含 11 个不同栏目")
+        return self
+
+
+class JournalTextRequest(JournalOutput):
+    """只将工作原文传入模型，其他栏目在业务层透传。"""
+
+    content: str = Field(min_length=1)
+
+
+class JournalRecord(JournalOutput):
+    """规范化生成文本；不用于需要原样返回的识别字段。"""
+
+    @field_validator("*", mode="after", check_fields=False)
+    @classmethod
+    def trim_text(cls, text: object, info: ValidationInfo) -> object:
+        if info.field_name == "content":
+            return text
+        return text.strip() or None if isinstance(text, str) else text
+
+
+class JournalPatrol(JournalRecord):
+    inspectionScope: str | None = Field(description="巡视范围；无依据时为 null")
+    mainConstruction: str | None = Field(description="巡视所见主要施工情况")
+    qualitySafetyEnvironment: str | None = Field(description="已记录的质量、安全、环保情况")
+    problemsAndActions: str | None = Field(description="发现的问题及处理意见，不编造整改动作")
+
+
+class JournalWitness(JournalRecord):
+    supervisionProject: str | None = Field(description="旁站项目或明确未开展旁站的记录")
+    constructionProcess: str | None = Field(description="旁站施工过程简述")
+    supervisionWork: str | None = Field(description="实际旁站工作，不编造检查和取样")
+    mainDataRecords: str | None = Field(description="原文中的主要数据、指标及单位")
+    problemsAndResults: str | None = Field(description="发现的问题及处理结果，不推测完成状态")
+
+
+class JournalWorkValues(JournalRecord):
+    construction: str | None = Field(description="主要施工情况，保留关键事实与数据")
+    patrol: JournalPatrol
+    witness: JournalWitness
+
+
+class JournalWork(JournalWorkValues):
+    content: str
+
+
+class JournalCommon(JournalOutput):
+    projectName: str | None
+    documentNo: str | None
+    supervisionOrg: str | None
+    recorderName: str | None
+    recorderPosition: str | None
+    weather: str | None
+    logDate: str | None
+    reviewerName: str | None
+
+
+class JournalFields(JournalOutput):
+    mainWork: JournalWork
+    issues: str | None
+    nextDayPlan: str | None
+
+
+class JournalData(JournalOutput):
+    common: JournalCommon
+    fields: JournalFields
+
+
+class JournalResponseData(JournalOutput):
+    jsonData: JournalData
+
+
+class JournalResponse(JournalOutput):
+    code: Literal[200]
+    message: Literal["success"]
+    data: JournalResponseData

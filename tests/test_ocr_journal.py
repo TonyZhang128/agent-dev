@@ -127,10 +127,11 @@ def settings(tmp_path):
 
 
 def offline_service(settings) -> ModelService:
-    """拆分模型不可达：本文件只验证 OCR，mainWork 应按标题规则完成。"""
+    """只模拟模型 HTTP 边界，OCR 与结果组装保持真实执行。"""
+    from tests.journal_helpers import GENERATED, completion
 
     def unavailable(request):
-        raise httpx.ConnectError("offline", request=request)
+        return completion(json.dumps(GENERATED, ensure_ascii=False))
 
     return ModelService(
         settings,
@@ -163,30 +164,42 @@ def test_new_route_reads_one_page_and_maps_fields(client, settings):
     assert response.status_code == 200
     assert engine.calls == 1
     assert response.json() == {
-        "status": 200,
-        "message": "识别完成",
+        "code": 200,
+        "message": "success",
         "data": {
-            "taskId": "42",
-            "documentType": "supervision_diary",
-            "common": {
-                "projectName": "成乐高速公路扩容建设",
-                "documentNo": "JL-001",
-                "supervisionOrg": "测试监理机构",
-                "recorderName": "王璐瑶",
-                "recorderPosition": "专业监理工程师",
-                "weather": "晴",
-                "logDate": "2026-11-11",
-                "reviewerName": "王梦瑶",
-            },
-            "fields": {
-                "mainWork": {
-                    "construction": MAIN_WORK_CONSTRUCTION,
-                    "witness": MAIN_WORK_WITNESS,
-                    "patrol": MAIN_WORK_PATROL,
+            "jsonData": {
+                "common": {
+                    "projectName": "成乐高速公路扩容建设",
+                    "documentNo": "JL-001",
+                    "supervisionOrg": "测试监理机构",
+                    "recorderName": "王璐瑶",
+                    "recorderPosition": "专业监理工程师",
+                    "weather": "晴",
+                    "logDate": "2026-11-11",
+                    "reviewerName": "王梦瑶",
                 },
-                "issues": "挡土墙墙背回填局部压实不足",
-                "nextDayPlan": "见证水稳基层检测",
-            },
+                "fields": {
+                    "mainWork": {
+                        "content": "主要施工情况\nK3+280段路基填筑\n旁站情况\n旁站路基碾压\n巡视情况\n挡土墙错缝砌筑",
+                        "construction": MAIN_WORK_CONSTRUCTION,
+                        "witness": {
+                            "supervisionProject": None,
+                            "constructionProcess": None,
+                            "supervisionWork": MAIN_WORK_WITNESS,
+                            "mainDataRecords": None,
+                            "problemsAndResults": None,
+                        },
+                        "patrol": {
+                            "inspectionScope": None,
+                            "mainConstruction": "巡视挡土墙砌筑",
+                            "qualitySafetyEnvironment": None,
+                            "problemsAndActions": None,
+                        },
+                    },
+                    "issues": "挡土墙墙背回填局部压实不足",
+                    "nextDayPlan": "见证水稳基层检测",
+                },
+            }
         },
     }
 
@@ -201,32 +214,50 @@ def test_new_route_keeps_null_fields_and_matches_backend_contract(client, settin
     assert response.status_code == 200
     payload = response.json()
     assert payload == {
-        "status": 200,
-        "message": "识别完成",
+        "code": 200,
+        "message": "success",
         "data": {
-            "taskId": None,
-            "documentType": "supervision_diary",
-            "common": {
-                "projectName": None,
-                "documentNo": None,
-                "supervisionOrg": None,
-                "recorderName": None,
-                "recorderPosition": None,
-                "weather": None,
-                "logDate": None,
-                "reviewerName": None,
-            },
-            "fields": {
-                "mainWork": {"construction": None, "witness": None, "patrol": None},
-                "issues": None,
-                "nextDayPlan": None,
-            },
+            "jsonData": {
+                "common": {
+                    "projectName": None,
+                    "documentNo": None,
+                    "supervisionOrg": None,
+                    "recorderName": None,
+                    "recorderPosition": None,
+                    "weather": None,
+                    "logDate": None,
+                    "reviewerName": None,
+                },
+                "fields": {
+                    "mainWork": {
+                        "content": "",
+                        "construction": None,
+                        "patrol": {
+                            "inspectionScope": None,
+                            "mainConstruction": None,
+                            "qualitySafetyEnvironment": None,
+                            "problemsAndActions": None,
+                        },
+                        "witness": {
+                            "supervisionProject": None,
+                            "constructionProcess": None,
+                            "supervisionWork": None,
+                            "mainDataRecords": None,
+                            "problemsAndResults": None,
+                        },
+                    },
+                    "issues": None,
+                    "nextDayPlan": None,
+                },
+            }
         },
     }
     contract_path = Path(__file__).resolve().parents[1] / "interfaces/journal/response.schema.json"
     contract = json.loads(contract_path.read_text(encoding="utf-8"))
 
     def assert_keys(actual, schema):
+        if "$ref" in schema:
+            schema = contract["$defs"][schema["$ref"].rsplit("/", 1)[-1]]
         if schema.get("type") == "object":
             assert isinstance(actual, dict)
             assert actual.keys() == schema["properties"].keys()
@@ -243,7 +274,7 @@ def test_empty_field_does_not_repeat_ocr(client, settings):
 
     response = client.post("/ocr/journal", json={"path": "journal.png"})
 
-    data = response.json()["data"]
+    data = response.json()["data"]["jsonData"]
     assert response.status_code == 200
     assert engine.calls == 1
     assert data["common"]["reviewerName"] is None
@@ -466,7 +497,7 @@ def test_new_route_accepts_base64_and_prefers_it(client, settings):
     )
 
     assert response.status_code == 200
-    assert response.json()["data"]["common"]["projectName"] == "成乐高速公路扩容建设"
+    assert response.json()["data"]["jsonData"]["common"]["projectName"] == "成乐高速公路扩容建设"
 
 
 @pytest.mark.parametrize("route", ["/ocr/journal", "/ocr/journal/recognize"])

@@ -40,7 +40,7 @@ Linux 完整步骤、配置和后台托管见 [部署说明](../docs/deployment-
 
 `scripts/docs/` 只服务于接口契约：`export_openapi` 从 `app.main:app` 生成待确认草案，默认写入 `interfaces/drafts/fastapi.openapi.json`；`render_api_markdown` 把同一契约渲染为 `interfaces/API.md` 评审文档；`check_openapi` 只比较契约与实现并返回非零状态，不覆盖任何契约。正式契约必须由用户批准后人工提升到 `interfaces/openapi/`，详见 [接口文档](../interfaces/README.md) 和 [AGENTS.md 第四节](../AGENTS.md#4接口契约与-api-first-开发流程)。
 
-`scripts/ocr/build_journal_template.py` 从指定 PDF 离线构建监理日记模板；`scripts/ocr/inspect_journal.py` 读取指定照片，输出单次 OCR 诊断、字段覆盖图和规则拆分报告，默认不调用 LLM。完整命令见 [模板识别维护](../docs/journal-template-recognition.md)。已删除的旧 docsvc 工具不由本次重构恢复。
+`scripts/ocr/build_journal_template.py` 从指定 PDF 离线构建监理日记模板；`scripts/ocr/inspect_journal.py` 读取指定照片，输出单次 OCR 诊断、字段覆盖图和完整识别报告，默认不调用 LLM。完整命令见 [模板识别维护](../docs/journal-template-recognition.md)。已删除的旧 docsvc 工具不由本次重构恢复。
 
 容器部署前在开发机预置两类模型，并分别运行 `scripts.models.download_qwen35_gguf --check` 与 `scripts.models.download_ocr_models --check`。完整目录迁移和 SHA256 清单见 [Docker 部署](../docs/docker.md#2准备权重)。`scripts.common.verify_agents` 只覆盖 Agent；照片 OCR 及 CUDA EP 需要按该文档独立验收，不能从 Agent 回归通过推断 OCR 可用。
 

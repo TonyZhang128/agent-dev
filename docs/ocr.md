@@ -1,8 +1,8 @@
 # OCR与本地依赖诊断
 
-当前提供 `POST /ocr/journal` 完整业务处理、`POST /ocr/journal/recognize` 纯 OCR、`POST /ocr/journal/process` 纯文本拆分，以及系统级 `GET /diagnostics`。旧照片、简表、填表、表样和WBS入口已删除，不再作为可用能力介绍。
+当前提供 `POST /ocr/journal` 完整业务处理、`POST /ocr/journal/recognize` 纯 OCR、`POST /ocr/journal/process` 业务生成，以及系统级 `GET /diagnostics`。旧照片、简表、填表、表样和WBS入口已删除，不再作为可用能力介绍。
 
-三个入口直接复用内部函数；纯 OCR 保留全部原始文字框、置信度和拆分前栏目，坐标统一为 EXIF 校正后、缩小前的图片像素坐标。纯文本入口不访问 OCR 引擎。正式定义见 [三入口契约](../interfaces/openapi/journal.openapi.json)。
+三个入口直接复用内部函数；纯 OCR 保留全部原始文字框、置信度和拆分前栏目，坐标统一为 EXIF 校正后、缩小前的图片像素坐标。业务生成入口不访问 OCR 引擎。正式定义见 [三入口契约](../interfaces/openapi/journal.openapi.json)。
 
 接口流程、请求及失败语义以 [接口指南](../interfaces/guides/ocr.md) 为准；table模板构建、算法、命名和真实验收见 [监理日记模板识别](journal-template-recognition.md)。
 
@@ -25,7 +25,7 @@ HTTP `path` 只能指向 `PROJECTS_ROOT` 数据池内文件，兼容 `projects/`
 ## 3、工具和启动
 
 - `scripts.ocr.build_journal_template`：从PDF生成table相对模板和覆盖图。
-- `scripts.ocr.inspect_journal`：真实照片单次OCR、字段覆盖和规则拆分报告，默认不调用LLM。
+- `scripts.ocr.inspect_journal`：真实照片单次OCR、字段覆盖和完整识别报告，默认不调用LLM。
 - `scripts.common.verify_ocr`：调用运行中的API；HTTP检查不能替代逐字段验收。
 
 详细命令见 [模板维护](journal-template-recognition.md)。使用 `zsh scripts/dev/services.sh restart-api` 更新本项目本地API；不停止其他方式启动的服务。服务默认 `127.0.0.1:8309`。

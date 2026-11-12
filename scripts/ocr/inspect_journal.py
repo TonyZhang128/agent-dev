@@ -1,4 +1,4 @@
-"""真实照片本地验收：一次 OCR、字段覆盖图和规则拆分报告；默认不调用 LLM。"""
+"""真实照片本地验收：一次 OCR、字段覆盖图和原始识别报告；默认不调用 LLM。"""
 
 import argparse
 import json
@@ -11,15 +11,11 @@ from app.config import Settings
 from app.ocr import journal
 from app.ocr.core.resources import OCRResources, use_resources
 from app.ocr.journal.field_matching import field_bounds_on_canvas
-from app.ocr.journal.main_work_split import (
-    extract_by_keywords,
-    merge_main_work,
-    validate_generated_values,
-)
+from app.ocr.journal.output import merge_main_work
 
 
 def inspect_photo(photo: Path, output: Path, task_id: str = "") -> dict:
-    """调用真实 OCR 并显式导出本地报告；规则无法拆分时不伪造成功业务响应。"""
+    """调用真实 OCR 并导出识别结果；业务生成统一使用 process，不在检查脚本中另建路径。"""
     resources = OCRResources(Settings())
     started = time.perf_counter()
     try:
@@ -63,36 +59,26 @@ def inspect_photo(photo: Path, output: Path, task_id: str = "") -> dict:
             }
         )
     source = merge_main_work(recognition.readings)
-    values = extract_by_keywords(source)
-    payload = None
-    if values is not None:
-        validate_generated_values(source, values)
-        payload = {
-            "status": 200,
-            "message": "识别完成",
-            "data": journal.build_processed_payload(recognition, values),
-        }
+    recognized = journal.build_recognition_response(recognition)
     report = {
         "photo": str(photo),
         "table_corners": recognition.alignment.table_quad_in_photo.tolist(),
         "table_rect_on_canvas": recognition.alignment.table_rect_on_canvas,
         "line_support": recognition.alignment.line_support,
         "elapsed_ms": round((time.perf_counter() - started) * 1000),
-        "split_strategy": "rules" if values is not None else "requires_model",
+        "generation_required": bool(source.strip()),
         "fields": regions,
-        "response": payload,
+        "recognition": recognized.model_dump(mode="json"),
     }
     output.mkdir(parents=True, exist_ok=True)
     (output / "report.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
-    if payload is not None:
-        (output / "response.json").write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-        )
-    else:
-        # 同一目录连续检查不同照片时，不能把上次的成功JSON冒充本次结果。
-        (output / "response.json").unlink(missing_ok=True)
+    (output / "recognition.json").write_text(
+        recognized.model_dump_json(indent=2) + "\n", encoding="utf-8"
+    )
+    # 此工具不生成业务结果，清除旧版本遗留结果以免误认成本次输出。
+    (output / "response.json").unlink(missing_ok=True)
     cv2.imencode(".png", canvas)[1].tofile(output / "fields.png")
     cv2.imencode(".png", recognition.alignment.source_coverage_mask)[1].tofile(
         output / "coverage.png"
@@ -107,7 +93,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--task-id", default="")
     arguments = parser.parse_args(argv)
     report = inspect_photo(arguments.photo, arguments.output, arguments.task_id)
-    print(f"已导出识别报告：{arguments.output}；拆分方式：{report['split_strategy']}")
+    print(f"已导出识别报告：{arguments.output}；需要生成：{report['generation_required']}")
 
 
 if __name__ == "__main__":

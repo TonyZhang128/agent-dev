@@ -54,9 +54,9 @@
 
 ## 4、兼容性要求
 
-2026-11-12 已批准监理日记路径迁移：原 `/ocr/daily-logs-new` 删除，改用 `/ocr/journal`；新增 `/ocr/journal/recognize` 和 `/ocr/journal/process`。文本 process 直接返回三个字段，不能套用历史 OCR/WBS 的 status/data 包装假设。外部调用方是否已迁移仍需在其仓库确认。
+2026-11-12 已批准监理日记路径迁移：原 `/ocr/daily-logs-new` 删除，改用 `/ocr/journal`；新增 `/ocr/journal/recognize` 和 `/ocr/journal/process`。process 接收 recognize.data；process 与 journal 均返回 code/message/data/jsonData，不能套用历史 OCR/WBS 的 status/data 包装假设。外部调用方是否已迁移仍需在其仓库确认。
 
-- OCR/WBS 成功响应不得移除 `status`、`data`，也不得把 `status` 改成布尔值或字符串。
+- 历史 OCR/WBS 包装假设不适用于已批准升级的 journal 和 process；调用方需按新的正式子契约迁移。recognize 保持 status/message/data。
 - 错误响应不得移除 `detail`；Java 读取的是顶层 `message` 或 `detail`。
 - 422 的 `detail` 是数组，Java 客户端可能把它转成字符串展示；这属于调用方展示问题，
   但修改本服务错误结构会影响所有调用方，必须审批。

@@ -46,7 +46,7 @@
 | 7 | `POST /agents/chat` | 自由对话 | `confirmed` |
 | 8 | `POST /ocr/journal` | 识别并处理监理日记 | `confirmed` |
 | 9 | `POST /ocr/journal/recognize` | 仅识别监理日记 | `confirmed` |
-| 10 | `POST /ocr/journal/process` | 仅拆分监理工作内容 | `confirmed` |
+| 10 | `POST /ocr/journal/process` | 生成监理日记业务结果 | `confirmed` |
 
 ## 4、接口详情
 
@@ -465,11 +465,11 @@ Schema：`ChatResponse`
 | --- | --- |
 | 摘要 | 识别并处理监理日记 |
 | 契约状态 | `confirmed` |
-| 来源 | interfaces/openapi/journal.openapi.json（2026-11-12 用户明确批准）；interfaces/journal/response.schema.json（成功响应已确认）；interfaces/journal/main-work-processing.md（生成语义已确认）；docs/journal-mainwork-split.md；tests/test_ocr_journal.py；tests/test_agents_main_work.py |
+| 来源 | 用户于 2026-11-12 明确批准两阶段串联、完整业务输出、JournalAgent 命名及删除关键词/规则路径。 |
 | 副作用 | 只读取数据池照片，不写 PDF/Excel。 |
 | 幂等/重试 | 识别结果可能因模型和照片变化而不同；只读调用可重试。 |
 
-新版监理日志识别：按 PDF 构建的模板对齐完整表格，整页一次 OCR 后匹配表内外字段；不进行字段级补充识别。mainWork先合并OCR文字，再按施工情况、旁站情况、巡视情况关键词提取；规则无法完整可靠覆盖时，由Agent基于全文生成construction、witness、patrol。允许整理表达、合并断句和去标题，但保留全部业务事实与关键数据，不摘要、不补充事实；原文没有的类别为 null。成功响应严格遵守已确认的后端格式，顶层只有 status、message、data，业务字段直接位于 data，不返回内部识别详情。mainWork 无法可靠拆分时返回 502。
+组合入口：内部顺序执行与 recognize 相同的图片识别阶段，再执行与 process 相同的业务生成阶段；一次 OCR，不通过 HTTP 调用自身。返回与 process 相同的最终业务格式。识别失败停止，不继续生成。
 
 **请求体**
 
@@ -492,39 +492,51 @@ Schema：`JournalReq`
 
 **响应**
 
-- `200`：监理日志业务字段；成功响应结构已由用户确认，不含额外信息。
+- `200`：规定的完整业务日记；其他栏目与工作原文保留，Agent 生成施工和巡视/旁站子项。
 - `400`：路径越界、文件不存在/不是文件、图片无法解码、未检测到通过模板结构核验的监理日志表格，或文档处理失败。
 - `422`：请求校验失败，或输入与上下文超过预算。校验失败时 detail 为错误数组；输入超限时为字符串。
-- `502`：mainWork无法可靠处理：关键词规则无法完整提取，且Agent不可用、超时或生成结果未通过结构/关键数据检查。
+- `502`：工作内容生成失败：模型不可用、超时、有效文本超过 4000 字符或生成结果未通过结构/关键数据校验；沿用既有 detail 错误包装和固定文案。
 - `503`：OCR 模型不可用。
 
 **200 响应体**
 
 ```json
 {
-  "status": 200,
-  "message": "识别完成",
+  "code": 200,
+  "message": "success",
   "data": {
-    "taskId": "123456789012345678",
-    "documentType": "supervision_diary",
-    "common": {
-      "projectName": "测试高速公路项目",
-      "documentNo": null,
-      "supervisionOrg": null,
-      "recorderName": null,
-      "recorderPosition": "专业监理工程师",
-      "weather": null,
-      "logDate": "2026-10-03",
-      "reviewerName": null
-    },
-    "fields": {
-      "mainWork": {
-        "construction": "K3+280段路基填筑",
-        "witness": "旁站路基碾压",
-        "patrol": "巡视挡土墙砌筑"
+    "jsonData": {
+      "common": {
+        "projectName": "成乐高速公路扩容建设",
+        "documentNo": "20261108301720230410S210-1",
+        "supervisionOrg": "成乐高速公路扩容建设项目JL7总监办",
+        "recorderName": null,
+        "recorderPosition": "专业监理工程师",
+        "weather": "晴",
+        "logDate": "2026-11-01",
+        "reviewerName": null
       },
-      "issues": null,
-      "nextDayPlan": null
+      "fields": {
+        "mainWork": {
+          "content": "",
+          "construction": "路基第8层土方填筑碾压。",
+          "patrol": {
+            "inspectionScope": "对XX交安施工区域相关部位进行巡视。现场施工工艺符合批准的施工组织设计/专项施工方案，主要机械设备运行正常，特种作业人员持证上岗；测量放样、技术交底落实；未见违规违章作业。",
+            "mainConstruction": "对XX交安施工区域进行巡视。当日施工内容为……（如：XX标线波形板施工、XX标线施工、XX材料进场等），投入作业人员X人、主要设备X台，工序衔接有序。",
+            "qualitySafetyEnvironment": "示例（交安专业）：巡查标志基础混凝土浇筑及标志牌立柱垂直度；检查波形梁护栏立柱间距、埋深及线形（抽查X处，线形顺畅、顺接平顺）；抽查标线放样及热熔涂料干膜厚度（1.8~2.2mm）；隔离栅基础及轮廓标、防眩板安装。安全：占道施工交通组织与警示标志；环保：施工废料回收。",
+            "problemsAndActions": "发现……问题X项（如：立柱竖直度、立柱间距等），已现场口头通知整改X项，必要时下发《监理通知单》（编号XXX），明确整改要求与期限，跟踪闭环。"
+          },
+          "witness": {
+            "supervisionProject": "XX桩号基层、底基层试验段",
+            "constructionProcess": "当日施工内容为……（如：XX桥3#墩柱模板安装、XX钢筋绑扎），投入作业人员X人、主要设备X台，工序衔接有序。",
+            "supervisionWork": "1、现场特种作业人员、证件情况，现场安全措施。2、现场具体施工工序是否满足规范要求。3、现场见证取样情况，如砼试件、塌落度等。",
+            "mainDataRecords": "指标检查情况，实测值、设计值，是否满足现场要求。（如孔径、孔深、首盘砼方量、松铺厚度、摊铺厚度、温度、碾压遍数、横纵断面高程尺寸等）",
+            "problemsAndResults": "发现……问题X项，已现场口头通知整改X项，必要时通知专业监理下发《监理通知单》（编号XXX），明确整改要求与期限，跟踪闭环。"
+          }
+        },
+        "issues": "挡土墙墙背回填局部压实不足，已完成补压。",
+        "nextDayPlan": "继续旁站路基第9层填筑。"
+      }
     }
   }
 }
@@ -534,18 +546,15 @@ Schema：`JournalReq`
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
-| `status` | const `200` | 是 |  |  |  |
-| `message` | const `识别完成` | 是 |  |  |  |
-| `data` | object | 是 |  |  |  |
+| `code` | const `200` | 是 |  |  |  |
+| `message` | const `success` | 是 |  |  |  |
+| `data` | `JournalResponseData` | 是 |  |  |  |
 
 **`data` 字段**
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
-| `taskId` | string / null | 是 |  |  |  |
-| `documentType` | const `supervision_diary` | 是 |  |  |  |
-| `common` | object | 是 |  |  |  |
-| `fields` | object | 是 |  |  |  |
+| `jsonData` | `JournalData` | 是 |  |  |  |
 
 Schema：`JournalResponse`
 
@@ -555,7 +564,7 @@ Schema：`JournalResponse`
 | --- | --- |
 | 摘要 | 仅识别监理日记 |
 | 契约状态 | `confirmed` |
-| 来源 | interfaces/openapi/journal.openapi.json；interfaces/journal/capabilities.md |
+| 来源 | 用户于 2026-11-12 明确批准三入口方案；interfaces/drafts/journal-capabilities.md；interfaces/openapi/journal.openapi.json |
 | 副作用 | 不写文件、不持久化会话。 |
 | 幂等/重试 | 只读，可重试。 |
 
@@ -582,7 +591,7 @@ Schema：`JournalReq`
 
 **响应**
 
-- `200`：完整文字框和拆分前栏目。
+- `200`：成功。
 - `400`：路径、图片或表格定位失败。
 - `422`：请求校验失败，或输入与上下文超过预算。校验失败时 detail 为错误数组；输入超限时为字符串。
 - `503`：OCR 模型或资源不可用。
@@ -614,19 +623,343 @@ Schema：`JournalRecognitionResponse`
 
 | 项目 | 内容 |
 | --- | --- |
-| 摘要 | 仅拆分监理工作内容 |
+| 摘要 | 生成监理日记业务结果 |
 | 契约状态 | `confirmed` |
-| 来源 | interfaces/openapi/journal.openapi.json；interfaces/journal/capabilities.md |
+| 来源 | 用户于 2026-11-12 明确批准两阶段串联、完整业务输出、JournalAgent 命名及删除关键词/规则路径。 |
 | 副作用 | 不写文件、不持久化会话。 |
 | 幂等/重试 | 只读，可重试；模型路径可能产生不同措辞。 |
 
-仅处理完整 main_work 文本：规则优先、Agent 兜底及关键数据校验。空文本或纯标题返回三个 null；模型路径沿用 4000 字符保护，规则路径不设统一长度上限。处理失败统一 502；不访问 OCR 引擎。
+输入为 recognize 响应的 data。字段 key 必须完整且唯一。映射 common、issues、nextDayPlan，原样保留各栏目 text；main_work 的 text 映射为 mainWork.content，null 映射为空字符串。仅工作原文送入 JournalAgent 生成 construction、patrol 四项、witness 五项。无依据的生成子项为 null，两个对象始终存在。允许语言补全，不得补造事实和关键数据。空白内容不调用模型，纯标题交由 Agent 判定并返回空字段，不使用关键词/规则提取。有效模型输入最多 4000 字符；超限或模型失败统一受控 502。
 
 **请求体**
 
 ```json
 {
-  "main_work": "施工情况：K1+100填筑。\n旁站情况：旁站碾压。\n巡视情况：巡视施工现场。"
+  "taskId": null,
+  "documentType": "supervision_diary",
+  "image": {
+    "width": 100,
+    "height": 100,
+    "coordinateSpace": "exif_corrected_original"
+  },
+  "tablePolygon": [
+    [
+      0,
+      0
+    ],
+    [
+      100,
+      0
+    ],
+    [
+      100,
+      100
+    ],
+    [
+      0,
+      100
+    ]
+  ],
+  "boxes": [],
+  "fields": [
+    {
+      "key": "project",
+      "label": "project",
+      "text": null,
+      "confidence": 0.0,
+      "polygon": [
+        [
+          0,
+          0
+        ],
+        [
+          10,
+          0
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          0,
+          10
+        ]
+      ],
+      "boxIds": [],
+      "ambiguous": false,
+      "visibleFraction": 1.0
+    },
+    {
+      "key": "number",
+      "label": "number",
+      "text": null,
+      "confidence": 0.0,
+      "polygon": [
+        [
+          0,
+          0
+        ],
+        [
+          10,
+          0
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          0,
+          10
+        ]
+      ],
+      "boxIds": [],
+      "ambiguous": false,
+      "visibleFraction": 1.0
+    },
+    {
+      "key": "supervision_org",
+      "label": "supervision_org",
+      "text": null,
+      "confidence": 0.0,
+      "polygon": [
+        [
+          0,
+          0
+        ],
+        [
+          10,
+          0
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          0,
+          10
+        ]
+      ],
+      "boxIds": [],
+      "ambiguous": false,
+      "visibleFraction": 1.0
+    },
+    {
+      "key": "recorder",
+      "label": "recorder",
+      "text": null,
+      "confidence": 0.0,
+      "polygon": [
+        [
+          0,
+          0
+        ],
+        [
+          10,
+          0
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          0,
+          10
+        ]
+      ],
+      "boxIds": [],
+      "ambiguous": false,
+      "visibleFraction": 1.0
+    },
+    {
+      "key": "weather",
+      "label": "weather",
+      "text": null,
+      "confidence": 0.0,
+      "polygon": [
+        [
+          0,
+          0
+        ],
+        [
+          10,
+          0
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          0,
+          10
+        ]
+      ],
+      "boxIds": [],
+      "ambiguous": false,
+      "visibleFraction": 1.0
+    },
+    {
+      "key": "position",
+      "label": "position",
+      "text": null,
+      "confidence": 0.0,
+      "polygon": [
+        [
+          0,
+          0
+        ],
+        [
+          10,
+          0
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          0,
+          10
+        ]
+      ],
+      "boxIds": [],
+      "ambiguous": false,
+      "visibleFraction": 1.0
+    },
+    {
+      "key": "date",
+      "label": "date",
+      "text": null,
+      "confidence": 0.0,
+      "polygon": [
+        [
+          0,
+          0
+        ],
+        [
+          10,
+          0
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          0,
+          10
+        ]
+      ],
+      "boxIds": [],
+      "ambiguous": false,
+      "visibleFraction": 1.0
+    },
+    {
+      "key": "reviewer",
+      "label": "reviewer",
+      "text": null,
+      "confidence": 0.0,
+      "polygon": [
+        [
+          0,
+          0
+        ],
+        [
+          10,
+          0
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          0,
+          10
+        ]
+      ],
+      "boxIds": [],
+      "ambiguous": false,
+      "visibleFraction": 1.0
+    },
+    {
+      "key": "main_work",
+      "label": "main_work",
+      "text": "K1+100段路基填筑。",
+      "confidence": 0.0,
+      "polygon": [
+        [
+          0,
+          0
+        ],
+        [
+          10,
+          0
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          0,
+          10
+        ]
+      ],
+      "boxIds": [],
+      "ambiguous": false,
+      "visibleFraction": 1.0
+    },
+    {
+      "key": "issues",
+      "label": "issues",
+      "text": null,
+      "confidence": 0.0,
+      "polygon": [
+        [
+          0,
+          0
+        ],
+        [
+          10,
+          0
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          0,
+          10
+        ]
+      ],
+      "boxIds": [],
+      "ambiguous": false,
+      "visibleFraction": 1.0
+    },
+    {
+      "key": "next_day_plan",
+      "label": "next_day_plan",
+      "text": null,
+      "confidence": 0.0,
+      "polygon": [
+        [
+          0,
+          0
+        ],
+        [
+          10,
+          0
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          0,
+          10
+        ]
+      ],
+      "boxIds": [],
+      "ambiguous": false,
+      "visibleFraction": 1.0
+    }
+  ]
 }
 ```
 
@@ -634,27 +967,80 @@ Schema：`JournalRecognitionResponse`
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
-| `main_work` | string | 是 |  |  |  |
+| `taskId` | string 或 null | 是 |  |  |  |
+| `documentType` | const `supervision_diary` | 是 |  |  |  |
+| `image` | `JournalImageInfo` | 是 |  |  |  |
+| `tablePolygon` | `JournalPolygon` | 是 |  | minItems=4，maxItems=4 |  |
+| `boxes` | array<`JournalOCRBox`> | 是 |  |  |  |
+| `fields` | array<`JournalOCRField`> | 是 |  | minItems=11，maxItems=11 |  |
 
 Schema：`JournalProcessRequest`
 
 **响应**
 
-- `200`：三个必填可空的工作内容字段。
+- `200`：规定的完整业务日记；其他栏目与工作原文保留，Agent 生成施工和巡视/旁站子项。
 - `422`：请求校验失败，或输入与上下文超过预算。校验失败时 detail 为错误数组；输入超限时为字符串。
-- `502`：主要工作内容无法可靠拆分；模型不可用、超时或结果检查失败。
+- `502`：工作内容生成失败：模型不可用、超时、有效文本超过 4000 字符或生成结果未通过结构/关键数据校验；沿用既有 detail 错误包装和固定文案。
 
 **200 响应体**
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "jsonData": {
+      "common": {
+        "projectName": "成乐高速公路扩容建设",
+        "documentNo": "20261108301720230410S210-1",
+        "supervisionOrg": "成乐高速公路扩容建设项目JL7总监办",
+        "recorderName": null,
+        "recorderPosition": "专业监理工程师",
+        "weather": "晴",
+        "logDate": "2026-11-01",
+        "reviewerName": null
+      },
+      "fields": {
+        "mainWork": {
+          "content": "",
+          "construction": "路基第8层土方填筑碾压。",
+          "patrol": {
+            "inspectionScope": "对XX交安施工区域相关部位进行巡视。现场施工工艺符合批准的施工组织设计/专项施工方案，主要机械设备运行正常，特种作业人员持证上岗；测量放样、技术交底落实；未见违规违章作业。",
+            "mainConstruction": "对XX交安施工区域进行巡视。当日施工内容为……（如：XX标线波形板施工、XX标线施工、XX材料进场等），投入作业人员X人、主要设备X台，工序衔接有序。",
+            "qualitySafetyEnvironment": "示例（交安专业）：巡查标志基础混凝土浇筑及标志牌立柱垂直度；检查波形梁护栏立柱间距、埋深及线形（抽查X处，线形顺畅、顺接平顺）；抽查标线放样及热熔涂料干膜厚度（1.8~2.2mm）；隔离栅基础及轮廓标、防眩板安装。安全：占道施工交通组织与警示标志；环保：施工废料回收。",
+            "problemsAndActions": "发现……问题X项（如：立柱竖直度、立柱间距等），已现场口头通知整改X项，必要时下发《监理通知单》（编号XXX），明确整改要求与期限，跟踪闭环。"
+          },
+          "witness": {
+            "supervisionProject": "XX桩号基层、底基层试验段",
+            "constructionProcess": "当日施工内容为……（如：XX桥3#墩柱模板安装、XX钢筋绑扎），投入作业人员X人、主要设备X台，工序衔接有序。",
+            "supervisionWork": "1、现场特种作业人员、证件情况，现场安全措施。2、现场具体施工工序是否满足规范要求。3、现场见证取样情况，如砼试件、塌落度等。",
+            "mainDataRecords": "指标检查情况，实测值、设计值，是否满足现场要求。（如孔径、孔深、首盘砼方量、松铺厚度、摊铺厚度、温度、碾压遍数、横纵断面高程尺寸等）",
+            "problemsAndResults": "发现……问题X项，已现场口头通知整改X项，必要时通知专业监理下发《监理通知单》（编号XXX），明确整改要求与期限，跟踪闭环。"
+          }
+        },
+        "issues": "挡土墙墙背回填局部压实不足，已完成补压。",
+        "nextDayPlan": "继续旁站路基第9层填筑。"
+      }
+    }
+  }
+}
+```
 
 **响应字段**
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
-| `construction` | string 或 null | 是 |  |  | 施工部位、工序和进展；保留全部事实与关键数据，不摘要 |
-| `witness` | string 或 null | 是 |  |  | 旁站活动、过程和检测记录；保留全部事实与关键数据，不摘要 |
-| `patrol` | string 或 null | 是 |  |  | 巡视检查、现场观察及质量安全状态；保留全部事实与关键数据，不摘要 |
+| `code` | const `200` | 是 |  |  |  |
+| `message` | const `success` | 是 |  |  |  |
+| `data` | `JournalResponseData` | 是 |  |  |  |
 
-Schema：`MainWorkValues`
+**`data` 字段**
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `jsonData` | `JournalData` | 是 |  |  |  |
+
+Schema：`JournalResponse`
 
 ## 5、Schema 附录
 
@@ -742,11 +1128,39 @@ Schema：`MainWorkValues`
 | `text` | string | 是 |  | minLength=1，maxLength=2000 | 待识别的归档业务内容 |
 | `intents` | array<`JsonValue`> | 否 |  | maxItems=0 | 仅为兼容保留，必须省略或为[]；不支持调用方自定义分类 |
 
-### 5.9、`JournalFieldKey`
+### 5.9、`JournalCommon`
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `projectName` | string 或 null | 是 |  |  |  |
+| `documentNo` | string 或 null | 是 |  |  |  |
+| `supervisionOrg` | string 或 null | 是 |  |  |  |
+| `recorderName` | string 或 null | 是 |  |  |  |
+| `recorderPosition` | string 或 null | 是 |  |  |  |
+| `weather` | string 或 null | 是 |  |  |  |
+| `logDate` | string 或 null | 是 |  |  |  |
+| `reviewerName` | string 或 null | 是 |  |  |  |
+
+### 5.10、`JournalData`
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `common` | `JournalCommon` | 是 |  |  |  |
+| `fields` | `JournalFields` | 是 |  |  |  |
+
+### 5.11、`JournalFieldKey`
 
 类型：enum（`project`、`number`、`supervision_org`、`recorder`、`weather`、`position`、`date`、`reviewer`、`main_work`、`issues`、`next_day_plan`）
 
-### 5.10、`JournalImageInfo`
+### 5.12、`JournalFields`
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `mainWork` | `JournalWork` | 是 |  |  |  |
+| `issues` | string 或 null | 是 |  |  |  |
+| `nextDayPlan` | string 或 null | 是 |  |  |  |
+
+### 5.13、`JournalImageInfo`
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
@@ -754,7 +1168,7 @@ Schema：`MainWorkValues`
 | `height` | integer | 是 |  | exclusiveMinimum=0.0 |  |
 | `coordinateSpace` | const `exif_corrected_original` | 是 |  |  |  |
 
-### 5.11、`JournalOCRBox`
+### 5.14、`JournalOCRBox`
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
@@ -763,7 +1177,7 @@ Schema：`MainWorkValues`
 | `confidence` | `RecognitionConfidence` | 是 |  | minimum=0.0，maximum=1.0 |  |
 | `polygon` | `JournalPolygon` | 是 |  | minItems=4，maxItems=4 |  |
 
-### 5.12、`JournalOCRField`
+### 5.15、`JournalOCRField`
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
@@ -776,23 +1190,37 @@ Schema：`MainWorkValues`
 | `ambiguous` | boolean | 是 |  |  |  |
 | `visibleFraction` | `RecognitionConfidence` | 是 |  | minimum=0.0，maximum=1.0 |  |
 
-### 5.13、`JournalPoint`
-
-类型：array<any>
-
-### 5.14、`JournalPolygon`
-
-类型：array<any>
-
-### 5.15、`JournalProcessRequest`
-
-独立文本处理请求；允许空文本，不引入会话或图片依赖。
+### 5.16、`JournalPatrol`
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
-| `main_work` | string | 是 |  |  |  |
+| `inspectionScope` | string 或 null | 是 |  |  | 巡视范围；无依据时为 null |
+| `mainConstruction` | string 或 null | 是 |  |  | 巡视所见主要施工情况 |
+| `qualitySafetyEnvironment` | string 或 null | 是 |  |  | 已记录的质量、安全、环保情况 |
+| `problemsAndActions` | string 或 null | 是 |  |  | 发现的问题及处理意见，不编造整改动作 |
 
-### 5.16、`JournalRecognitionData`
+### 5.17、`JournalPoint`
+
+类型：array<any>
+
+### 5.18、`JournalPolygon`
+
+类型：array<any>
+
+### 5.19、`JournalProcessRequest`
+
+接收完整识别结果；同一栏目必须恰好出现一次，避免静默丢失或覆盖。
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `taskId` | string 或 null | 是 |  |  |  |
+| `documentType` | const `supervision_diary` | 是 |  |  |  |
+| `image` | `JournalImageInfo` | 是 |  |  |  |
+| `tablePolygon` | `JournalPolygon` | 是 |  | minItems=4，maxItems=4 |  |
+| `boxes` | array<`JournalOCRBox`> | 是 |  |  |  |
+| `fields` | array<`JournalOCRField`> | 是 |  | minItems=11，maxItems=11 |  |
+
+### 5.20、`JournalRecognitionData`
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
@@ -803,7 +1231,7 @@ Schema：`MainWorkValues`
 | `boxes` | array<`JournalOCRBox`> | 是 |  |  |  |
 | `fields` | array<`JournalOCRField`> | 是 |  |  |  |
 
-### 5.17、`JournalRecognitionResponse`
+### 5.21、`JournalRecognitionResponse`
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
@@ -811,7 +1239,7 @@ Schema：`MainWorkValues`
 | `message` | const `识别完成` | 是 |  |  |  |
 | `data` | `JournalRecognitionData` | 是 |  |  |  |
 
-### 5.18、`JournalReq`
+### 5.22、`JournalReq`
 
 新版监理日志识别请求；与旧接口字段一致，实现链独立。
 
@@ -821,11 +1249,44 @@ Schema：`MainWorkValues`
 | `img` | string | 否 | `""` |  | base64 编码的图片数据；path 与 img 至少提供一个 |
 | `taskId` | string | 否 | `""` | maxLength=128 | 业务任务 ID，仅原样回显到 processed.taskId；不传则为 null |
 
-### 5.19、`JsonValue`
+### 5.23、`JournalResponse`
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `code` | const `200` | 是 |  |  |  |
+| `message` | const `success` | 是 |  |  |  |
+| `data` | `JournalResponseData` | 是 |  |  |  |
+
+### 5.24、`JournalResponseData`
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `jsonData` | `JournalData` | 是 |  |  |  |
+
+### 5.25、`JournalWitness`
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `supervisionProject` | string 或 null | 是 |  |  | 旁站项目或明确未开展旁站的记录 |
+| `constructionProcess` | string 或 null | 是 |  |  | 旁站施工过程简述 |
+| `supervisionWork` | string 或 null | 是 |  |  | 实际旁站工作，不编造检查和取样 |
+| `mainDataRecords` | string 或 null | 是 |  |  | 原文中的主要数据、指标及单位 |
+| `problemsAndResults` | string 或 null | 是 |  |  | 发现的问题及处理结果，不推测完成状态 |
+
+### 5.26、`JournalWork`
+
+| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `construction` | string 或 null | 是 |  |  | 主要施工情况，保留关键事实与数据 |
+| `patrol` | `JournalPatrol` | 是 |  |  |  |
+| `witness` | `JournalWitness` | 是 |  |  |  |
+| `content` | string | 是 |  |  |  |
+
+### 5.27、`JsonValue`
 
 类型：any
 
-### 5.20、`LogSummary`
+### 5.28、`LogSummary`
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
@@ -836,7 +1297,7 @@ Schema：`MainWorkValues`
 | `pending_items` | array<string> | 是 |  | maxItems=8 | 仅输入明确的待办或进行中事项；空值及未记录合格率不产生待办，无则[]。 |
 | `issues` | array<string> | 是 |  | maxItems=8 | 输入原表明确的不合格结论、问题、风险或矛盾，必须保留；例如结论为宽度不合格则列出宽度不合格；未填合格率不属于质量问题，无则[]。 |
 
-### 5.21、`LogSummaryRequest`
+### 5.29、`LogSummaryRequest`
 
 可变结构的工程表单 OCR JSON 或兼容文字，序列化后最多 4000 字符。
 
@@ -846,17 +1307,7 @@ Schema：`MainWorkValues`
 | `session_id` | string | 是 |  | minLength=1，maxLength=128 |  |
 | `content` | string 或 object | 是 |  |  | 工程表单 OCR 识别对象，内部字段和层级可变化；兼容通用日志文字或对象。非空，按 json.dumps(ensure_ascii=False) 序列化后最多4000字符；顶层不接受数组。 |
 
-### 5.22、`MainWorkValues`
-
-三个字段必须明确返回；不存在的类别为null，内容必须依据原文。
-
-| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
-| --- | --- | --- | --- | --- | --- |
-| `construction` | string 或 null | 是 |  |  | 施工部位、工序和进展；保留全部事实与关键数据，不摘要 |
-| `witness` | string 或 null | 是 |  |  | 旁站活动、过程和检测记录；保留全部事实与关键数据，不摘要 |
-| `patrol` | string 或 null | 是 |  |  | 巡视检查、现场观察及质量安全状态；保留全部事实与关键数据，不摘要 |
-
-### 5.23、`PendingClarification`
+### 5.30、`PendingClarification`
 
 调用方保存的一级意图澄清状态；attempts 是已完成的澄清轮数。
 
@@ -865,11 +1316,11 @@ Schema：`MainWorkValues`
 | `page` | enum（`supervision_diary`、`work_list`、`image_library`、`recognition_platform`、`business_management`、`workbench`） | 是 |  |  |  |
 | `attempts` | integer | 是 |  | minimum=0.0，maximum=10.0 |  |
 
-### 5.24、`RecognitionConfidence`
+### 5.31、`RecognitionConfidence`
 
 类型：number
 
-### 5.25、`ValidationErrorItem`
+### 5.32、`ValidationErrorItem`
 
 校验错误项。实际响应省略 input 与 ctx，避免回显原始身份、历史和输入。
 
@@ -879,7 +1330,7 @@ Schema：`MainWorkValues`
 | `loc` | array<string 或 integer> | 是 |  |  | 错误位置，例如 body、history、0、role。 |
 | `msg` | string | 是 |  |  | 可公开的错误说明。 |
 
-### 5.26、`RequestError`
+### 5.33、`RequestError`
 
 422 统一错误响应。
 
@@ -887,7 +1338,7 @@ Schema：`MainWorkValues`
 | --- | --- | --- | --- | --- | --- |
 | `detail` | string 或 array<`ValidationErrorItem`> | 是 |  |  | 请求校验失败时为错误数组；输入或上下文超限时为字符串。 |
 
-### 5.27、`ErrorDetail`
+### 5.34、`ErrorDetail`
 
 非校验类错误响应。
 
@@ -895,19 +1346,19 @@ Schema：`MainWorkValues`
 | --- | --- | --- | --- | --- | --- |
 | `detail` | string | 是 |  |  | 脱敏后的错误说明，不包含密钥、原始输入、身份、历史或上游错误正文。 |
 
-### 5.28、`HealthResponse`
+### 5.35、`HealthResponse`
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
 | `status` | const `ok` | 是 |  |  | 进程存活标记。 |
 
-### 5.29、`ReadyResponse`
+### 5.36、`ReadyResponse`
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
 | `status` | const `ready` | 是 |  |  | 配置模型已出现在上游模型列表。 |
 
-### 5.30、`DependencyStatus`
+### 5.37、`DependencyStatus`
 
 单个依赖的导入检查结果。
 
@@ -918,7 +1369,7 @@ Schema：`MainWorkValues`
 | `version` | string | 否 |  |  |  |
 | `error` | string | 否 |  |  |  |
 
-### 5.31、`CapabilityStatus`
+### 5.38、`CapabilityStatus`
 
 按能力分组的检查结果；不同能力的字段不完全相同。
 
@@ -942,7 +1393,7 @@ Schema：`MainWorkValues`
 | `assets` | object | 否 |  |  |  |
 | `error` | string | 否 |  |  |  |
 
-### 5.32、`DiagnosticsData`
+### 5.39、`DiagnosticsData`
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
@@ -950,7 +1401,7 @@ Schema：`MainWorkValues`
 | `warnings` | array<string> | 是 |  |  | 非致命问题，例如模型目录为空但可写、表样目录缺失。 |
 | `caps` | object | 是 |  |  | 能力名 → 检查结果。能力名包括 PDF、Excel、图像、文字识别、模型推理、OpenCV 特征、推理设备和 OCR 资源。 |
 
-### 5.33、`DiagnosticsResponse`
+### 5.40、`DiagnosticsResponse`
 
 本地依赖与资源诊断成功响应。
 
@@ -958,13 +1409,3 @@ Schema：`MainWorkValues`
 | --- | --- | --- | --- | --- | --- |
 | `status` | const `200` | 是 |  |  | 业务成功状态，与 HTTP 200 一致；不是 HTTP 状态码的替代品。 |
 | `data` | `DiagnosticsData` | 是 |  |  |  |
-
-### 5.34、`JournalResponse`
-
-用户于 2026-11-06 确认的成功响应；2026-11-12 批准路径更名为 POST /ocr/journal；以 data/ocr/resources/daily-logs-output.json 为结构依据。
-
-| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
-| --- | --- | --- | --- | --- | --- |
-| `status` | const `200` | 是 |  |  |  |
-| `message` | const `识别完成` | 是 |  |  |  |
-| `data` | object | 是 |  |  |  |

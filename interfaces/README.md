@@ -83,7 +83,7 @@ interfaces/
 | 本地依赖诊断 | `GET /diagnostics` | pending-review | [OCR 指南](guides/ocr.md) |
 | 监理日记完整处理 | `POST /ocr/journal` | confirmed | [正式子契约](openapi/journal.openapi.json) |
 | 监理日记纯 OCR | `POST /ocr/journal/recognize` | confirmed | [三入口语义](journal/capabilities.md) |
-| 监理工作文本拆分 | `POST /ocr/journal/process` | confirmed | [三入口语义](journal/capabilities.md) |
+| 监理日记业务生成 | `POST /ocr/journal/process` | confirmed | [三入口语义](journal/capabilities.md) |
 
 监理日记字段以正式子契约为准；其他接口见 OpenAPI 草案的 `components/schemas`；本目录的 Markdown 只说明业务流程、
 状态转换、超时、重试、路径限制等 OpenAPI 不易表达的内容，不重复维护字段表。
@@ -97,9 +97,8 @@ interfaces/
   - `/agents/*` 直接返回业务对象，没有 `data` 包装。
   - `/health`、`/ready` 返回 `{"status":"ok"}` / `{"status":"ready"}`。
   - `/diagnostics` 返回
-    `{"status":200,"data":...}`；其中 `/ocr/journal` 严格返回
-    `{"status":200,"message":"识别完成","data":...}`，`data` 为业务字段对象。
-    `/ocr/journal/recognize` 使用相同包装，data 为识别明细；`/ocr/journal/process` 直接返回三个工作字段。
+    `{"status":200,"data":...}`；`/ocr/journal/recognize` 返回 `{"status":200,"message":"识别完成","data":...}`，data 为识别明细。
+    `/ocr/journal` 与 `/ocr/journal/process` 返回 `{"code":200,"message":"success","data":{"jsonData":...}}`，业务字段位于 jsonData。
     `status` 是业务成功标记，不是 HTTP 状态码替代品。
 - 错误：统一为 `{"detail": ...}`。请求校验失败时 `detail` 是错误数组；上下文超限和
   其余业务/模型错误是字符串。错误响应不回显原始输入、身份、历史、密钥或上游正文。

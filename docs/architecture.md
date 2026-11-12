@@ -8,7 +8,7 @@
 业务系统 → FastAPI → 领域 Router
                        ├── Agent → runtime → ChatOpenAI → Ollama / vLLM
                        └── journal → 表格定位与对齐 → 整页 OCR → 字段提取
-                                                              └── mainWork 规则 / Agent
+                                                              └── JournalAgent 业务生成
 ```
 
 LLM 是独立模型推理服务；OCR 引擎在算法服务进程内运行。可选云端回退沿用统一 Agent 运行时，触发与预算见 [配置说明](configuration.md#4云端回退)。当前没有数据库、服务端持久会话或业务系统写入工具。
@@ -63,11 +63,11 @@ uv run --locked python -m scripts.intent.compile_catalog --check
 
 ## 5、OCR 与 mainWork
 
-当前 OCR HTTP 入口为组合处理 `/ocr/journal`、纯 OCR `/ocr/journal/recognize` 和纯文本拆分 `/ocr/journal/process`，不将已移除的旧照片、简表、填表和 WBS 接口列为可用能力。识别过程使用随代码发布的 journal 模板，定位与对齐后整页 OCR，再匹配业务栏目。
+当前 OCR HTTP 入口为组合处理 `/ocr/journal`、纯 OCR `/ocr/journal/recognize` 和业务生成 `/ocr/journal/process`，不将已移除的旧照片、简表、填表和 WBS 接口列为可用能力。识别过程使用随代码发布的 journal 模板，定位与对齐后整页 OCR，再匹配业务栏目。
 
-mainWork 优先按可靠的施工、旁站、巡视标题提取，规则不足时交给 MainWorkAgent 基于完整原文生成三个字段，再检查关键数据。生成有独立的总预算和并发限制，失败时返回受控错误，不能伪造成功或改变事实。
+process 接收 recognize.data，映射普通栏目并交给 JournalAgent 基于工作原文生成施工、巡视四项和旁站五项，随后检查关键数据；journal 顺序执行相同两阶段。生成有独立的总预算和并发限制，失败时返回受控错误，不能伪造成功或改变事实。
 
-模板构建与照片诊断见 [模板识别](journal-template-recognition.md)，mainWork 实现见 [处理专题](journal-mainwork-split.md)，对外行为以 [接口说明](../interfaces/journal/main-work-processing.md) 为准。
+模板构建与照片诊断见 [模板识别](journal-template-recognition.md)，mainWork 实现见 [处理专题](journal-generation.md)，对外行为以 [接口说明](../interfaces/journal/main-work-processing.md) 为准。
 
 工作区未跟踪的独立 `ocr/` 若存在，不属于主应用；修改前阅读其自身 README，不合并依赖或路由。docsvc 迁移属于历史背景，当前能力以源码和接口清单为准。
 

@@ -1,52 +1,326 @@
 {
-  "title": "JournalResponse",
-  "description": "用户于 2026-11-06 确认的成功响应；2026-11-12 批准路径更名为 POST /ocr/journal；以 data/ocr/resources/daily-logs-output.json 为结构依据。",
   "type": "object",
   "additionalProperties": false,
-  "required": ["status", "message", "data"],
+  "required": [
+    "code",
+    "message",
+    "data"
+  ],
   "properties": {
-    "status": {"type": "integer", "const": 200},
-    "message": {"type": "string", "const": "识别完成"},
+    "code": {
+      "type": "integer",
+      "const": 200
+    },
+    "message": {
+      "type": "string",
+      "const": "success"
+    },
     "data": {
+      "$ref": "#/$defs/JournalResponseData"
+    }
+  },
+  "$defs": {
+    "JournalCommon": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["taskId", "documentType", "common", "fields"],
+      "required": [
+        "projectName",
+        "documentNo",
+        "supervisionOrg",
+        "recorderName",
+        "recorderPosition",
+        "weather",
+        "logDate",
+        "reviewerName"
+      ],
       "properties": {
-        "taskId": {"type": ["string", "null"]},
-        "documentType": {"type": "string", "const": "supervision_diary"},
+        "projectName": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "documentNo": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "supervisionOrg": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "recorderName": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "recorderPosition": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "weather": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "logDate": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reviewerName": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "JournalPatrol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "inspectionScope",
+        "mainConstruction",
+        "qualitySafetyEnvironment",
+        "problemsAndActions"
+      ],
+      "properties": {
+        "inspectionScope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mainConstruction": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "qualitySafetyEnvironment": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "problemsAndActions": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "JournalWitness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "supervisionProject",
+        "constructionProcess",
+        "supervisionWork",
+        "mainDataRecords",
+        "problemsAndResults"
+      ],
+      "properties": {
+        "supervisionProject": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "constructionProcess": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "supervisionWork": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mainDataRecords": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "problemsAndResults": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "JournalWork": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "construction",
+        "patrol",
+        "witness",
+        "content"
+      ],
+      "properties": {
+        "construction": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "patrol": {
+          "$ref": "#/$defs/JournalPatrol"
+        },
+        "witness": {
+          "$ref": "#/$defs/JournalWitness"
+        },
+        "content": {
+          "type": "string"
+        }
+      }
+    },
+    "JournalFields": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mainWork",
+        "issues",
+        "nextDayPlan"
+      ],
+      "properties": {
+        "mainWork": {
+          "$ref": "#/$defs/JournalWork"
+        },
+        "issues": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "nextDayPlan": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "JournalData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "common",
+        "fields"
+      ],
+      "properties": {
         "common": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["projectName", "documentNo", "supervisionOrg", "recorderName", "recorderPosition", "weather", "logDate", "reviewerName"],
-          "properties": {
-            "projectName": {"type": ["string", "null"]},
-            "documentNo": {"type": ["string", "null"]},
-            "supervisionOrg": {"type": ["string", "null"]},
-            "recorderName": {"type": ["string", "null"]},
-            "recorderPosition": {"type": ["string", "null"]},
-            "weather": {"type": ["string", "null"]},
-            "logDate": {"type": ["string", "null"]},
-            "reviewerName": {"type": ["string", "null"]}
-          }
+          "$ref": "#/$defs/JournalCommon"
         },
         "fields": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["mainWork", "issues", "nextDayPlan"],
-          "properties": {
-            "mainWork": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["construction", "witness", "patrol"],
-              "properties": {
-                "construction": {"type": ["string", "null"]},
-                "witness": {"type": ["string", "null"]},
-                "patrol": {"type": ["string", "null"]}
-              }
-            },
-            "issues": {"type": ["string", "null"]},
-            "nextDayPlan": {"type": ["string", "null"]}
-          }
+          "$ref": "#/$defs/JournalFields"
+        }
+      }
+    },
+    "JournalResponseData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jsonData"
+      ],
+      "properties": {
+        "jsonData": {
+          "$ref": "#/$defs/JournalData"
         }
       }
     }

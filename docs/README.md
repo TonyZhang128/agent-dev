@@ -29,7 +29,7 @@
 | --- | --- |
 | 了解当前 OCR 能力、资源路径与静态诊断 | [OCR 说明](ocr.md) |
 | 构建模板、检查表格对齐、字段提取与真实照片效果 | [监理日记模板识别](journal-template-recognition.md) |
-| 维护 mainWork 关键词提取、全文生成与关键数据校验 | [mainWork 实现](journal-mainwork-split.md) |
+| 维护监理日记业务生成与关键数据校验 | [mainWork 实现](journal-generation.md) |
 | 查询 mainWork 已确认的对外处理语义 | [mainWork 接口说明](../interfaces/journal/main-work-processing.md) |
 
 ## 4、生产部署

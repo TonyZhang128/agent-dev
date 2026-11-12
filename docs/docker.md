@@ -150,8 +150,8 @@ OCR_ASSETS_DIR=/srv/highway-agent/data/ocr/assets
 OCR_PROJECTS_DIR=/srv/highway-agent/data/ocr/projects
 API_BIND_ADDRESS=127.0.0.1
 API_HOST_PORT=8309
-MAIN_WORK_SPLIT_TIMEOUT_SECONDS=30
-MAIN_WORK_SPLIT_CONCURRENCY=1
+JOURNAL_TIMEOUT_SECONDS=30
+JOURNAL_CONCURRENCY=1
 ```
 
 - vLLM 与 OCR 共享单卡时，`0.75` 是保守起始预算，仍需按实际显存和并发调整；它不是

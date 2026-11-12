@@ -21,7 +21,7 @@
 - `/agents/*`：受 `LLM_TIMEOUT_SECONDS` 和可选回退预算约束；`/agents/intent/business` 的
   `chat` 或 `clarify` 可能包含两次模型调用。
 - `/ocr/journal`、`/ocr/journal/recognize`：首次调用可能需要加载 OCR 模型；组合入口还可能调用语言模型。
-- `/ocr/journal/process`：不执行 OCR，规则不足时受 `MAIN_WORK_SPLIT_TIMEOUT_SECONDS` 总预算约束（包括排队），失败沿用 502。
+- `/ocr/journal/process`：不执行 OCR，所有非空白工作内容受 `JOURNAL_TIMEOUT_SECONDS` 总预算约束（包括排队），失败沿用 502。
 
 调用方应按操作设置超时，不要用一个很短的全局超时覆盖所有接口。当前 Java 调用方对
 `/ocr/jianbiao` 和 `/ocr/recognize` 使用 2 分钟，对 `/wbs/draft` 使用 5 分钟，对

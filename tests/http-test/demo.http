@@ -103,8 +103,334 @@ Content-Type: application/json
 
 {"path":"projects/监理日志照片.jpg","taskId":"example"}
 
-### 监理工作纯文本拆分：不执行 OCR
+### 监理日记业务生成：直接提交 recognize 响应的 data，可先校对 fields.text
 POST {{baseUrl}}/ocr/journal/process
 Content-Type: application/json
 
-{"main_work":"施工情况：K1+100填筑。\n旁站情况：旁站碾压。\n巡视情况：巡视施工现场。"}
+{
+  "taskId": null,
+  "documentType": "supervision_diary",
+  "image": {
+    "width": 100,
+    "height": 100,
+    "coordinateSpace": "exif_corrected_original"
+  },
+  "tablePolygon": [
+    [
+      0,
+      0
+    ],
+    [
+      100,
+      0
+    ],
+    [
+      100,
+      100
+    ],
+    [
+      0,
+      100
+    ]
+  ],
+  "boxes": [],
+  "fields": [
+    {
+      "key": "project",
+      "label": "project",
+      "text": null,
+      "confidence": 0.0,
+      "polygon": [
+        [
+          0,
+          0
+        ],
+        [
+          10,
+          0
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          0,
+          10
+        ]
+      ],
+      "boxIds": [],
+      "ambiguous": false,
+      "visibleFraction": 1.0
+    },
+    {
+      "key": "number",
+      "label": "number",
+      "text": null,
+      "confidence": 0.0,
+      "polygon": [
+        [
+          0,
+          0
+        ],
+        [
+          10,
+          0
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          0,
+          10
+        ]
+      ],
+      "boxIds": [],
+      "ambiguous": false,
+      "visibleFraction": 1.0
+    },
+    {
+      "key": "supervision_org",
+      "label": "supervision_org",
+      "text": null,
+      "confidence": 0.0,
+      "polygon": [
+        [
+          0,
+          0
+        ],
+        [
+          10,
+          0
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          0,
+          10
+        ]
+      ],
+      "boxIds": [],
+      "ambiguous": false,
+      "visibleFraction": 1.0
+    },
+    {
+      "key": "recorder",
+      "label": "recorder",
+      "text": null,
+      "confidence": 0.0,
+      "polygon": [
+        [
+          0,
+          0
+        ],
+        [
+          10,
+          0
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          0,
+          10
+        ]
+      ],
+      "boxIds": [],
+      "ambiguous": false,
+      "visibleFraction": 1.0
+    },
+    {
+      "key": "weather",
+      "label": "weather",
+      "text": null,
+      "confidence": 0.0,
+      "polygon": [
+        [
+          0,
+          0
+        ],
+        [
+          10,
+          0
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          0,
+          10
+        ]
+      ],
+      "boxIds": [],
+      "ambiguous": false,
+      "visibleFraction": 1.0
+    },
+    {
+      "key": "position",
+      "label": "position",
+      "text": null,
+      "confidence": 0.0,
+      "polygon": [
+        [
+          0,
+          0
+        ],
+        [
+          10,
+          0
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          0,
+          10
+        ]
+      ],
+      "boxIds": [],
+      "ambiguous": false,
+      "visibleFraction": 1.0
+    },
+    {
+      "key": "date",
+      "label": "date",
+      "text": null,
+      "confidence": 0.0,
+      "polygon": [
+        [
+          0,
+          0
+        ],
+        [
+          10,
+          0
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          0,
+          10
+        ]
+      ],
+      "boxIds": [],
+      "ambiguous": false,
+      "visibleFraction": 1.0
+    },
+    {
+      "key": "reviewer",
+      "label": "reviewer",
+      "text": null,
+      "confidence": 0.0,
+      "polygon": [
+        [
+          0,
+          0
+        ],
+        [
+          10,
+          0
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          0,
+          10
+        ]
+      ],
+      "boxIds": [],
+      "ambiguous": false,
+      "visibleFraction": 1.0
+    },
+    {
+      "key": "main_work",
+      "label": "main_work",
+      "text": "K1+100段路基填筑。",
+      "confidence": 0.0,
+      "polygon": [
+        [
+          0,
+          0
+        ],
+        [
+          10,
+          0
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          0,
+          10
+        ]
+      ],
+      "boxIds": [],
+      "ambiguous": false,
+      "visibleFraction": 1.0
+    },
+    {
+      "key": "issues",
+      "label": "issues",
+      "text": null,
+      "confidence": 0.0,
+      "polygon": [
+        [
+          0,
+          0
+        ],
+        [
+          10,
+          0
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          0,
+          10
+        ]
+      ],
+      "boxIds": [],
+      "ambiguous": false,
+      "visibleFraction": 1.0
+    },
+    {
+      "key": "next_day_plan",
+      "label": "next_day_plan",
+      "text": null,
+      "confidence": 0.0,
+      "polygon": [
+        [
+          0,
+          0
+        ],
+        [
+          10,
+          0
+        ],
+        [
+          10,
+          10
+        ],
+        [
+          0,
+          10
+        ]
+      ],
+      "boxIds": [],
+      "ambiguous": false,
+      "visibleFraction": 1.0
+    }
+  ]
+}

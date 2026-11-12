@@ -142,7 +142,7 @@ def test_routers_reuse_agents_within_each_application_and_isolate_applications()
         "clarify_agent",
         "business_intent_agent",
         "archive_intent_agent",
-        "main_work_agent",
+        "journal_agent",
     )
     with TestClient(first_app) as first, TestClient(second_app) as second:
         first_resources = [getattr(first_app.state, name) for name in resource_names]

@@ -19,7 +19,7 @@ from app.schemas.ocr import (
     JournalProcessRequest,
     JournalRecognitionResponse,
     JournalReq,
-    MainWorkValues,
+    JournalResponse,
 )
 
 router = APIRouter(tags=["ocr"])
@@ -68,15 +68,15 @@ async def _recognize_photo(req: JournalReq, request: Request) -> journal.Journal
         return await run_in_threadpool(journal.recognize_journal, path, img, req.task_id)
 
 
-@router.post("/ocr/journal", response_model=None)
-async def journal_recognize(req: JournalReq, request: Request) -> dict:
-    """新版监理日志识别：整页OCR后按关键词提取，必要时由Agent基于完整mainWork生成三部分。"""
+@router.post("/ocr/journal", response_model=JournalResponse)
+async def journal_recognize(req: JournalReq, request: Request) -> JournalResponse:
+    """顺序执行图片识别与业务生成，复用两个独立入口的同一处理阶段。"""
     sheet = await _recognize_photo(req, request)
-    outcome = await journal.split_main_work(
-        sheet.readings, request.app.state.main_work_agent.generate
+    recognized = journal.build_recognition_response(sheet)
+    return await journal.generate_journal(
+        JournalProcessRequest.model_validate(recognized.data.model_dump()),
+        request.app.state.journal_agent.generate,
     )
-    data = journal.build_processed_payload(sheet, outcome.values)
-    return {"status": 200, "message": "识别完成", "data": data}
 
 
 @router.post("/ocr/journal/recognize", response_model=JournalRecognitionResponse)
@@ -86,10 +86,7 @@ async def journal_recognize_only(req: JournalReq, request: Request) -> JournalRe
     return journal.build_recognition_response(sheet)
 
 
-@router.post("/ocr/journal/process", response_model=MainWorkValues)
-async def journal_process(req: JournalProcessRequest, request: Request) -> MainWorkValues:
-    """仅处理完整工作内容文本，复用规则、模型兜底与事实校验。"""
-    outcome = await journal.process_main_work(
-        req.main_work, request.app.state.main_work_agent.generate
-    )
-    return outcome.values
+@router.post("/ocr/journal/process", response_model=JournalResponse)
+async def journal_process(req: JournalProcessRequest, request: Request) -> JournalResponse:
+    """基于完整 OCR 栏目生成业务日记，不重新识别图片。"""
+    return await journal.generate_journal(req, request.app.state.journal_agent.generate)

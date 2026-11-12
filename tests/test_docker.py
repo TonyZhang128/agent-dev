@@ -33,7 +33,7 @@ def compose_environment():
     ("overrides", "expected_timeout", "expected_concurrency"),
     [
         ({}, 30, 1),
-        ({"MAIN_WORK_SPLIT_TIMEOUT_SECONDS": "45", "MAIN_WORK_SPLIT_CONCURRENCY": "3"}, 45, 3),
+        ({"JOURNAL_TIMEOUT_SECONDS": "45", "JOURNAL_CONCURRENCY": "3"}, 45, 3),
     ],
 )
 def test_compose_passes_main_work_configuration_to_api(
@@ -62,11 +62,11 @@ def test_compose_passes_main_work_configuration_to_api(
     injected = json.loads(process.stdout)["services"]["agent-service"]["environment"]
     settings = Settings(
         _env_file=None,
-        main_work_split_timeout_seconds=injected["MAIN_WORK_SPLIT_TIMEOUT_SECONDS"],
-        main_work_split_concurrency=injected["MAIN_WORK_SPLIT_CONCURRENCY"],
+        journal_timeout_seconds=injected["JOURNAL_TIMEOUT_SECONDS"],
+        journal_concurrency=injected["JOURNAL_CONCURRENCY"],
     )
-    assert settings.main_work_split_timeout_seconds == expected_timeout
-    assert settings.main_work_split_concurrency == expected_concurrency
+    assert settings.journal_timeout_seconds == expected_timeout
+    assert settings.journal_concurrency == expected_concurrency
 
 
 @pytest.mark.parametrize("device", ["cpu", "cuda"])

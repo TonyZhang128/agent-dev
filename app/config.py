@@ -29,10 +29,10 @@ class Settings(BaseSettings):
     llm_fallback_timeout_seconds: float = Field(default=60, gt=0, le=600)
     llm_fallback_reasoning_effort: str = "none"
     agent_recursion_limit: int = Field(default=8, ge=3, le=50)
-    # mainWork 拆分：一次模型尝试的总预算（含并发排队），超时改用标题规则。
-    main_work_split_timeout_seconds: float = Field(default=30, gt=0, le=600)
+    # 监理日记生成：模型总预算（含并发排队和回退），超时返回受控 502。
+    journal_timeout_seconds: float = Field(default=30, gt=0, le=600)
     # 本地模型默认串行；OCR 本身仍按应用串行加锁。
-    main_work_split_concurrency: int = Field(default=1, ge=1, le=16)
+    journal_concurrency: int = Field(default=1, ge=1, le=16)
     langsmith_tracing: bool = False
 
     templates_root: Path = ROOT / "data/ocr/templates"
