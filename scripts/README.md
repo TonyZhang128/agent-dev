@@ -5,30 +5,30 @@
 | 场景 | 入口 | 说明 |
 | --- | --- | --- |
 | Mac 完整开发安装 | `zsh scripts/dev/setup.sh` | Homebrew/uv、dev 依赖、Ollama 模型、本项目服务及真实验收 |
-| Mac 前台 API | `zsh scripts/dev/start-api.sh --reload` | 仅用于 macOS 开发 |
-| Mac 前台调试 API | `zsh scripts/dev/start-api.sh --debug` | 前台启动并监听 `127.0.0.1:5678`，供 VS Code Attach |
-| Mac 后台调试 API | `zsh scripts/dev/services.sh debug-api` | launchd 启动带 debugpy 的 API，供 VS Code Attach；仅用于开发 |
+| Mac 前台算法服务 | `zsh scripts/dev/start-api.sh --reload` | 仅用于 macOS 开发 |
+| Mac 前台调试算法服务 | `zsh scripts/dev/start-api.sh --debug` | 前台启动并监听 `127.0.0.1:5678`，供 VS Code Attach |
+| Mac 后台调试算法服务 | `zsh scripts/dev/services.sh debug-api` | launchd 启动带 debugpy 的算法服务，供 VS Code Attach；仅用于开发 |
 | Mac 前台 Ollama | `zsh scripts/dev/start-ollama.sh` | 复用本机模型存储 |
 | Mac 后台任务 | `zsh scripts/dev/services.sh start\|stop\|status\|restart-api` | launchd；仅管理本项目注册任务 |
 | Mac 下载网络检查 | `zsh scripts/dev/check-network.sh [proxy_url]` | Homebrew、PyPI、Ollama 连通性 |
 | Mac 真实模型及 GPU | `uv run --locked python -m scripts.dev.verify_live` | 通用推理验收 + 本机 Ollama Q4_K_M/GPU 分配 |
 | Linux 业务环境安装 | `bash scripts/prod/setup.sh` | Python 3.12、锁定运行依赖、保留已有 `.env` |
-| Linux 前台 API | `bash scripts/prod/start-api.sh` | 不同步依赖，拒绝 reload；允许传入其他 uvicorn 参数 |
-| Linux 前台模型服务 | `bash scripts/prod/start-vllm.sh [vLLM 参数]` | NVIDIA 检查、独立 vLLM 环境；不安装驱动或模型 |
+| Linux 前台算法服务 | `bash scripts/prod/start-api.sh` | 不同步依赖，拒绝 reload；允许传入其他 uvicorn 参数 |
+| Linux 前台模型推理服务 | `bash scripts/prod/start-vllm.sh [vLLM 参数]` | NVIDIA 检查、独立 vLLM 环境；不安装驱动或模型 |
 | 模型权重下载 | `uv run --locked python -m scripts.models.download_qwen35_gguf [--quant Q4_K_M\|--vision\|--check\|--list]` | 从 ModelScope 下 GGUF 并补齐 config.json、tokenizer，落到 `.cache/models/`，供 vLLM 挂载 |
 | OCR 模型下载 | `uv run --locked python -m scripts.models.download_ocr_models [--root <目录>\|--check]` | 下载 PP-OCRv6 Medium + PP-OCRv5 Server 三个 ONNX 到 `.cache/models/ocr/`，校验 sha256，供离线预置 |
-| Linux 完整验收 | `bash scripts/prod/verify.sh` | NVIDIA 信息、运行中 API 的业务验收及完整意图、日志评测集、通用真实推理 |
-| 通用业务验收 | `uv run --locked python -m scripts.common.verify_agents` | Mac/Linux；调用运行中的 API，验收完整意图及日志评测集 |
+| Linux 完整验收 | `bash scripts/prod/verify.sh` | NVIDIA 信息、运行中算法服务 的业务验收及完整意图、日志评测集、通用真实推理 |
+| 通用业务验收 | `uv run --locked python -m scripts.common.verify_agents` | Mac/Linux；调用运行中的算法服务，验收完整意图及日志评测集 |
 | 通用推理验收 | `uv run --locked python -m scripts.common.verify_live` | Mac/Linux；直调 Agent、ASGI、TCP；不检查硬件 |
-| OCR 真实验收 | `uv run --locked python -m scripts.common.verify_ocr --photo <数据池相对路径> [--task-id <任务 ID>]` | 调运行中 API，检查新版监理日志识别；报告在 verification/ocr |
+| OCR 真实验收 | `uv run --locked python -m scripts.common.verify_ocr --photo <数据池相对路径> [--task-id <任务 ID>]` | 调运行中算法服务，检查新版监理日志识别；报告在 verification/ocr |
 | OpenAPI 草案导出 | `uv run --locked python -m scripts.docs.export_openapi` | 从当前应用导出到 `interfaces/drafts/`，拒绝写入正式契约目录 |
 | 接口评审文档渲染 | `uv run --locked python -m scripts.docs.render_api_markdown` | 把契约渲染为 `interfaces/API.md`；只读视图，不手工维护 |
 | OpenAPI 契约校验 | `uv run --locked python -m scripts.docs.check_openapi` | 比较契约与实现；有正式契约时优先检查正式契约，不写文件 |
 | 业务意图目录生成 | `uv run --locked python -m scripts.intent.compile_catalog [--check]` | 从 `app/resources/intent/business_pages.json` 生成枚举；`--check` 用于 CI 漂移检查 |
 
-Linux 完整步骤、配置和后台托管见 [部署说明](../docs/deployment-linux.md)。Mac 步骤见 [项目 README](../README.md#环境与安装)。
+Linux 完整步骤、配置和后台托管见 [部署说明](../docs/deployment-linux.md)。Mac 安装、服务管理和调试见 [本地开发](../docs/local-development.md)，应用变量见 [配置说明](../docs/configuration.md)。
 
-`dev/` 使用 zsh，只接受 macOS；`prod/` 使用 Bash，只接受 Linux。Linux API 可以独立运行在没有 GPU 的主机；模型服务和硬件验收需要 NVIDIA。通用 Python 验收不依赖 Homebrew、Ollama 或 `nvidia-smi`。
+`dev/` 使用 zsh，只接受 macOS；`prod/` 使用 Bash，只接受 Linux。Linux 算法服务 可以独立运行在没有 GPU 的主机；模型推理服务和硬件验收需要 NVIDIA。通用 Python 验收不依赖 Homebrew、Ollama 或 `nvidia-smi`。
 
 原有 `scripts/setup.sh`、`services.sh`、`start-api.sh`、`start-ollama.sh`、`check-network.sh` 保留为 Mac 开发兼容入口，不会自动切到生产环境。原有 `python -m scripts.verify_agents` 转到通用验收；`python -m scripts.verify_live` 保留 Mac Ollama/GPU 验收语义。新命令请使用明确的环境目录。
 

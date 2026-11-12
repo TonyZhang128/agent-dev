@@ -1,4 +1,4 @@
-# 生产编排：业务 API + 独立 vLLM 模型服务（两个镜像、两个环境）。
+# 生产编排：算法服务 + 独立 vLLM 模型推理服务（两个镜像、两个环境）。
 #
 #   test -f docker/prod.env || cp docker/env.example docker/prod.env
 #   chmod 600 docker/prod.env
@@ -69,14 +69,14 @@ services:
               count: ${VLLM_GPU_COUNT:-1}
               capabilities: [gpu]
 
-  docsvc:
+  agent-service:
     platform: linux/amd64
     build:
       context: .
       dockerfile: Dockerfile
       args:
         OCR_DEVICE: ${OCR_DEVICE-cuda}
-    image: highway-agent-api:${APP_VERSION:-0.1.0}
+    image: agent-service:${APP_VERSION:-0.1.0}
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -90,7 +90,7 @@ services:
       LLM_CONTEXT_TOKENS: ${LLM_CONTEXT_TOKENS:-8192}
       LLM_CONTEXT_MARGIN_TOKENS: ${LLM_CONTEXT_MARGIN_TOKENS:-256}
       CONVERSATION_MAX_INPUT_CHARACTERS: ${CONVERSATION_MAX_INPUT_CHARACTERS:-1000000}
-      # 思考开关由模型服务 chat template 控制，生产默认不再传 reasoning_effort。
+      # 思考开关由模型推理服务 chat template 控制，生产默认不再传 reasoning_effort。
       LLM_REASONING_EFFORT: ${LLM_REASONING_EFFORT:-}
       # 可选云端回退；开关与非空密钥需同时具备，关闭时可保留密钥。
       LLM_FALLBACK_ENABLED: ${LLM_FALLBACK_ENABLED:-false}
@@ -108,7 +108,7 @@ services:
       OCR_MODEL_ROOT: /app/data/ocr/models
       # 镜像保留 CUDA/cuDNN；设备同时决定构建时安装的 OCR extra，切换后必须重新构建。
       OCR_DEVICE: ${OCR_DEVICE-cuda}
-    # 业务 API 默认分配 GPU；与 vLLM 共享同一块 GPU 时保持 1。
+    # 算法服务默认分配 GPU；与 vLLM 共享同一块 GPU 时保持 1。
     # 无 GPU 主机需改用覆盖文件移除本段，并把 OCR_DEVICE 设为 cpu。
     deploy:
       resources:
@@ -126,7 +126,7 @@ services:
       - "${OCR_MODEL_DIR:-ocr-models}:/app/data/ocr/models"
     depends_on:
       model:
-        # 模型加载可能很久；API 可先启动，/health 仍应立即可用。
+        # 模型加载可能很久；算法服务可先启动，/health 仍应立即可用。
         condition: service_started
 
 volumes:

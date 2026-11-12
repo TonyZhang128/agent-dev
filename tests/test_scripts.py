@@ -254,3 +254,31 @@ def test_legacy_python_entry_points_resolve_to_expected_environments():
 
     assert verify_agents.main is common_agents.main
     assert verify_live.main is mac_live.main
+
+
+@pytest.mark.skipif(not shutil.which("zsh"), reason="macOS service scripts require zsh")
+@pytest.mark.parametrize("command", ["start", "status"])
+def test_mac_service_uses_agent_service_identity(deployment, command):
+    deployment.stub("uname", "echo Darwin")
+    deployment.stub("ollama", "exit 0")
+    deployment.stub("curl", "exit 1")
+    deployment.stub(
+        "launchctl",
+        'printf "%s\\n" "$@" >> "$TRACE_FILE"\nif [ "$1" = list ]; then exit 1; fi',
+    )
+    process = subprocess.run(
+        ["zsh", str(deployment.root / "scripts/dev/services.sh"), command],
+        cwd="/",
+        env=deployment.env,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert process.returncode == 0, process.stderr
+    commands = deployment.trace.read_text().splitlines()
+    assert "local.highway-agent.agent-service" in commands
+    assert "local.highway-agent.ollama" in commands
+    assert "local.highway-agent.api" not in commands
+    if command == "start":
+        assert str(deployment.root / ".logs/agent-service.out.log") in commands
+        assert str(deployment.root / "scripts/dev/start-api.sh") in commands

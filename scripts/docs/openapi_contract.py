@@ -586,7 +586,7 @@ def build_contract() -> dict[str, Any]:
     """返回当前应用对应的完整 OpenAPI 草案；每次调用重新生成，不使用缓存。"""
     spec = copy.deepcopy(create_app().openapi())
     spec["info"]["description"] = (
-        "公路工程业务智能体与文档加工服务的对外 HTTP 契约。当前文件是从实现归纳的"
+        "公路工程智能算法服务的对外 HTTP 契约。当前文件是从实现归纳的"
         "待确认草案：已实现接口的请求和成功响应来自 FastAPI/Pydantic，补充的响应结构"
         "及统一错误响应由 scripts/docs/openapi_contract.py 维护。"
         "经用户批准前不得视为正式契约，也不得据此绕过接口变更审批。"

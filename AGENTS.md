@@ -4,8 +4,9 @@
 
 ## 一、项目定位与工作边界
 
+- 项目标题为“公路工程业务智能体层”；对外服务全称“公路工程智能算法服务”，简称“算法服务”，程序／容器标识统一为 `agent-service`。独立的 Ollama／vLLM 称为“模型推理服务”，其模型名称与配置变量不因服务命名调整而改动。
 - 主应用入口为 `app.main:app`，默认监听 `127.0.0.1:8309`；技术栈为 Python 3.12、uv、FastAPI、Pydantic 和 LangChain 1.4.6。
-- macOS 开发使用 Ollama；Linux 部署使用独立的 vLLM 服务，通过 `.env` 中的 OpenAI 兼容端点切换。业务环境与模型服务环境分离。
+- macOS 开发使用 Ollama；Linux 部署使用独立的 vLLM 服务，通过 `.env` 中的 OpenAI 兼容端点切换。业务环境与模型推理服务环境分离。
 - 当前提供工程日志总结、意图识别和聊天三类业务；尚未接入审批、订单修改、通知发送等外部业务动作，也没有数据库或服务端持久会话。
 - 工作区中的 `ocr/` 是独立应用，有自己的依赖和启动方式，未挂载到主应用。修改前阅读其 README；不要把主应用的检查结果当作 OCR 验收，也不要擅自合并环境、路由或依赖。
 - `../docsvc` 的文档加工功能已合并到 `app/ocr/`，由 `app/api/ocr.py`、`app/api/wbs.py` 接入同一主应用；它与上面的未跟踪 `ocr/` 是不同项目。模板与数据路径见 `docs/ocr.md`，脚本统一为 `scripts/ocr/`。
@@ -46,7 +47,7 @@
 
 - 业务接口一律使用 `APIRouter`，公共路径使用 `prefix`，文档分组使用 `tags`，由主应用统一注册。检查完整路径，避免前缀重复、遗漏和重复注册。
 - 保留原有方法、参数、`response_model`、summary、description、operationId、状态码及依赖配置；保留同步/异步语义和 `await` 关系，不在异步路由中引入阻塞耗时操作。
-- 模型服务及 Agent 在 lifespan 中初始化，路由通过当前 `request.app.state` 获取；确有复用价值时可使用 `Depends()`，不为形式增加包装。
+- 模型推理服务及 Agent 在 lifespan 中初始化，路由通过当前 `request.app.state` 获取；确有复用价值时可使用 `Depends()`，不为形式增加包装。
 - 禁止每次请求重建昂贵资源、在模块全局持有模型实例，或跨应用共享可变状态。保留共享 ChatAgent 注入 IntentAgent 的关系。
 - 使用 `@asynccontextmanager` 管理启动与关闭，异步生成器注解使用 `AsyncGenerator[None, None]`；初始化后的资源释放放入 `try/finally`，覆盖启动失败和关闭异常路径。不改回旧的 `on_event` 写法。
 - `ModelService` 持有的同步、异步 HTTP 客户端，包括注入的客户端，均由其关闭；不得因清理异常丢失原始异常或取消信号。
@@ -296,7 +297,7 @@ Linux 使用 `scripts/prod/` 对应入口；远端业务验收使用 `BUSINESS_A
 - 注释和 docstring 统一使用中文；标识符、命令、路径、环境变量和必要技术术语保留原文。新增或修改代码时保持该风格，翻译注释不得改变代码行为。
 - 依赖通过 `uv add` 管理，`pyproject.toml` 和 `uv.lock` 一起更新，禁止手改锁文件。固定已验证的 `langchain`、`langchain-core`、`langchain-openai`；升级前查官方文档与 provider 兼容性，不引入不必要框架。
 - OCR 的 ONNX Runtime 只通过互斥 extra 安装：`ocr-cpu`（CPU 版 `onnxruntime`）或 `ocr-gpu`（`onnxruntime-gpu`）。两者提供同名 `onnxruntime` 模块，不得同时装入同一环境；新增部署入口须显式指定其中一个 extra。
-- `Settings` 的读取顺序为 API 进程环境、根目录 `.env`、源码默认值；新增配置同步更新 `Settings`、`.env.example` 和 README，保留本机 `.env`。
+- `Settings` 的读取顺序为算法服务进程环境、根目录 `.env`、源码默认值；新增配置同步更新 `Settings`、`.env.example` 和 README，保留本机 `.env`。
 - launchd 启动的后台任务不保证继承当前终端临时导出的所有变量。持久业务配置优先维护根目录 `.env`，不要声称 `export LLM_*` 或 `OLLAMA_*` 一定传入后台任务；Ollama 自身配置需由其实际启动环境提供。
 - `LANGSMITH_TRACING=false` 为默认值，只有显式配置才启用；凭据运行时注入，不记录或提交真实业务 traces。`SecretStr` 不替代日志、错误和提交内容的脱敏。
 - 使用 `scripts/dev/services.sh` 管理本项目 Mac 任务；不停止其他方式启动的进程，不编辑 shell profile。

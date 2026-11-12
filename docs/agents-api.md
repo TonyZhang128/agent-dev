@@ -274,7 +274,7 @@ curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/chat \
 
 ## 开发位置与验证
 
-业务规则在 `app/agents/`，系统提示词在 `app/prompts/`，请求及返回类型在 `app/schemas/agents.py`，HTTP 路由在 `app/api/agents.py`、`system.py`，由 `app/api/router.py` 聚合、`app/main.py` 注册。`main.py` 保留应用工厂和共享资源生命周期；`app/http_errors.py` 注册原有全局异常处理器。`app/agents/base.py` 提供对话和结构化业务共用的 `BaseAgent`，以及带 Schema 和结果校验的 `StructuredAgent`；`runtime.py` 统一创建和调用 LangChain Agent，`middleware.py` 检查异常模型响应，`app/llm.py` 负责 OpenAI 兼容模型适配。新增业务的步骤见 [README](../README.md#项目结构与-agent-开发)。
+业务规则在 `app/agents/`，系统提示词在 `app/prompts/`，请求及返回类型在 `app/schemas/agents.py`，HTTP 路由在 `app/api/agents.py`、`system.py`，由 `app/api/router.py` 聚合、`app/main.py` 注册。`main.py` 保留应用工厂和共享资源生命周期；`app/http_errors.py` 注册原有全局异常处理器。`app/agents/base.py` 提供对话和结构化业务共用的 `BaseAgent`，以及带 Schema 和结果校验的 `StructuredAgent`；`runtime.py` 统一创建和调用 LangChain Agent，`middleware.py` 检查异常模型响应，`app/llm.py` 负责 OpenAI 兼容模型适配。新增业务的步骤见 [架构与扩展](architecture.md#扩展流程)，检查与真实模型验收见 [测试与验收](testing.md)。
 
 ```zsh
 # 在项目根目录执行：
@@ -288,10 +288,10 @@ UV_CACHE_DIR="$PWD/.cache/uv" uv run --locked python -m scripts.common.verify_ag
 
 云端回退默认关闭；设置 `LLM_FALLBACK_ENABLED=true` 且配置非空 `LLM_FALLBACK_API_KEY` 后才启用。设为 `false` 可保留密钥并禁止回退，总预算恢复为 `LLM_TIMEOUT_SECONDS`。启用后，本地 Ollama/vLLM 的模型调用因连接失败、超时或上游 HTTP 错误抛出异常时，本次调用改用回退模型重试一次，两次尝试的总预算为 `LLM_TIMEOUT_SECONDS + LLM_FALLBACK_TIMEOUT_SECONDS`。回退只覆盖模型调用失败，不重试已返回但未通过 Schema 校验的输出；`/ready` 仍只检查本地模型。回退模型若为 DeepSeek，`ProviderStrategy` 的严格 `json_schema` 请求会降级为 `json_object`，响应仍由 LangChain 解析并由 Pydantic 严格校验。启用回退会把本次请求内容发送到云端，需按数据合规要求评估。
 
-后台服务修改代码后，重启 API 即可，模型服务可继续复用：
+后台服务修改代码后，重启算法服务即可，模型推理服务可继续复用：
 
 ```zsh
 zsh scripts/dev/services.sh restart-api
 ```
 
-Linux 上线请使用 [部署脚本说明](../scripts/README.md)中的 `scripts/prod/` 入口，并由服务管理器重启 API。
+Linux 上线请使用 [部署脚本说明](../scripts/README.md)中的 `scripts/prod/` 入口，并由服务管理器重启算法服务。

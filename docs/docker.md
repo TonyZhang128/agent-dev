@@ -1,10 +1,10 @@
 # Docker 生产部署：Agent + OCR
 
-业务 API 与 vLLM 是两个镜像、两个 Python 环境；通过 Compose 内部网络通信。
+算法服务与 vLLM 是两个镜像、两个 Python 环境；通过 Compose 内部网络通信。
 本方案面向 Linux x86_64 + NVIDIA GPU，当前目标为 RTX 5090 Laptop GPU、
 Qwen3.5 9B Q4_K_M。LLM 权重提前下载并从宿主机只读挂载；OCR 权重可预置，也可首次使用时自动下载。
 
-API 镜像基于 `nvidia/cuda:12.9.1-cudnn-runtime-ubuntu24.04`，安装 Python 3.12，
+算法服务镜像基于 `nvidia/cuda:12.9.1-cudnn-runtime-ubuntu24.04`，安装 Python 3.12，
 通过锁文件的 `ocr-gpu` extra 安装 `onnxruntime-gpu==1.24.4`。
 builder/runtime 使用同一基础环境，镜像包含 CUDA 12.9.1 与 cuDNN 9 用户态库。
 宿主机提供 NVIDIA 驱动与 Container Toolkit，无需另行挂载 CUDA 库。
@@ -157,10 +157,10 @@ MAIN_WORK_SPLIT_CONCURRENCY=1
 - vLLM 与 OCR 共享单卡时，`0.75` 是保守起始预算，仍需按实际显存和并发调整；它不是
   显存隔离。若为 24 GiB，vLLM 的初始目标约 18 GiB，余量还需容纳 OCR、桌面及其他进程。
 - `VLLM_MAX_MODEL_LEN` 与 `LLM_CONTEXT_TOKENS` 保持一致。模型思考由服务端 chat template 关闭。
-- API 的 `LLM_MODEL` 自动取 `VLLM_SERVED_MODEL_NAME`，密钥自动取 `VLLM_API_KEY`。
+- 算法服务的 `LLM_MODEL` 自动取 `VLLM_SERVED_MODEL_NAME`，密钥自动取 `VLLM_API_KEY`。
   容器不读取宿主机根目录 `.env`；只有 Compose 明确转发的变量进入容器。
 - 所有挂载源目录必须已存在；`create_host_path: false` 会拒绝不存在的路径。
-  API 以 UID/GID `10001` 运行，需能遍历目录、读取模型与照片；按共享数据池约定配置写权限。
+  算法服务以 UID/GID `10001` 运行，需能遍历目录、读取模型与照片；按共享数据池约定配置写权限。
 - 云端回退默认关闭；只在明确需要时设置 `LLM_FALLBACK_ENABLED=true` 与对应密钥。
 - 当前 GGUF 方案使用第三方插件镜像。标签存在不等于目标 GPU 验收通过，确认后应记录
   镜像 digest。改用 BF16 权重时才选择对应官方 vLLM 镜像和模型目录。
@@ -179,10 +179,10 @@ dc config --quiet
 dc build
 dc up -d
 dc ps
-dc logs --tail=100 model api
+dc logs --tail=100 model agent-service
 ```
 
-首次模型加载可能较慢，`VLLM_START_PERIOD` 默认 15 分钟。API 可以提前启动，
+首次模型加载可能较慢，`VLLM_START_PERIOD` 默认 15 分钟。算法服务可以提前启动，
 不等待模型健康；模型未就绪前 `/ready` 应失败。使用 `config --quiet` 避免把展开的密钥
 打印到终端记录。构建上下文通过 `.dockerignore` 排除生产变量、模型和业务样本。
 
@@ -207,7 +207,7 @@ curl -fsS http://127.0.0.1:8309/diagnostics
 ### OCR CUDA EP 真实初始化（服务器）
 
 ```bash
-dc exec -T api python - <<'PY'
+dc exec -T agent-service python - <<'PY'
 import onnxruntime as ort
 from app.config import Settings
 
@@ -228,7 +228,7 @@ PY
 ```
 
 上述命令分别检查三个实际 ONNX 会话的 CUDA provider；缺库、设备不可见或回退 CPU 都不能算通过。
-排查时可以将 `OCR_DEVICE=cpu` 并重建 API 容器，但必须把这次结果标为 CPU 验证。
+排查时可以将 `OCR_DEVICE=cpu` 并重建算法服务容器，但必须把这次结果标为 CPU 验证。
 整个 Compose 的 vLLM 服务仍需要 NVIDIA GPU。
 
 ### Agent 业务回归（开发机通过 SSH 隧道）
@@ -269,11 +269,13 @@ curl --fail-with-body http://127.0.0.1:8309/ocr/daily-logs-new \
 
 ## 6. 更新、访问与回滚
 
+算法服务的 Compose 服务名与镜像名统一为 `agent-service`，模型推理服务保留 `model`。已有部署若仍使用 `docsvc` 或 `api`，先按旧版编排文件停止旧算法服务，再使用新编排构建、启动 `agent-service`，避免旧容器继续占用 8309；不要将模型推理服务或数据卷作为命名迁移的一部分删除。
+
 只更新业务代码：
 
 ```bash
-dc build api
-dc up -d --no-deps api
+dc build agent-service
+dc up -d --no-deps agent-service
 ```
 
 修改 `docker/prod.env` 后使用 `up -d` 重建对应容器；单独 `restart` 不加载新环境变量。
@@ -301,7 +303,7 @@ CUDA 推理、GGUF 模型加载、结构化输出、长上下文及双服务并�
 修改配置后执行：
 
 ```bash
-docker compose -f compose.prod.yml --env-file docker/prod.env up -d --build --no-deps docsvc
+docker compose -f compose.prod.yml --env-file docker/prod.env up -d --build --no-deps agent-service
 ```
 
 仅 restart 不会更新依赖或容器环境；不要跳过重新构建。终端导出的 OCR_DEVICE
@@ -330,6 +332,6 @@ RapidOCR 在首次 OCR 请求时自动下载缺失模型，之后复用缓存；
 OCR_MODEL_DIR=
 ```
 
-修改后执行 `docker compose -f compose.prod.yml --env-file docker/prod.env up -d --no-deps docsvc`
+修改后执行 `docker compose -f compose.prod.yml --env-file docker/prod.env up -d --no-deps agent-service`
 重建容器挂载；同时修改 OCR_DEVICE 时需追加 `--build`。下载失败沿用现有 OCR 错误处理，
 不影响 `/health` 进程存活检查，首次 OCR 包含下载耗时。

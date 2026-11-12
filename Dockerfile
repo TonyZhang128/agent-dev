@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-# 生产业务 API 镜像。模型服务使用 Dockerfile.vllm 单独部署，二者不合并环境。
+# 生产算法服务镜像。模型推理服务使用 Dockerfile.vllm 单独部署，二者不合并环境。
 # 构建与运行说明见 docs/docker.md。
 
 ARG CUDA_IMAGE=nvidia/cuda:12.9.1-cudnn-runtime-ubuntu24.04
@@ -42,8 +42,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
       
 FROM python-base AS runtime
 
-LABEL org.opencontainers.image.title="highway-agent-api" \
-      org.opencontainers.image.description="公路工程业务智能体 API（不含模型服务）"
+LABEL org.opencontainers.image.title="agent-service" \
+      org.opencontainers.image.description="公路工程智能算法服务（不含模型推理服务）"
 
 RUN groupadd --system --gid 10001 app \
  && useradd --system --uid 10001 --gid app --home-dir /app --shell /usr/sbin/nologin app

@@ -3,7 +3,7 @@
 set -euo pipefail
 
 : "${VLLM_MODEL_PATH:?请设置 VLLM_MODEL_PATH，例如 /models/Qwen3.5-9B-Q4_K_M.gguf}"
-: "${VLLM_API_KEY:?请设置 VLLM_API_KEY，并与业务 API 的 LLM_API_KEY 保持一致}"
+: "${VLLM_API_KEY:?请设置 VLLM_API_KEY，并与算法服务的 LLM_API_KEY 保持一致}"
 
 VLLM_BIN="${VLLM_BIN:-vllm}"
 command -v "$VLLM_BIN" >/dev/null 2>&1 || {

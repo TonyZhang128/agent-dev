@@ -27,7 +27,7 @@ uv run --locked python -m scripts.ocr.build_journal_template \
 
 当前产物为schema/version 2。构建器读取可见文字层和线/窄矩形边，提取真实单元格及表外值区，再转换到table坐标。缺少标签、结构或出现歧义时失败，不猜坐标。绿色框为值区、红框为标签，发布前逐项核对11个区域。
 
-源PDF/业务照片不提交；部署须带上版本控制内的 `templates/journal.json`。产物记录源SHA。请求只读JSON，不打开PDF；缓存按应用隔离，模板更新后重启API。旧页面比例模板和旧函数别名已删除，不提供兼容分支。
+源PDF/业务照片不提交；部署须带上版本控制内的 `templates/journal.json`。产物记录源SHA。请求只读JSON，不打开PDF；缓存按应用隔离，模板更新后重启算法服务。旧页面比例模板和旧函数别名已删除，不提供兼容分支。
 
 ## 本地检查
 

@@ -59,7 +59,7 @@ def test_compose_passes_main_work_configuration_to_api(
         timeout=15,
     )
     assert process.returncode == 0, process.stderr
-    injected = json.loads(process.stdout)["services"]["docsvc"]["environment"]
+    injected = json.loads(process.stdout)["services"]["agent-service"]["environment"]
     settings = Settings(
         _env_file=None,
         main_work_split_timeout_seconds=injected["MAIN_WORK_SPLIT_TIMEOUT_SECONDS"],
@@ -91,9 +91,9 @@ def test_compose_ocr_variant(compose_environment, device):
     )
     assert process.returncode == 0, process.stderr
     services = json.loads(process.stdout)["services"]
-    api = services["docsvc"]
+    api = services["agent-service"]
     assert api["build"]["args"]["OCR_DEVICE"] == device
-    assert api["image"] == "highway-agent-api:0.1.0"
+    assert api["image"] == "agent-service:0.1.0"
     assert api["environment"]["OCR_DEVICE"] == device
     devices = api.get("deploy", {}).get("resources", {}).get("reservations", {}).get("devices", [])
     assert devices[0]["driver"] == "nvidia"
@@ -134,7 +134,7 @@ def test_compose_ocr_models_optional(compose_environment, tmp_path, model_direct
     )
     assert process.returncode == 0, process.stderr
     configuration = json.loads(process.stdout)
-    mounts = configuration["services"]["docsvc"]["volumes"]
+    mounts = configuration["services"]["agent-service"]["volumes"]
     models = next(mount for mount in mounts if mount["target"] == "/app/data/ocr/models")
     assert not models.get("read_only", False)
     if model_directory == "missing":

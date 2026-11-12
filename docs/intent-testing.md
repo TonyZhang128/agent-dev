@@ -87,7 +87,7 @@ uv run --locked pytest -v
 
 `message` 的具体措辞、`reason`（内部字段）和 `confidence` 的具体数值不要求逐字一致。
 
-在 Mac 启动模型服务后，重启 API 以加载新提示词和目录，再验收：
+在 Mac 启动模型推理服务后，重启算法服务以加载新提示词和目录，再验收：
 
 ```zsh
 zsh scripts/dev/services.sh restart-api

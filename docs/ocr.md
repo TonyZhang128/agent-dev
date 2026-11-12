@@ -14,7 +14,7 @@
 
 ## 资源与路径
 
-journal的schema2模板随代码发布于 `app/ocr/journal/templates/journal.json`，不是从旧表样库读取。构建源PDF和照片位于忽略提交的 `data/ocr/resources/`；报告在 `verification/ocr/`。模板发布后重启API加载。
+journal的schema2模板随代码发布于 `app/ocr/journal/templates/journal.json`，不是从旧表样库读取。构建源PDF和照片位于忽略提交的 `data/ocr/resources/`；报告在 `verification/ocr/`。模板发布后重启算法服务加载。
 
 HTTP `path` 只能指向 `PROJECTS_ROOT` 数据池内文件，兼容 `projects/` 前缀；拒绝绝对路径、穿越、越界符号链接和目录。也可传base64 `img`，同时传入时img优先。HTTP不写模板、PDF、Excel或固定样例输出。
 

@@ -19,8 +19,10 @@ start_job() {
   if [[ "$name" == ollama && -n "${HTTPS_PROXY:-}" ]]; then
     job_env+=("HTTPS_PROXY=$HTTPS_PROXY" "https_proxy=$HTTPS_PROXY")
   fi
+  # 保持 Ollama 日志名，算法服务日志使用统一程序标识。
+  local log_name="${name%-service}-service"
   launchctl submit -l "$label" \
-    -o "$root/.logs/$name-service.out.log" -e "$root/.logs/$name-service.err.log" \
+    -o "$root/.logs/$log_name.out.log" -e "$root/.logs/$log_name.err.log" \
     -- /usr/bin/env "${job_env[@]}" /bin/zsh "$root/scripts/dev/$script" "$@"
   print "已启动：$label"
 }
@@ -44,12 +46,12 @@ stop_job() {
 }
 
 restart_api() {
-  stop_job api 8309
+  stop_job agent-service 8309
   if /usr/sbin/lsof -nP -iTCP:8309 -sTCP:LISTEN >/dev/null 2>&1; then
     print -u2 '端口 8309 被其他进程占用，未停止该进程。'
     exit 1
   fi
-  start_job api start-api.sh "$@"
+  start_job agent-service start-api.sh "$@"
 }
 
 case "${1:-status}" in
@@ -62,13 +64,13 @@ case "${1:-status}" in
       print '复用已运行的 Ollama'
     fi
     if ! curl --noproxy '*' -fsS --max-time 3 http://127.0.0.1:8309/health >/dev/null 2>&1; then
-      start_job api start-api.sh
+      start_job agent-service start-api.sh
     else
       print '端口 8309 已有健康接口，保留现有进程'
     fi
     ;;
   stop)
-    stop_job api 8309
+    stop_job agent-service 8309
     stop_job ollama 11434
     ;;
   restart-api)
@@ -79,7 +81,7 @@ case "${1:-status}" in
     print '请选择 VS Code 的 Debug API (attach) 连接 127.0.0.1:5678。'
     ;;
   status)
-    for name in ollama api; do
+    for name in ollama agent-service; do
       launchctl list "local.highway-agent.$name" 2>/dev/null || print "$name：未注册本项目服务"
     done
     curl --noproxy '*' -fsS --max-time 5 http://127.0.0.1:11434/api/version || true

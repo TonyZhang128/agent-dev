@@ -46,7 +46,7 @@ def create_app(service: ModelService | None = None, *, settings: Settings | None
                 if resources is not None:
                     resources.close()
 
-    app = FastAPI(title="公路工程业务智能体", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="公路工程智能算法服务", version="0.1.0", lifespan=lifespan)
 
     register_exception_handlers(app)
     app.include_router(api_router)
