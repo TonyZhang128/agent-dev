@@ -32,7 +32,7 @@ zsh scripts/dev/services.sh start
 zsh scripts/dev/services.sh status
 ```
 
-macOS 系统的详细开发、断点调试和排障见 [本地开发（macOS）](docs/local-development.md)。
+macOS 系统的详细开发、断点调试和排障见 [macOS 本地开发](docs/macos-dev.md)。
 
 ### 1.2、Windows 本机开发
 
@@ -175,7 +175,7 @@ uv run --locked pytest -v --cov=app --cov-fail-under=85
 
 | 场景 | 文档 |
 | --- | --- |
-| 安装、启动、调试、网络排障 | [本地开发](docs/local-development.md) |
+| macOS 安装、启动、调试、网络排障 | [macOS 本地开发](docs/macos-dev.md) |
 | 模型、回退、OCR 设备与数据路径配置 | [配置说明](docs/configuration.md) |
 | 理解模块、维护 Agent 与扩展能力 | [架构与扩展](docs/architecture.md) |
 | 离线检查、真实模型与照片验收 | [测试与验收](docs/testing.md) |

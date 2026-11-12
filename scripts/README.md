@@ -26,7 +26,7 @@
 | OpenAPI 契约校验 | `uv run --locked python -m scripts.docs.check_openapi` | 比较契约与实现；有正式契约时优先检查正式契约，不写文件 |
 | 业务意图目录生成 | `uv run --locked python -m scripts.intent.compile_catalog [--check]` | 从 `app/resources/intent/business_pages.json` 生成枚举；`--check` 用于 CI 漂移检查 |
 
-Linux 完整步骤、配置和后台托管见 [部署说明](../docs/deployment-linux.md)。Mac 安装、服务管理和调试见 [本地开发](../docs/local-development.md)，应用变量见 [配置说明](../docs/configuration.md)。
+Linux 完整步骤、配置和后台托管见 [部署说明](../docs/deployment-linux.md)。Mac 安装、服务管理和调试见 [macOS 本地开发](../docs/macos-dev.md)，应用变量见 [配置说明](../docs/configuration.md)。
 
 `dev/` 使用 zsh，只接受 macOS；`prod/` 使用 Bash，只接受 Linux。Linux 算法服务 可以独立运行在没有 GPU 的主机；模型推理服务和硬件验收需要 NVIDIA。通用 Python 验收不依赖 Homebrew、Ollama 或 `nvidia-smi`。
 
