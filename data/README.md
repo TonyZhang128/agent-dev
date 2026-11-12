@@ -5,7 +5,7 @@
 | `log_summary.json` | 仅用户提供的一条工程表单 OCR 原始对象 | 请求体包含 `user_id`、`session_id`，并将此对象放入 `content`；固定输出见 [日志接口目录](../interfaces/log_summary/README.md) |
 | `intent.json` | 42条业务意图样例及4条非法请求样例，版本 `5.0.0` | 发送单条 `samples[i].request` 到文件中指定的 `endpoint` |
 
-## 工程日志输入
+## 1、工程日志输入
 
 `log_summary.json` 保留用户给出的项目编号 `20240721LDZSM`、项目名称、施工和监理单位、抽检人、计划开始日期、分部工程桩号，以及压实度、弯沉、宽度三项指标。文件直接是系统传入的 OCR 数据对象，不含 `samples`、`request`、`expected_response` 或 `acceptance` 等评测包装，也不包含其他业务例子。
 
@@ -29,7 +29,7 @@ PY
 
 原有11条人工回归用例已移入 `tests/fixtures/log_summary_cases.json`，用于离线与真实模型测试，不再出现在业务输入文件中。工程字段和层级变化、空值、0%合格率、备注注入及旧文字/对象兼容测试继续保留；详见 [日志总结测试说明](../docs/log-summary-testing.md)。
 
-## 意图输入
+## 2、意图输入
 
 `intent.json` 的 `endpoint` 是目标 API，`samples` 是42条业务意图样例，`expected` 是人工参考的 `status/page/action`；调用接口时只发送单条 `request`。样例覆盖全部一级页面和二级功能、一级意图澄清、基于 `last_navigation` 的纠错、聊天和未知场景。另有4条 `invalid_requests`，验证缺少/非法 `current_page`、非法历史角色或旧 `text` 字段返回 `expected_status: 422`。输出状态和示例见 [业务端意图接口](../interfaces/intent/README.md)。
 

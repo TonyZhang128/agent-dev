@@ -2,7 +2,7 @@
 
 本文说明原有 `/agents/*` 契约。合并后的文档加工接口 `/ocr/*`、`/wbs/draft` 与系统级诊断 `/diagnostics` 见 [OCR API 与路径配置](ocr.md)，与本文共用 `app.main:app` 和 8309 端口。统一接口索引、契约状态和待确认草案见 [interfaces/README.md](../interfaces/README.md)；完整 OpenAPI 草案见 [interfaces/drafts/fastapi.openapi.json](../interfaces/drafts/fastapi.openapi.json)。
 
-服务地址：`http://127.0.0.1:8309`。交互文档：`http://127.0.0.1:8309/docs`。`/docs` 是运行时实现的投影，不是正式契约；接口变更必须按 [AGENTS.md 第四节](../AGENTS.md#四接口契约与-api-first-开发流程)审批。
+服务地址：`http://127.0.0.1:8309`。交互文档：`http://127.0.0.1:8309/docs`。`/docs` 是运行时实现的投影，不是正式契约；接口变更必须按 [AGENTS.md 第四节](../AGENTS.md#4接口契约与-api-first-开发流程)审批。
 
 `user_id`、`session_id` 是必填业务标识，不是登录凭据。
 
@@ -15,11 +15,11 @@
 
 当前 API 文档版本 `0.1.0`（以 `app/main.py` 为准）。三类智能体均通过 LangChain `create_agent()` 执行，共享 `app/llm.py` 的 `ChatOpenAI` 模型工厂和 `.env` 配置。日志总结、意图识别使用 `ProviderStrategy` 和 JSON Schema 约束生成，最后经过 Pydantic 校验；对话返回普通文本，再包装为 JSON。接口只处理传入内容，不执行外部业务操作，不将用户消息保存为服务端会话。
 
-## 用户与会话请求契约
+## 1、用户与会话请求契约
 
 各智能体接口均要求非空字符串 `user_id`、`session_id`，去除首尾空白后各1–128字符。业务端意图还要求 `message`、`current_page`，`history` 可选；归档端和 `/chat` 必须传 `history`（首轮为 `[]`）；日志总结不接受该字段。业务意图的 `current_page`、`last_navigation`、`pending_clarification` 由调用方传入并持久化。完整示例、并发隔离、裁剪规则和身份信任边界见 [用户与会话](sessions.md)。
 
-## 1. 工作日志总结
+## 2、工作日志总结
 
 `content` 主要接收工程人员填表后的 OCR 识别 JSON 对象，也兼容既有通用日志文字和 JSON 对象。内部字段名、嵌套层级、指标数组或对象可变化，无须固定为下列示例结构；对象内部允许数组和 `null`。字符串去除首尾空白后不能为空，对象不能为空，顶层不接受数组，请求外层仅允许 `user_id`、`session_id` 和 `content`，不接收历史。
 
@@ -121,7 +121,7 @@
 
 评测数据与验收方法见 [日志总结测试说明](log-summary-testing.md)。
 
-## 2. 意图识别
+## 3、意图识别
 
 接口：`POST /agents/intent/business`。根据用户当前诉求、当前页面、上次导航和服务端业务目录，识别一级页面及能够完成任务的最小二级功能。本服务不保存会话、不做认证；调用方传入 `current_page`、可选的 `history`/`last_navigation`/`pending_clarification`，并持久化识别结果。
 
@@ -203,7 +203,7 @@ curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/intent/business \
 
 错误：请求校验失败 `422`；模型不可达 `503`；分类、聊天或澄清超时 `504`；上游错误、非法输出或目录外编码 `502`。响应不泄露原始输入、身份、历史或上游错误正文。归档端见下一节。
 
-## 2.1 归档端意图识别
+## 4、归档端意图识别
 
 文件归档系统使用独立的扁平 profile 和分类流程，接口为 `POST /agents/intent/archive`。请求沿用 `IntentRequest`：`text` 最多 2000 字符，必须携带 `history`，`intents` 只能省略或为 `[]`。响应为四字段，`intent` 只能取当前占位分类 `A`、`B`、`C`、`D` 或兜底 `unknown`；没有 `chat` 分流。
 
@@ -226,7 +226,7 @@ curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/intent/archive \
 
 归档端响应的 [Schema 和示例](../interfaces/intent/archive/README.md) 位于 `interfaces/intent/archive/`。在真实分类含义补齐前，归档端不纳入真实模型语义评测；离线测试只验证档案隔离、枚举、回退、错误映射和契约。
 
-## 3. 自由对话
+## 5、自由对话
 
 最简单的请求只需要 `message`：
 
@@ -272,9 +272,9 @@ curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/chat \
 - 不接收调用方的 `system` 消息；系统提示词在 `app/prompts/chat.md` 中维护。
 - 每次返回完整回答，不使用流式响应。不同请求不会自动共享历史。
 
-## 开发位置与验证
+## 6、开发位置与验证
 
-业务规则在 `app/agents/`，系统提示词在 `app/prompts/`，请求及返回类型在 `app/schemas/agents.py`，HTTP 路由在 `app/api/agents.py`、`system.py`，由 `app/api/router.py` 聚合、`app/main.py` 注册。`main.py` 保留应用工厂和共享资源生命周期；`app/http_errors.py` 注册原有全局异常处理器。`app/agents/base.py` 提供对话和结构化业务共用的 `BaseAgent`，以及带 Schema 和结果校验的 `StructuredAgent`；`runtime.py` 统一创建和调用 LangChain Agent，`middleware.py` 检查异常模型响应，`app/llm.py` 负责 OpenAI 兼容模型适配。新增业务的步骤见 [架构与扩展](architecture.md#扩展流程)，检查与真实模型验收见 [测试与验收](testing.md)。
+业务规则在 `app/agents/`，系统提示词在 `app/prompts/`，请求及返回类型在 `app/schemas/agents.py`，HTTP 路由在 `app/api/agents.py`、`system.py`，由 `app/api/router.py` 聚合、`app/main.py` 注册。`main.py` 保留应用工厂和共享资源生命周期；`app/http_errors.py` 注册原有全局异常处理器。`app/agents/base.py` 提供对话和结构化业务共用的 `BaseAgent`，以及带 Schema 和结果校验的 `StructuredAgent`；`runtime.py` 统一创建和调用 LangChain Agent，`middleware.py` 检查异常模型响应，`app/llm.py` 负责 OpenAI 兼容模型适配。新增业务的步骤见 [架构与扩展](architecture.md#6扩展流程)，检查与真实模型验收见 [测试与验收](testing.md)。
 
 ```zsh
 # 在项目根目录执行：

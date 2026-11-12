@@ -1,10 +1,10 @@
 # 意图识别测试说明
 
-接口：`POST /agents/intent/business`。请求、响应和兼容说明见 [API 文档](agents-api.md#2-意图识别)。
+接口：`POST /agents/intent/business`。请求、响应和兼容说明见 [API 文档](agents-api.md#3意图识别)。
 归档端 `POST /agents/intent/archive` 仍使用 `A`–`D` 占位分类及 `unknown` 兜底，不纳入本文件的
 业务意图语义评测；其离线测试见 `tests/test_intent_archive.py`。
 
-## 验收规则
+## 1、验收规则
 
 业务端使用层级目录 `app/resources/intent/business_pages.json`，页面编码和二级功能编码由
 构建期生成枚举。响应状态与验收标准：
@@ -34,7 +34,7 @@
 `confidence` 是模型判断分数，不是校准概率。低分或同页动作不确定时返回 `clarify`；只有无法
 确定页面时才返回 `unknown`。
 
-## 澄清轮次
+## 2、澄清轮次
 
 - 调用方在 `pending_clarification.attempts` 传入已完成的澄清轮数，从 0 开始。
 - 同一页面返回 `clarify` 后，调用方将 `attempts` 加 1 再传回。
@@ -42,7 +42,7 @@
 - `pending_clarification.page` 与本次识别页面不同时，按新页面重新计数。
 - Chat 澄清失败时返回 HTTP `200` 的确定性选项文案，保留 `page` 和 `options`。
 
-## 离线自动化测试
+## 3、离线自动化测试
 
 - `tests/test_intent_catalog.py`：JSON 唯一性、保留字、父子关系、内容哈希、生成文件漂移。
 - `tests/test_intent_business.py`：`resolved`/`clarify`/`chat`/`unknown`、低分和需澄清回退、
@@ -64,7 +64,7 @@ uv run --locked python -m scripts.intent.compile_catalog --check
 uv run --locked pytest -v
 ```
 
-## 真实模型评测
+## 4、真实模型评测
 
 版本化数据集 [data/intent.json](../data/intent.json) 为 `5.0.0`，包含 42 条业务意图样例和
 4 条非法请求：

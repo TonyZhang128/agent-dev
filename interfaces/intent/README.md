@@ -19,7 +19,7 @@
 示例是人工参考值，不是实际模型验收记录；`message`、`confidence` 的具体内容由本次推理产生。
 发送请求时只发送 `request` 的内容；单次 API 响应只有 `response` 中的七个字段。
 
-## 固定返回字段
+## 1、固定返回字段
 
 | 字段 | 类型 | 规则 |
 | --- | --- | --- |
@@ -34,7 +34,7 @@
 七个字段全部必填，禁止额外字段；不允许把 `null` 写成字符串 `"null"`。JSON 对象的键顺序
 没有业务含义。
 
-## 状态语义
+## 2、状态语义
 
 | `status` | 含义 | 调用方处理 |
 | --- | --- | --- |
@@ -47,7 +47,7 @@
 `page` 和非空 `message`；`options` 是该页面下的合法二级功能。`chat`/`unknown` 的
 `page`、`action` 必须为 `null`。
 
-## 请求
+## 3、请求
 
 ```json
 {
@@ -76,7 +76,7 @@
 - `request_id` 可选，仅由调用方用于关联；本服务不持久化，也不提供幂等保证。
 - 本服务不读写数据库、不做认证；历史、当前页面和待澄清状态由调用方持久化并在每次请求传入。
 
-## 目录与编码
+## 4、目录与编码
 
 业务功能 JSON 位于 `app/resources/intent/business_pages.json`，是页面和二级功能的唯一数据源。
 构建期由 `scripts.intent.compile_catalog` 生成 `app/schemas/intent_catalog_generated.py`；
@@ -95,7 +95,7 @@ uv run --locked python -m scripts.intent.compile_catalog --check
 模型返回目录外编码、`action` 不属于 `page` 或结构不合法时，服务返回 HTTP `502`，不会伪装成
 `unknown` 或成功跳转。
 
-## 一级意图与澄清
+## 5、一级意图与澄清
 
 仅识别到一级模块时返回 `status="clarify"`、`page=<code>`、`action=null`，并调用 Chat 澄清
 模式生成 `message`。`options` 由后端从目录生成，Chat 只负责措辞，不得提出目录外操作。
@@ -108,7 +108,7 @@ uv run --locked python -m scripts.intent.compile_catalog --check
 - Chat 澄清不可达、超时或输出为空时，服务返回 HTTP `200` 的 `clarify`，`message` 为后端根据
   目录生成的确定性选项文案，不中断导航流程。
 
-## 纠错与上下文
+## 6、纠错与上下文
 
 `current_page` 表示调用方当前实际页面；`last_navigation` 表示上一次返回的导航目标。两者分开
 保存，不能互相替代。用户以“不对”“不是这个”等表达否定上次导航时，模型结合
@@ -118,7 +118,7 @@ uv run --locked python -m scripts.intent.compile_catalog --check
 本服务不跟踪前端跳转是否成功，也不返回 `navigation_id`。调用方后端负责前端跳转、权限和
 失败处理。
 
-## 调用示例
+## 7、调用示例
 
 ```zsh
 curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/intent/business \
@@ -139,7 +139,7 @@ curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/intent/business \
 失败响应不能按成功 Schema 解析。请求校验失败的 `detail` 为 FastAPI 校验详情数组；上述模型
 错误返回 `{"detail":"错误描述"}`。错误响应不泄露原始输入、身份、历史或上游错误正文。
 
-## 保持契约同步
+## 8、保持契约同步
 
 修改 `BusinessIntentResult` 后，在项目根目录重新导出 Schema：
 
@@ -158,7 +158,7 @@ for filename in ("response.schema.json", "response.default.schema.json"):
 PYTHON
 ```
 
-随后同步示例、[API 文档](../../docs/agents-api.md#2-意图识别)、OpenAPI 草案和调用方类型，
+随后同步示例、[API 文档](../../docs/agents-api.md#3意图识别)、OpenAPI 草案和调用方类型，
 执行 `uv run --locked pytest tests/test_intent_interface.py tests/test_intent_business.py
 tests/test_intent_catalog.py tests/test_interfaces_contract.py -v`。测试检查 Schema 与
 Pydantic/契约草案一致、示例状态覆盖、目录层级、澄清选项、错误映射和生成文件漂移。

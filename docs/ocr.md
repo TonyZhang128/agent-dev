@@ -4,7 +4,7 @@
 
 接口流程、请求及失败语义以 [接口指南](../interfaces/guides/ocr.md) 为准；table模板构建、算法、命名和真实验收见 [监理日记模板识别](journal-template-recognition.md)。
 
-## 环境
+## 1、环境
 
 沿用主项目Python 3.12和uv，不使用独立OCR环境。ONNX Runtime通过互斥extra选择：macOS/CPU使用 `uv sync --locked --group dev --extra ocr-cpu`；Linux NVIDIA使用 `--extra ocr-gpu` 并准备CUDA/cuDNN运行库。不能同时安装两个extra，不带extra的重新sync会移除已安装运行时。
 
@@ -12,7 +12,7 @@
 
 生产离线部署使用 `uv run --locked python -m scripts.models.download_ocr_models --check` 校验已有权重；需要预下载时见 [Docker部署](docker.md)。本次不引入新模型或依赖。
 
-## 资源与路径
+## 2、资源与路径
 
 journal的schema2模板随代码发布于 `app/ocr/journal/templates/journal.json`，不是从旧表样库读取。构建源PDF和照片位于忽略提交的 `data/ocr/resources/`；报告在 `verification/ocr/`。模板发布后重启算法服务加载。
 
@@ -20,7 +20,7 @@ HTTP `path` 只能指向 `PROJECTS_ROOT` 数据池内文件，兼容 `projects/`
 
 `TEMPLATES_ROOT`、`ADMIN_ROOT`、`ASSET_ROOT` 仍由现有 `/diagnostics` 静态检查引用，本次没有改变其对外结构；它们不参与journal字段定位。诊断不会初始化引擎、执行推理或访问网络，`ok=false`仍返回200；诊断可用不等于照片识别正确。
 
-## 工具和启动
+## 3、工具和启动
 
 - `scripts.ocr.build_journal_template`：从PDF生成table相对模板和覆盖图。
 - `scripts.ocr.inspect_journal`：真实照片单次OCR、字段覆盖和规则拆分报告，默认不调用LLM。

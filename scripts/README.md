@@ -34,15 +34,15 @@ Linux 完整步骤、配置和后台托管见 [部署说明](../docs/deployment-
 
 开发安装通过 `uv sync --locked --group dev --extra ocr-cpu` 安装 pytest / pytest-asyncio 与 CPU 版 ONNX Runtime，并使用 `uv run --locked pytest -v` 执行离线单元测试。生产 `--no-dev` 环境不安装这些测试工具。
 
-`scripts/models/download_qwen35_gguf.py` 只做下载与校验，不需要 GPU 或 vLLM：默认取 `unsloth/Qwen3.5-9B-GGUF` 的 `Qwen3.5-9B-Q4_K_M.gguf`，再从 `Qwen/Qwen3.5-9B` 补齐 `config.json` 与 tokenizer，按 ModelScope 文件列表的 sha256 校验后写入 `.cache/models/qwen3.5-9b-q4_k_m/`。GGUF 不能单独作为 vLLM 模型：GGUF 加载器要求 `--model` 指向 `.gguf` 文件，并按 `Path(model).parent` 读取同目录的 `config.json` 与 tokenizer。`--vision` 才下载 mmproj，且放进 `vision/` 子目录；`--check` 离线校验已有目录；中断后保留 `.part`，重跑即续传。下载结果与容器变量的对应见 [Docker 生产部署](../docs/docker.md#2-准备权重)。
+`scripts/models/download_qwen35_gguf.py` 只做下载与校验，不需要 GPU 或 vLLM：默认取 `unsloth/Qwen3.5-9B-GGUF` 的 `Qwen3.5-9B-Q4_K_M.gguf`，再从 `Qwen/Qwen3.5-9B` 补齐 `config.json` 与 tokenizer，按 ModelScope 文件列表的 sha256 校验后写入 `.cache/models/qwen3.5-9b-q4_k_m/`。GGUF 不能单独作为 vLLM 模型：GGUF 加载器要求 `--model` 指向 `.gguf` 文件，并按 `Path(model).parent` 读取同目录的 `config.json` 与 tokenizer。`--vision` 才下载 mmproj，且放进 `vision/` 子目录；`--check` 离线校验已有目录；中断后保留 `.part`，重跑即续传。下载结果与容器变量的对应见 [Docker 生产部署](../docs/docker.md#2准备权重)。
 
 `scripts/models/download_ocr_models.py` 复用运行时的 `rapidocr_params()`，保证预下载的模型与实际识别一致；默认写入 `.cache/models/ocr/`，`--root` 可指向部署目录，`--check` 只做离线文件和 sha256 校验。容器部署可通过 `OCR_MODEL_DIR` 可读写挂载该目录；留空时使用命名卷，首次 OCR 可自动下载缺失模型；完全离线时在有网机器下载后整目录拷贝过去。下载源与运行时相同，均为 ModelScope 上的 RapidOCR 3.x 模型。
 
-`scripts/docs/` 只服务于接口契约：`export_openapi` 从 `app.main:app` 生成待确认草案，默认写入 `interfaces/drafts/fastapi.openapi.json`；`render_api_markdown` 把同一契约渲染为 `interfaces/API.md` 评审文档；`check_openapi` 只比较契约与实现并返回非零状态，不覆盖任何契约。正式契约必须由用户批准后人工提升到 `interfaces/openapi/`，详见 [接口文档](../interfaces/README.md) 和 [AGENTS.md 第四节](../AGENTS.md#四接口契约与-api-first-开发流程)。
+`scripts/docs/` 只服务于接口契约：`export_openapi` 从 `app.main:app` 生成待确认草案，默认写入 `interfaces/drafts/fastapi.openapi.json`；`render_api_markdown` 把同一契约渲染为 `interfaces/API.md` 评审文档；`check_openapi` 只比较契约与实现并返回非零状态，不覆盖任何契约。正式契约必须由用户批准后人工提升到 `interfaces/openapi/`，详见 [接口文档](../interfaces/README.md) 和 [AGENTS.md 第四节](../AGENTS.md#4接口契约与-api-first-开发流程)。
 
 `scripts/ocr/build_journal_template.py` 从指定 PDF 离线构建监理日记模板；`scripts/ocr/inspect_journal.py` 读取指定照片，输出单次 OCR 诊断、字段覆盖图和规则拆分报告，默认不调用 LLM。完整命令见 [模板识别维护](../docs/journal-template-recognition.md)。已删除的旧 docsvc 工具不由本次重构恢复。
 
-容器部署前在开发机预置两类模型，并分别运行 `scripts.models.download_qwen35_gguf --check` 与 `scripts.models.download_ocr_models --check`。完整目录迁移和 SHA256 清单见 [Docker 部署](../docs/docker.md#2-准备权重)。`scripts.common.verify_agents` 只覆盖 Agent；照片 OCR 及 CUDA EP 需要按该文档独立验收，不能从 Agent 回归通过推断 OCR 可用。
+容器部署前在开发机预置两类模型，并分别运行 `scripts.models.download_qwen35_gguf --check` 与 `scripts.models.download_ocr_models --check`。完整目录迁移和 SHA256 清单见 [Docker 部署](../docs/docker.md#2准备权重)。`scripts.common.verify_agents` 只覆盖 Agent；照片 OCR 及 CUDA EP 需要按该文档独立验收，不能从 Agent 回归通过推断 OCR 可用。
 
 真实验收会调用模型，报告写入忽略提交的 `verification/`。业务验收报告 `agents-live-result.json` 的每条 `checks` 记录包含实际请求体 `request` 和 API 输出 `response`。设置 `BUSINESS_API_URL` 可验证其他地址的 API，模型直调仍读取当前进程及根目录 `.env` 的 `LLM_*` 配置，二者需对应同一部署。Linux 验收使用 `--no-sync --no-dev`，避免安装开发工具或在验收时修改环境。
 

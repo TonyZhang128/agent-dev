@@ -1,9 +1,9 @@
 # 接口文档
 
 `interfaces/` 统一管理供其他系统对接的 HTTP 接口文档。接口契约优先（API-First）规则见
-[AGENTS.md 第四节](../AGENTS.md#四接口契约与-api-first-开发流程)。
+[AGENTS.md 第四节](../AGENTS.md#4接口契约与-api-first-开发流程)。
 
-## 当前状态
+## 1、当前状态
 
 截至 2026-11-04：
 
@@ -21,7 +21,7 @@
   [日志总结](log_summary/README.md)、[业务端意图](intent/README.md)、
   [归档端意图](intent/archive/README.md)。
 
-## 权威来源
+## 2、权威来源
 
 1. 用户明确批准的正式契约：`interfaces/openapi/` 中的文件（当前尚无整包正式契约）。
 2. 已确认的响应子契约：`interfaces/log_summary/`、`interfaces/intent/` 下的 JSON Schema。
@@ -35,7 +35,7 @@
 
 代码与正式契约不一致时，必须先报告差异并由用户决定修代码还是改契约，不能默认以代码为准。
 
-## 目录
+## 3、目录
 
 ```text
 interfaces/
@@ -58,7 +58,7 @@ interfaces/
     └── archive/               # 归档端响应 Schema 与示例
 ```
 
-## 契约状态
+## 4、契约状态
 
 | 状态 | 含义 | 能否据此实现 |
 | --- | --- | --- |
@@ -69,7 +69,7 @@ interfaces/
 每个 OpenAPI 操作都带 `x-contract-status`、`x-contract-source`、`x-side-effects` 和
 `x-idempotency`，便于审查。
 
-## 接口清单
+## 5、接口清单
 
 | 业务 | 方法与路径 | 状态 | 主要资料 |
 | --- | --- | --- | --- |
@@ -85,7 +85,7 @@ interfaces/
 完整字段以 OpenAPI 草案的 `components/schemas` 为准；本目录的 Markdown 只说明业务流程、
 状态转换、超时、重试、路径限制等 OpenAPI 不易表达的内容，不重复维护字段表。
 
-## 通用约定
+## 6、通用约定
 
 - 编码：JSON 请求与响应均为 UTF-8；`Content-Type: application/json`。
 - 认证：当前应用没有自定义认证、授权、租户隔离或 CORS 配置。`user_id`、`session_id`
@@ -105,7 +105,7 @@ interfaces/
 - 异步任务：当前没有任务提交、任务状态、轮询、webhook 或取消接口。所有请求同步完成。
 - 流式：`/agents/chat` 返回完整回答，不使用 SSE 或流式响应。
 
-## Swagger UI 与 OpenAPI
+## 7、Swagger UI 与 OpenAPI
 
 运行中的 FastAPI 自带交互文档，数据来自当前实现，适合调试：
 
@@ -124,7 +124,7 @@ curl -fsS http://127.0.0.1:8309/openapi.json
 `interfaces/openapi/fastapi.openapi.json`，可用支持 OpenAPI 3.1 的编辑器、Swagger Editor
 或 Redoc 预览。
 
-## 生成与校验
+## 8、生成与校验
 
 ```zsh
 # 从当前应用导出待确认草案；脚本拒绝写入 interfaces/openapi/
@@ -143,7 +143,7 @@ uv run --locked pytest tests/test_interfaces_contract.py -v
 `export_openapi` 只覆盖 `interfaces/drafts/fastapi.openapi.json`。正式契约的提升必须由
 用户批准后人工完成，见 [openapi/README.md](openapi/README.md)。
 
-## 新增或修改接口的流程
+## 9、新增或修改接口的流程
 
 1. 先检查 `interfaces/openapi/` 是否有正式契约；有则严格按契约实现。
 2. 没有正式契约时，先在 `interfaces/drafts/` 提出 OpenAPI 草案，说明路径、方法、请求、
@@ -154,9 +154,9 @@ uv run --locked pytest tests/test_interfaces_contract.py -v
 
 未经批准，禁止为了让代码运行、通过测试或解决前后端不一致而修改正式契约。
 
-## 相关文档
+## 10、相关文档
 
-- [API-First 规则](../AGENTS.md#四接口契约与-api-first-开发流程)
+- [API-First 规则](../AGENTS.md#4接口契约与-api-first-开发流程)
 - [智能体 API](../docs/agents-api.md)、[用户与会话](../docs/sessions.md)
 - [文档加工与 OCR](../docs/ocr.md)
 - [覆盖清单](coverage.md)、[变更记录](CHANGELOG.md)、[待确认草案](drafts/README.md)

@@ -13,7 +13,7 @@ builder/runtime 使用同一基础环境，镜像包含 CUDA 12.9.1 与 cuDNN 9 
 
 非容器方式见 [Linux 部署](deployment-linux.md)。
 
-## 1. 服务器前置检查
+## 1、服务器前置检查
 
 ```bash
 uname -m
@@ -43,7 +43,7 @@ docker run --rm --gpus all nvidia/cuda:12.9.1-base-ubuntu24.04 nvidia-smi
 后续命令在服务器项目根目录执行，除非标为“开发机”。服务器只构建和运行容器时，
 不需要在宿主机安装 Python、uv 或 vLLM。
 
-## 2. 准备权重
+## 2、准备权重
 
 在已安装项目环境的开发机执行；已有正确文件会复用，不使用 `--force`：
 
@@ -110,7 +110,7 @@ sha256sum --check SHA256SUMS
 
 权重齐全只表示可以开始推理验收，不表示识别或分类质量已通过。
 
-## 3. 代码、模板和配置
+## 3、代码、模板和配置
 
 部署与开发机验收对应的 Git 版本。获取代码后进入仓库根目录：
 
@@ -168,7 +168,7 @@ MAIN_WORK_SPLIT_CONCURRENCY=1
 - 如果 GGUF 加载报缺视觉张量，先核对插件和模型配置，再检查该分支是否支持
   `--language-model-only`；不要通过下载不匹配的视觉权重掩盖错误。
 
-## 4. 构建与启动
+## 4、构建与启动
 
 ```bash
 dc() {
@@ -190,9 +190,9 @@ dc logs --tail=100 model agent-service
 执行整套需要 NVIDIA 的 Compose。服务器完全离线时，还需在联网环境构建对应 amd64
 镜像并用 `docker save` / `docker load` 迁移；只有权重预下载不能让镜像构建离线完成。
 
-## 5. 分层验收
+## 5、分层验收
 
-### 存活、模型就绪与静态诊断
+### 5.1、存活、模型就绪与静态诊断
 
 ```bash
 curl -fsS http://127.0.0.1:8309/health
@@ -204,7 +204,7 @@ curl -fsS http://127.0.0.1:8309/diagnostics
 即使 `data.ok=false` 也返回 200。缺少旧表样库时诊断可能失败，需逐项判断，不能
 把该结果等同于新版 journal 定位失败，也不能用 provider 名称证明 CUDA 实际初始化。
 
-### OCR CUDA EP 真实初始化（服务器）
+### 5.2、OCR CUDA EP 真实初始化（服务器）
 
 ```bash
 dc exec -T agent-service python - <<'PY'
@@ -231,7 +231,7 @@ PY
 排查时可以将 `OCR_DEVICE=cpu` 并重建算法服务容器，但必须把这次结果标为 CPU 验证。
 整个 Compose 的 vLLM 服务仍需要 NVIDIA GPU。
 
-### Agent 业务回归（开发机通过 SSH 隧道）
+### 5.3、Agent 业务回归（开发机通过 SSH 隧道）
 
 开发机保留项目依赖和验收数据，服务器无需为验收额外装开发依赖：
 
@@ -249,7 +249,7 @@ BUSINESS_API_URL=http://127.0.0.1:18309 LLM_MODEL=highway-agent \
 报告位于 `verification/agents-live-result.json`。该脚本验证 Agent，**不验证照片 OCR**；
 若还运行模型直调验收，其 `LLM_*` 必须同样指向这次服务器部署。
 
-### 真实 OCR 照片与并发验收
+### 5.4、真实 OCR 照片与并发验收
 
 把独立标注的同版式照片放到服务器数据池 `projects/acceptance/journal.jpg`，确保 UID
 10001 可读；在服务器执行（开发机则把端口改为 SSH 隧道的 18309）：
@@ -267,18 +267,56 @@ curl --fail-with-body http://127.0.0.1:8309/ocr/daily-logs-new \
 字段正确率、失败案例、耗时和 `nvidia-smi` 显存峰值。无可用真实标注样本时标记未验证。
 无效表格应返回既有 400，不能全空成功；API 路径必须位于 PROJECTS_ROOT 内。
 
-## 6. 更新、访问与回滚
+## 6、更新、访问与回滚
 
 算法服务的 Compose 服务名与镜像名统一为 `agent-service`，模型推理服务保留 `model`。已有部署若仍使用 `docsvc` 或 `api`，先按旧版编排文件停止旧算法服务，再使用新编排构建、启动 `agent-service`，避免旧容器继续占用 8309；不要将模型推理服务或数据卷作为命名迁移的一部分删除。
 
-只更新业务代码：
+### 6.1、配置修改与生效
+
+Docker 部署修改 `docker/prod.env`，由 `compose.prod.yml` 的 `environment` 映射到容器；宿主机根目录 `.env` 不会自动传入容器。新增变量需同时检查 Compose 是否已映射，终端同名环境变量优先于 `--env-file`。
+
+以下命令沿用第 4 节定义的 `dc` 函数，等同于 `docker compose -f compose.prod.yml --env-file docker/prod.env`。修改后先校验配置：
 
 ```bash
-dc build agent-service
-dc up -d --no-deps agent-service
+dc config --quiet
 ```
 
-修改 `docker/prod.env` 后使用 `up -d` 重建对应容器；单独 `restart` 不加载新环境变量。
+仅修改算法服务的运行配置（如超时、云端回退开关），重新创建算法服务容器，保留模型服务运行：
+
+```bash
+dc up -d --no-deps --force-recreate agent-service
+```
+
+修改模型推理服务配置，或两个服务共用的 `VLLM_API_KEY`、`VLLM_SERVED_MODEL_NAME`、`VLLM_PORT` 等变量时，让 Compose 更新所有受影响的服务：
+
+```bash
+dc up -d
+```
+
+单独执行 `dc restart` 不会载入新环境变量。普通运行配置修改不需要重新构建镜像。
+
+### 6.2、代码、依赖与 OCR 设备更新
+
+修改业务代码、依赖或切换 `OCR_DEVICE` 后，重新构建镜像并更新算法服务：
+
+```bash
+dc up -d --build --no-deps agent-service
+```
+
+`OCR_DEVICE` 同时决定构建时安装的 OCR 依赖，不能只重建容器；设备切换要求见 [OCR CPU/CUDA 依赖切换](#8ocr-cpucuda-依赖切换)。
+
+### 6.3、更新后检查与回滚
+
+使用默认端口时，更新后检查容器状态、进程存活和模型就绪：
+
+```bash
+dc ps
+curl -fsS http://127.0.0.1:8309/health
+curl -fsS http://127.0.0.1:8309/ready
+```
+
+模型重新加载期间 `/ready` 可能暂时失败。就绪检查不验证业务效果，仍需按第 5 节执行对应的 Agent 或 OCR 验收。
+
 多个 worker 会各自加载 OCR 模型，默认保持一个。当前应用无身份认证，8309 保留回环
 绑定，对外访问由反向代理提供 TLS 和访问控制；模型 8001 仅在 Compose 内部网络开放。
 
@@ -286,14 +324,14 @@ dc up -d --no-deps agent-service
 回滚时恢复旧配置与镜像标签，使用 `dc up -d --no-build`，避免重新构建覆盖旧标签。
 `dc down` 停止本项目容器，宿主机 bind mount 中的模型与数据不删除。
 
-## 7. 验证边界
+## 7、验证边界
 
 本地检查、amd64 仿真构建、动态库加载和 CPU OCR 都不能替代 RTX 5090 Laptop 的实际
 CUDA 推理、GGUF 模型加载、结构化输出、长上下文及双服务并发验收。每次发布应分别
 记录本地检查与服务器验收结果，不能只根据容器 `healthy` 标记宣布功能可用。
 
 
-## OCR CPU/CUDA 依赖切换
+## 8、OCR CPU/CUDA 依赖切换
 
 统一保留 CUDA 12.9.1 + cuDNN 9 基础镜像。`docker/prod.env` 的 `OCR_DEVICE`
 同时传入构建参数和容器环境：`cpu` 仅安装 `ocr-cpu`（onnxruntime），`cuda` 仅安装
@@ -315,7 +353,7 @@ CPU 模式也保留 CUDA 库、API 的 GPU reservation 和原镜像标签；它�
 两种模式共用 ONNX 模型文件。目标服务器仍需分别构建镜像并执行真实 OCR 验收。
 
 
-## OCR 权重可选与自动下载
+## 9、OCR 权重可选与自动下载
 
 `OCR_MODEL_DIR` 不再必填。留空或删除该配置时，Compose 创建 `ocr-models` 命名卷挂载到
 `/app/data/ocr/models`。镜像中该目录归 UID 10001 所有，空命名卷首次挂载继承目录权限，

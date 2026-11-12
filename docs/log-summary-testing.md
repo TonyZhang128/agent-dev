@@ -1,8 +1,8 @@
 # 工程 OCR 日志描述测试说明
 
-接口为 `POST /agents/log-summary`，契约及示例见 [API 文档](agents-api.md#1-工作日志总结)。调用方将 OCR 识别对象放入 `content`，读取返回的 `summary` 作为当日日志片段。兼容既有文字及通用日志 JSON；请求新增必填 user_id、session_id，响应及 content 的4000字符限制不变，不接收 history。业务输入文件只保存用户提供的一条 OCR 原始对象；[固定输出接口](../interfaces/log_summary/README.md) 保存六个必填字段的 Schema、示例和对接说明。
+接口为 `POST /agents/log-summary`，契约及示例见 [API 文档](agents-api.md#2工作日志总结)。调用方将 OCR 识别对象放入 `content`，读取返回的 `summary` 作为当日日志片段。兼容既有文字及通用日志 JSON；请求新增必填 user_id、session_id，响应及 content 的4000字符限制不变，不接收 history。业务输入文件只保存用户提供的一条 OCR 原始对象；[固定输出接口](../interfaces/log_summary/README.md) 保存六个必填字段的 Schema、示例和对接说明。
 
-## 暂行验收规则
+## 1、暂行验收规则
 
 正式业务话术标准尚待补充，目前按客观工程记录生成一段中文。规则统一在 `app/prompts/log_summary.md`，不在业务代码中固定某张表的字段或编写文本拼接模板。
 
@@ -24,7 +24,7 @@
 
 `summary` 最多1000字符；三个列表各最多8项，每项最多300字符。大表格需调用方按记录拆分，并保留必要上下文。暂未承诺任意大表或任意 OCR 错误都能自动整理正确。
 
-## 离线自动化验证
+## 2、离线自动化验证
 
 先定义输入兼容、事实边界及评测失败标准，再编写测试。新增评测测试在缺少日志数据集支持和事实检查函数时先失败（RED），补齐实现后重跑（GREEN）。
 
@@ -44,7 +44,7 @@ uv run --locked pytest -v
 
 测试目前直接位于 `tests/`。仓库 TDD 约定中的 `uv run --locked pytest tests/unit/ tests/integration/ -v` 引用了尚不存在的目录，需实际报告该命令结果，并以根目录全量测试补充验证。
 
-## 真实模型评测
+## 3、真实模型评测
 
 [data/log_summary.json](../data/log_summary.json) 仅保留用户提供的系统 OCR 输入，不含其他例子或评测包装。对应的人工参考输出位于 [interfaces/log_summary/response.example.json](../interfaces/log_summary/response.example.json)，真实验收会把原始输入包装为 `content` 调用实际 API，检查固定响应结构、日期及列表有无。
 

@@ -2,7 +2,7 @@
 
 本项目作为公路工程业务系统的算法层，以同一 FastAPI 应用提供智能体和 OCR 服务。应用入口为 `app.main:app`，默认监听 `127.0.0.1:8309`；运行配置见 [配置说明](configuration.md)。
 
-## 请求链路
+## 1、请求链路
 
 ```text
 业务系统 → FastAPI → 领域 Router
@@ -11,9 +11,9 @@
                                                               └── mainWork 规则 / Agent
 ```
 
-LLM 是独立模型推理服务；OCR 引擎在算法服务进程内运行。可选云端回退沿用统一 Agent 运行时，触发与预算见 [配置说明](configuration.md#云端回退)。当前没有数据库、服务端持久会话或业务系统写入工具。
+LLM 是独立模型推理服务；OCR 引擎在算法服务进程内运行。可选云端回退沿用统一 Agent 运行时，触发与预算见 [配置说明](configuration.md#4云端回退)。当前没有数据库、服务端持久会话或业务系统写入工具。
 
-## 模块职责
+## 2、模块职责
 
 | 位置 | 职责 |
 | --- | --- |
@@ -36,7 +36,7 @@ LLM 是独立模型推理服务；OCR 引擎在算法服务进程内运行。可
 
 依赖方向为 `main → 路由聚合 → 领域 Router → Schema／业务资源`。Router 不导入全局 `app`；业务层不依赖 FastAPI 请求与响应对象，不为目录形式增加只做转发的 Service／Repository。
 
-## 资源生命周期与隔离
+## 3、资源生命周期与隔离
 
 模型推理服务、各 Agent 和 `OCRResources` 由 lifespan 创建，保存在当前应用 `app.state`，Router 从当前请求取得。业务端意图共享当前应用的 ChatAgent 和 ClarificationAgent。OCR 模型、模板与引擎按需加载；OCR 推理加锁，同步识别在线程池执行。
 
@@ -44,7 +44,7 @@ lifespan 使用 `@asynccontextmanager`，异步生成器类型为 `AsyncGenerato
 
 已编译 Agent 可复用，但消息、动态 Schema 和执行状态必须请求隔离，不修改共享 Agent。运行时不启用 checkpointer；历史由调用方完整传入并按预算裁剪，身份只通过请求局部 metadata 传递，见 [会话说明](sessions.md)。
 
-## 智能体实现
+## 4、智能体实现
 
 所有推理经 `build_agent()`／`invoke_agent()`，由 `langchain.agents.create_agent()` 执行，不直接调用 SDK 建立旁路。
 
@@ -61,7 +61,7 @@ uv run --locked python -m scripts.intent.compile_catalog --check
 
 归档端维持独立 `IntentProfile`，新增同类 profile 时复用 `profiles.py` 和 `intent.py`。目录／提示词修改后重启算法服务以刷新资源；涉及对外编码或行为变更时先走契约流程。
 
-## OCR 与 mainWork
+## 5、OCR 与 mainWork
 
 当前 OCR HTTP 入口仅为 `/ocr/daily-logs-new`，不将已移除的旧照片、简表、填表和 WBS 接口列为可用能力。识别过程使用随代码发布的 journal 模板，定位与对齐后整页 OCR，再匹配业务栏目。
 
@@ -71,7 +71,7 @@ mainWork 优先按可靠的施工、旁站、巡视标题提取，规则不足�
 
 工作区未跟踪的独立 `ocr/` 若存在，不属于主应用；修改前阅读其自身 README，不合并依赖或路由。docsvc 迁移属于历史背景，当前能力以源码和接口清单为准。
 
-## 扩展流程
+## 6、扩展流程
 
 1. 明确业务需求和验收标准，检查 [接口文档](../interfaces/README.md)。新增／变更对外行为先提交草案，由用户确认契约后再实现。
 2. 根据已确认行为定义正常、边界和失败用例，先写能复现缺失行为的测试；纯文档或类型调整按实际影响验证。
@@ -81,7 +81,7 @@ mainWork 优先按可靠的施工、旁站、巡视标题提取，规则不足�
 
 工具通过 LangChain `@tool` 定义并传入 `build_agent(..., tools=...)`，保留统一输出检查、总超时和步数控制。接入外部写操作前须明确身份、权限、幂等和业务确认；当前生成能力不代表有权执行业务动作。详细工程规范统一见 [AGENTS.md](../AGENTS.md)。
 
-## 参考资料
+## 7、参考资料
 
 - [LangChain Agents](https://docs.langchain.com/oss/python/langchain/agents)
 - [LangChain 结构化输出](https://docs.langchain.com/oss/python/langchain/structured-output)

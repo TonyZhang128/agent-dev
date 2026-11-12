@@ -7,7 +7,7 @@
 - [response.schema.json](response.schema.json)：供调用方校验、生成类型的 JSON Schema，与 `LogSummary.model_json_schema()` 一致。
 - [response.example.json](response.example.json)：对应 [用户提供的 OCR 输入](../../data/log_summary.json) 的人工参考输出。
 
-## 固定返回字段
+## 1、固定返回字段
 
 | 字段 | 类型 | 规则 |
 | --- | --- | --- |
@@ -22,7 +22,7 @@
 
 `summary` 按“项目或标段、工程部位—检测事项—指标实测值及单位—已记录的合格率或结论”组织，不存在的信息省略。实测值不换算、不四舍五入；弯沉 `0.1、0.2、0.3（单位0.01mm）` 保持原值和单位。`specified` 是要求，不能当作实际合格结论；缺失合格率不推断合格或不合格；表格存在不能推断已完成。当前固定的是 JSON 结构及描述顺序，具体业务话术仍按暂行规则生成，正式话术标准待补充；规则在 `app/prompts/log_summary.md` 维护。
 
-## 发送系统输入并读取输出
+## 2、发送系统输入并读取输出
 
 `data/log_summary.json` 仅保存用户提供的原始 OCR 对象，不含测试集、参考答案或 HTTP 包装。调用现有 API 时仍放入 `content` 字段，并同时传入必填的用户与会话ID：
 
@@ -55,7 +55,7 @@ PY
 
 服务不自动把每次业务输出写入该目录，也不保存服务端日志会话；调用方获取响应后按自己的存储生命周期处理。真实验收报告在 `verification/agents-live-result.json`。
 
-## 保持契约同步
+## 3、保持契约同步
 
 修改 `LogSummary` 后，在项目根目录重新导出 Schema：
 
@@ -72,4 +72,4 @@ Path("interfaces/log_summary/response.schema.json").write_text(
 PY
 ```
 
-随后同步响应示例、[API 文档](../../docs/agents-api.md#1-工作日志总结) 及调用方类型，执行 `uv run --locked pytest tests/test_log_summary_interface.py tests/test_agents.py -v`。测试会检查原始输入、Schema 与 Pydantic/OpenAPI 一致性、字段必填及示例合法性。边界回归数据在 `tests/fixtures/log_summary_cases.json`，不属于业务传入接口。
+随后同步响应示例、[API 文档](../../docs/agents-api.md#2工作日志总结) 及调用方类型，执行 `uv run --locked pytest tests/test_log_summary_interface.py tests/test_agents.py -v`。测试会检查原始输入、Schema 与 Pydantic/OpenAPI 一致性、字段必填及示例合法性。边界回归数据在 `tests/fixtures/log_summary_cases.json`，不属于业务传入接口。

@@ -4,7 +4,7 @@
 > 生成来源：`interfaces/drafts/fastapi.openapi.json`。
 > 权威字段以 OpenAPI 为准；正式契约批准前，本文件中的 `pending-review` 操作不能作为实现授权。
 
-## 基本信息
+## 1、基本信息
 
 | 项目 | 内容 |
 | --- | --- |
@@ -17,7 +17,7 @@
 
 公路工程智能算法服务的对外 HTTP 契约。当前文件是从实现归纳的待确认草案：已实现接口的请求和成功响应来自 FastAPI/Pydantic，补充的响应结构及统一错误响应由 scripts/docs/openapi_contract.py 维护。经用户批准前不得视为正式契约，也不得据此绕过接口变更审批。
 
-## 通用错误响应
+## 2、通用错误响应
 
 `400`、`404`、`502`、`503`、`504` 使用 `ErrorDetail`；`422` 使用 `RequestError`。各接口只列状态码和含义，字段结构见下表，不重复展开。
 
@@ -33,7 +33,7 @@
 | --- | --- | --- | --- | --- | --- |
 | `detail` | string 或 array<`ValidationErrorItem`> | 是 |  |  | 请求校验失败时为错误数组；输入或上下文超限时为字符串。 |
 
-## 接口索引
+## 3、接口索引
 
 | # | 方法与路径 | 摘要 | 状态 |
 | --- | --- | --- | --- |
@@ -46,9 +46,9 @@
 | 7 | `POST /agents/chat` | 自由对话 | `confirmed` |
 | 8 | `POST /ocr/daily-logs-new` | 识别监理日记（新版链路） | `pending-review` |
 
-## 接口详情
+## 4、接口详情
 
-### 1. `GET /health`
+### 4.1、`GET /health`
 
 | 项目 | 内容 |
 | --- | --- |
@@ -80,7 +80,7 @@
 
 Schema：`HealthResponse`
 
-### 2. `GET /ready`
+### 4.2、`GET /ready`
 
 | 项目 | 内容 |
 | --- | --- |
@@ -113,7 +113,7 @@ Schema：`HealthResponse`
 
 Schema：`ReadyResponse`
 
-### 3. `GET /diagnostics`
+### 4.3、`GET /diagnostics`
 
 | 项目 | 内容 |
 | --- | --- |
@@ -178,7 +178,7 @@ Schema：`ReadyResponse`
 
 Schema：`DiagnosticsResponse`
 
-### 4. `POST /agents/log-summary`
+### 4.4、`POST /agents/log-summary`
 
 | 项目 | 内容 |
 | --- | --- |
@@ -257,7 +257,7 @@ Schema：`LogSummaryRequest`
 
 Schema：`LogSummary`
 
-### 5. `POST /agents/intent/business`
+### 4.5、`POST /agents/intent/business`
 
 | 项目 | 内容 |
 | --- | --- |
@@ -332,7 +332,7 @@ Schema：`BusinessIntentRequest`
 
 Schema：`BusinessIntentResult`
 
-### 6. `POST /agents/intent/archive`
+### 4.6、`POST /agents/intent/archive`
 
 | 项目 | 内容 |
 | --- | --- |
@@ -397,7 +397,7 @@ Schema：`IntentRequest`
 
 Schema：`ArchiveIntentResult`
 
-### 7. `POST /agents/chat`
+### 4.7、`POST /agents/chat`
 
 | 项目 | 内容 |
 | --- | --- |
@@ -457,7 +457,7 @@ Schema：`ChatRequest`
 
 Schema：`ChatResponse`
 
-### 8. `POST /ocr/daily-logs-new`
+### 4.8、`POST /ocr/daily-logs-new`
 
 | 项目 | 内容 |
 | --- | --- |
@@ -547,11 +547,11 @@ Schema：`JournalReq`
 
 Schema：`JournalResponse`
 
-## Schema 附录
+## 5、Schema 附录
 
 以下是草案中引用的全部组件 Schema。
 
-### `ArchiveIntentResult`
+### 5.1、`ArchiveIntentResult`
 
 文件归档系统的意图识别结果；当前无聊天分流，理由始终简短。
 
@@ -562,7 +562,7 @@ Schema：`JournalResponse`
 | `reason` | string | 是 |  | minLength=1，maxLength=300 |  |
 | `needs_clarification` | boolean | 是 |  |  |  |
 
-### `BusinessIntentRequest`
+### 5.2、`BusinessIntentRequest`
 
 无状态业务意图请求；会话上下文由调用方传入。
 
@@ -577,7 +577,7 @@ Schema：`JournalResponse`
 | `pending_clarification` | `PendingClarification` 或 null | 否 |  |  |  |
 | `request_id` | string 或 null | 否 |  |  | 调用方幂等标识；本服务不持久化，仅供调用方关联 |
 
-### `BusinessIntentResult`
+### 5.3、`BusinessIntentResult`
 
 业务意图识别响应；status 区分跳转、澄清、聊天和未知。
 
@@ -591,7 +591,7 @@ Schema：`JournalResponse`
 | `options` | array<`BusinessIntentOption`> 或 null | 是 |  |  |  |
 | `catalog_version` | string | 是 |  | minLength=1，maxLength=64 |  |
 
-### `BusinessNavigationContext`
+### 5.4、`BusinessNavigationContext`
 
 调用方最近一次返回过的导航目标；只作为纠错上下文。
 
@@ -600,14 +600,14 @@ Schema：`JournalResponse`
 | `page` | enum（`supervision_diary`、`work_list`、`image_library`、`recognition_platform`、`business_management`、`workbench`） | 是 |  |  |  |
 | `action` | enum（`fill_supervision_log`、`fill_monthly_report`、`assign_monthly_report`、`view_supervision_log`、`fill_inspection_record`、`fill_standby_record`、`fill_environmental_log`、`fill_safety_log`、`approve_log`、`view_work_tasks`、`create_work_task`、`add_form`、`delete_supervision_form`、`view_approval_workflow`、`view_image_library`、`delete_image`、`create_album`、`delete_album`、`navigate_to_recognition`、`recognize_photo`、`add_personnel_configuration`、`delete_project_member`、`view_wbs`、`add_subproject`、`add_child_subproject`、`delete_subproject`、`delete_child_subproject`、`assign_wbs_personnel`、`navigate_to_work`、`view_today_tasks`、`view_pending_approvals`） 或 null | 否 |  |  |  |
 
-### `ChatMessage`
+### 5.5、`ChatMessage`
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
 | `role` | enum（`user`、`assistant`） | 是 |  |  | 消息角色，只允许 user 或 assistant。 |
 | `content` | string | 是 |  | minLength=1 | 消息正文，去除首尾空白后不能为空。 |
 
-### `ChatRequest`
+### 5.6、`ChatRequest`
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
@@ -616,14 +616,14 @@ Schema：`JournalResponse`
 | `history` | array<`ChatMessage`> | 是 |  |  | 当前用户当前会话的完整历史，首轮为[] |
 | `message` | string | 是 |  | minLength=1，maxLength=2000 |  |
 
-### `ChatResponse`
+### 5.7、`ChatResponse`
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
 | `reply` | string | 是 |  | minLength=1 | 完整聊天回答，不使用流式响应。 |
 | `model` | string | 是 |  |  | 本次调用实际使用的模型名称。 |
 
-### `IntentRequest`
+### 5.8、`IntentRequest`
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
@@ -633,7 +633,7 @@ Schema：`JournalResponse`
 | `text` | string | 是 |  | minLength=1，maxLength=2000 | 待识别的归档业务内容 |
 | `intents` | array<`JsonValue`> | 否 |  | maxItems=0 | 仅为兼容保留，必须省略或为[]；不支持调用方自定义分类 |
 
-### `JournalReq`
+### 5.9、`JournalReq`
 
 新版监理日志识别请求；与旧接口字段一致，实现链独立。
 
@@ -643,11 +643,11 @@ Schema：`JournalResponse`
 | `img` | string | 否 | `""` |  | base64 编码的图片数据；path 与 img 至少提供一个 |
 | `taskId` | string | 否 | `""` | maxLength=128 | 业务任务 ID，仅原样回显到 processed.taskId；不传则为 null |
 
-### `JsonValue`
+### 5.10、`JsonValue`
 
 类型：any
 
-### `LogSummary`
+### 5.11、`LogSummary`
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
@@ -658,7 +658,7 @@ Schema：`JournalResponse`
 | `pending_items` | array<string> | 是 |  | maxItems=8 | 仅输入明确的待办或进行中事项；空值及未记录合格率不产生待办，无则[]。 |
 | `issues` | array<string> | 是 |  | maxItems=8 | 输入原表明确的不合格结论、问题、风险或矛盾，必须保留；例如结论为宽度不合格则列出宽度不合格；未填合格率不属于质量问题，无则[]。 |
 
-### `LogSummaryRequest`
+### 5.12、`LogSummaryRequest`
 
 可变结构的工程表单 OCR JSON 或兼容文字，序列化后最多 4000 字符。
 
@@ -668,7 +668,7 @@ Schema：`JournalResponse`
 | `session_id` | string | 是 |  | minLength=1，maxLength=128 |  |
 | `content` | string 或 object | 是 |  |  | 工程表单 OCR 识别对象，内部字段和层级可变化；兼容通用日志文字或对象。非空，按 json.dumps(ensure_ascii=False) 序列化后最多4000字符；顶层不接受数组。 |
 
-### `PendingClarification`
+### 5.13、`PendingClarification`
 
 调用方保存的一级意图澄清状态；attempts 是已完成的澄清轮数。
 
@@ -677,7 +677,7 @@ Schema：`JournalResponse`
 | `page` | enum（`supervision_diary`、`work_list`、`image_library`、`recognition_platform`、`business_management`、`workbench`） | 是 |  |  |  |
 | `attempts` | integer | 是 |  | minimum=0.0，maximum=10.0 |  |
 
-### `ValidationErrorItem`
+### 5.14、`ValidationErrorItem`
 
 校验错误项。实际响应省略 input 与 ctx，避免回显原始身份、历史和输入。
 
@@ -687,7 +687,7 @@ Schema：`JournalResponse`
 | `loc` | array<string 或 integer> | 是 |  |  | 错误位置，例如 body、history、0、role。 |
 | `msg` | string | 是 |  |  | 可公开的错误说明。 |
 
-### `RequestError`
+### 5.15、`RequestError`
 
 422 统一错误响应。
 
@@ -695,7 +695,7 @@ Schema：`JournalResponse`
 | --- | --- | --- | --- | --- | --- |
 | `detail` | string 或 array<`ValidationErrorItem`> | 是 |  |  | 请求校验失败时为错误数组；输入或上下文超限时为字符串。 |
 
-### `ErrorDetail`
+### 5.16、`ErrorDetail`
 
 非校验类错误响应。
 
@@ -703,19 +703,19 @@ Schema：`JournalResponse`
 | --- | --- | --- | --- | --- | --- |
 | `detail` | string | 是 |  |  | 脱敏后的错误说明，不包含密钥、原始输入、身份、历史或上游错误正文。 |
 
-### `HealthResponse`
+### 5.17、`HealthResponse`
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
 | `status` | const `ok` | 是 |  |  | 进程存活标记。 |
 
-### `ReadyResponse`
+### 5.18、`ReadyResponse`
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
 | `status` | const `ready` | 是 |  |  | 配置模型已出现在上游模型列表。 |
 
-### `DependencyStatus`
+### 5.19、`DependencyStatus`
 
 单个依赖的导入检查结果。
 
@@ -726,7 +726,7 @@ Schema：`JournalResponse`
 | `version` | string | 否 |  |  |  |
 | `error` | string | 否 |  |  |  |
 
-### `CapabilityStatus`
+### 5.20、`CapabilityStatus`
 
 按能力分组的检查结果；不同能力的字段不完全相同。
 
@@ -750,7 +750,7 @@ Schema：`JournalResponse`
 | `assets` | object | 否 |  |  |  |
 | `error` | string | 否 |  |  |  |
 
-### `DiagnosticsData`
+### 5.21、`DiagnosticsData`
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 | --- | --- | --- | --- | --- | --- |
@@ -758,7 +758,7 @@ Schema：`JournalResponse`
 | `warnings` | array<string> | 是 |  |  | 非致命问题，例如模型目录为空但可写、表样目录缺失。 |
 | `caps` | object | 是 |  |  | 能力名 → 检查结果。能力名包括 PDF、Excel、图像、文字识别、模型推理、OpenCV 特征、推理设备和 OCR 资源。 |
 
-### `DiagnosticsResponse`
+### 5.22、`DiagnosticsResponse`
 
 本地依赖与资源诊断成功响应。
 
@@ -767,7 +767,7 @@ Schema：`JournalResponse`
 | `status` | const `200` | 是 |  |  | 业务成功状态，与 HTTP 200 一致；不是 HTTP 状态码的替代品。 |
 | `data` | `DiagnosticsData` | 是 |  |  |  |
 
-### `JournalResponse`
+### 5.23、`JournalResponse`
 
 用户于 2026-11-06 确认的 POST /ocr/daily-logs-new 成功响应；以 data/ocr/resources/daily-logs-output.json 为结构依据。
 

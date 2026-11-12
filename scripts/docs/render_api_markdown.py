@@ -240,7 +240,7 @@ def endpoint_section(
     spec: dict[str, Any], index: int, path: str, method: str, operation: dict[str, Any]
 ) -> list[str]:
     lines = [
-        f"### {index}. `{method.upper()} {path}`",
+        f"### 4.{index}、`{method.upper()} {path}`",
         "",
         "| 项目 | 内容 |",
         "| --- | --- |",
@@ -259,11 +259,13 @@ def endpoint_section(
 
 
 def schema_appendix(spec: dict[str, Any]) -> list[str]:
-    lines = ["## Schema 附录", "", "以下是草案中引用的全部组件 Schema。", ""]
-    for name, schema in spec.get("components", {}).get("schemas", {}).items():
+    lines = ["## 5、Schema 附录", "", "以下是草案中引用的全部组件 Schema。", ""]
+    for index, (name, schema) in enumerate(
+        spec.get("components", {}).get("schemas", {}).items(), start=1
+    ):
         resolved = resolve(spec, schema)
         description = resolved.get("description", "")
-        lines.extend([f"### `{name}`", ""])
+        lines.extend([f"### 5.{index}、`{name}`", ""])
         if description:
             lines.extend([description, ""])
         rows = field_rows(spec, schema)
@@ -295,7 +297,7 @@ def render(spec: dict[str, Any], source: Path) -> str:
         "> 权威字段以 OpenAPI 为准；正式契约批准前，本文件中的 `pending-review` 操作不能作为"
         "实现授权。",
         "",
-        "## 基本信息",
+        "## 1、基本信息",
         "",
         "| 项目 | 内容 |",
         "| --- | --- |",
@@ -308,14 +310,14 @@ def render(spec: dict[str, Any], source: Path) -> str:
         "",
         info.get("description", ""),
         "",
-        "## 通用错误响应",
+        "## 2、通用错误响应",
         "",
         "`400`、`404`、`502`、`503`、`504` 使用 `ErrorDetail`；`422` 使用 `RequestError`。"
         "各接口只列状态码和含义，字段结构见下表，不重复展开。",
         "",
         *field_table(spec, {"$ref": "#/components/schemas/ErrorDetail"}, "`ErrorDetail`"),
         *field_table(spec, {"$ref": "#/components/schemas/RequestError"}, "`RequestError`"),
-        "## 接口索引",
+        "## 3、接口索引",
         "",
         "| # | 方法与路径 | 摘要 | 状态 |",
         "| --- | --- | --- | --- |",
@@ -330,7 +332,7 @@ def render(spec: dict[str, Any], source: Path) -> str:
                 f"| {index} | `{method.upper()} {path}` | {cell(operation.get('summary', ''))} | "
                 f"`{operation.get('x-contract-status', '')}` |"
             )
-    lines.extend(["", "## 接口详情", ""])
+    lines.extend(["", "## 4、接口详情", ""])
     for index, (path, method, operation) in enumerate(entries, start=1):
         lines.extend(endpoint_section(spec, index, path, method, operation))
     lines.extend(schema_appendix(spec))

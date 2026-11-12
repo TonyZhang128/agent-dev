@@ -7,7 +7,7 @@
 | [response.schema.json](response.schema.json) | 正式响应契约，与 `ArchiveIntentResult.model_json_schema()`、FastAPI OpenAPI 一致 |
 | [response.example.json](response.example.json) | 单个 `A` 类响应参考 |
 
-## 固定返回字段
+## 1、固定返回字段
 
 | 字段 | 类型 | 规则 |
 | --- | --- | --- |
@@ -18,13 +18,13 @@
 
 四个字段全部必填，禁止额外字段；不返回 `null`，不能把分数、布尔值写成字符串。
 
-## 分类与兜底
+## 2、分类与兜底
 
 归档端当前使用 `A`、`B`、`C`、`D` 四个占位分类，具体业务含义由服务端在 [profiles.py](../../../app/agents/profiles.py) 中补充。分类候选只由服务端提供，请求中的 `intents` 只能省略或为 `[]`；任何非空列表都返回 `422`，不会在推理前改写候选。
 
 模型返回 `unknown`、分数低于 `0.65`，或 `needs_clarification=true` 时，服务统一返回 `intent="unknown"`、`needs_clarification=true`，保留模型分数和判断依据。归档端没有 `chat` 分类，问候或一般交流不会触发聊天调用。
 
-## 请求示例
+## 3、请求示例
 
 ```zsh
 curl --noproxy '*' -fsS http://127.0.0.1:8309/agents/intent/archive \

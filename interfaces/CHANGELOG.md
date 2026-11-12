@@ -2,27 +2,27 @@
 
 只记录对外接口契约的变化。运行时行为、提示词和内部重构不在此记录。
 
-## 2026-11-12 — 算法服务名称统一（用户已确认）
+## 1、2026-11-12 — 算法服务名称统一（用户已确认）
 
 - 用户确认完整服务名称“公路工程智能算法服务”、简称“算法服务”，程序／容器标识为 `agent-service`；项目标题“公路工程业务智能体层”保留。
 - OpenAPI `info.title` 从“公路工程业务智能体”调整为“公路工程智能算法服务”，草案介绍文字同步；版本保持 `0.1.0`，不变更路径、方法、请求／响应字段、状态码或业务语义。
 - 本次命名确认不代表整包 OpenAPI 草案已获批准；已有响应子契约保持不变。
 
-## 2026-11-08 — mainWork 规则优先、全文生成兜底（用户已确认）
+## 2、2026-11-08 — mainWork 规则优先、全文生成兜底（用户已确认）
 
 - 用户明确允许整理表达、合并断句和去标题，但要求保留全部业务事实与关键数据，不摘要、不补充事实。
 - 先从合并后的mainWork按施工情况、旁站情况、巡视情况关键词提取；规则不足时由Agent基于全文直接生成三个字段，不再返回unit_id分类计划。
 - 替代旧版逐字分配及保留标题要求，正式行为依据见 `journal/main-work-processing.md`。输出字段/类型、请求及mainWork之外字段不变；标题可能不再出现在值中。
 - 保留现有table失败400及mainWork失败502，空/不存在类别仍可为null，不承诺模型故障或不可辨输入也产生虚构成功。
 
-## 2026-11-07 — 监理日记无可靠表格时终止（用户已确认）
+## 3、2026-11-07 — 监理日记无可靠表格时终止（用户已确认）
 
 - 用户明确回复“同意，按上述 400 语义执行”。`POST /ocr/daily-logs-new` 无通过模板结构核验的 table，或无法消解多个候选时，在 OCR 和 mainWork 分类之前终止。
 - 返回 HTTP `400` 和 `{"detail":"未检测到监理日志表格，请重新拍摄"}`，正式响应子契约为 `journal/table-not-found.schema.json`。
 - 删除纸张/整图回退以及定位失败后的空字段200；真实合法空白表格仍可成功返回空字段。
 - 成功 Schema、请求、taskId 和既有 mainWork 拆分失败502不变；调用方需对新增400条件提示重新拍摄。本确认不提升无关接口或整包OpenAPI。
 
-## 2026-11-07 — 草案移除未启用的 OCR/WBS 接口（用户已确认）
+## 4、2026-11-07 — 草案移除未启用的 OCR/WBS 接口（用户已确认）
 
 - 从待确认草案中移除 `POST /ocr/recognize`、`POST /ocr/daily-logs`、
   `POST /ocr/jianbiao`、`POST /ocr/fill`、`GET /ocr/blank/{form}.png`、
@@ -35,7 +35,7 @@
   接口草案并完成审批，不能直接恢复路由。
 - 同时移除了仅被这些接口引用的组件 Schema，避免草案保留不可达模型。
 
-## 2026-11-07 — 新版监理日志 mainWork 字段拆分（待确认）
+## 5、2026-11-07 — 新版监理日志 mainWork 字段拆分（待确认）
 
 - `POST /ocr/daily-logs-new` 的 `data.fields.mainWork.construction`、`witness`、
   `patrol` 由“整段 `mainWork` 同时回填”改为“按业务含义拆分后的原文”。
@@ -50,7 +50,7 @@
 - 调用方影响：原来读取三个相同整段值的调用方需要按类别读取；同一字段可能为
   `null`；需要处理新增的 `502`。
 
-## 2026-11-06 — 新版监理日志成功响应对齐后端约定（用户已确认）
+## 6、2026-11-06 — 新版监理日志成功响应对齐后端约定（用户已确认）
 
 - 用户指定 `data/ocr/resources/daily-logs-output.json` 为 `POST /ocr/daily-logs-new`
   的成功响应格式；已确认的响应子契约保存在 `journal/response.schema.json`。
@@ -62,7 +62,7 @@
 - 调用方直接读取 `data.common` 和 `data.fields`，不再读取 `data.processed`。
   本次只确认新版接口的成功响应，未批准整包 OpenAPI；旧接口和错误响应保持原约定。
 
-## 2026-11-05 — 监理日记新版识别链路（待确认）
+## 7、2026-11-05 — 监理日记新版识别链路（待确认）
 
 - 新增 `POST /ocr/daily-logs-new`，作为新版监理日志识别链路的独立入口；
   请求字段与 `/ocr/daily-logs` 相同（`path`、`img`、可选 `taskId`），成功响应沿用
@@ -75,7 +75,7 @@
 - 操作状态为 `pending-review`；未提升为正式契约。
 - 调用方影响：新增接口，现有调用方不受影响；启用新链路需显式改调用路径。
 
-## 2026-11-05 — 监理日记业务结构（用户已确认）
+## 8、2026-11-05 — 监理日记业务结构（用户已确认）
 
 - `POST /ocr/daily-logs` 的 `processed` 由固定 `{}` 改为业务结构：
   `taskId`、`documentType`（固定 `supervision_diary`）、`common`、`fields`；
@@ -90,7 +90,7 @@
 - 调用方影响：未使用 `processed` 的调用方不受影响；使用 `supervision_work` 的调用方
   需改用 `witness`/`patrol`。
 
-## 2026-11-04 — 0.1.0-review.2（diagnostics 端点，用户已确认）
+## 9、2026-11-04 — 0.1.0-review.2（diagnostics 端点，用户已确认）
 
 - `GET /health/deps` 更名为一级路由 `GET /diagnostics`，归入系统级接口；旧路径不再注册，
   仍为 `pending-review` 操作。
@@ -101,7 +101,7 @@
 - `/health`、`/ready` 契约不变。
 - 已知调用方影响：Java `DocsvcClient` 原调用 `/health/deps`，必须同步改为 `/diagnostics`。
 
-## 2026-11-02 — intent-business 层级意图改造（用户已确认）
+## 10、2026-11-02 — intent-business 层级意图改造（用户已确认）
 
 - 业务端意图接口由 `POST /agents/intent` 替换为 `POST /agents/intent/business`；
   旧路径不再注册。当前没有旧调用方，不做兼容别名。
@@ -116,14 +116,14 @@
   `catalog_version` 为 JSON 内容哈希。
 - 归档端 `POST /agents/intent/archive` 和自由对话 `POST /agents/chat` 契约不变。
 
-## 2026-11-02 — 0.1.0-review.1（第一版评审稿，待确认）
+## 11、2026-11-02 — 0.1.0-review.1（第一版评审稿，待确认）
 
 - 将完整 OpenAPI 草案整理为第一版评审稿，补充中文操作摘要。
 - 新增由契约自动生成的 `interfaces/API.md`，用于人工审阅；它不是独立契约。
 - 契约状态仍为 `draft-pending-review`，8 个 OCR/WBS 操作仍为 `pending-review`，未提升为正式契约。
 - 未修改任何运行时接口。
 
-## 2026-11-02 — 0.1.0-draft.1（待确认）
+## 12、2026-11-02 — 0.1.0-draft.1（待确认）
 
 - 建立 `interfaces/openapi/`、`interfaces/drafts/`、`interfaces/guides/` 目录和接口清单。
 - 从 `app.main:app` 导出 14 个 HTTP 操作的 OpenAPI 3.1 草案。

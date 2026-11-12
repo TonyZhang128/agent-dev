@@ -4,7 +4,7 @@
 
 需要容器化部署时，使用 [Docker 生产部署](docker.md)（`Dockerfile`、`Dockerfile.vllm`、`compose.prod.yml`）；本文档描述直接在宿主机运行脚本的部署方式。
 
-## 1. 准备算法服务
+## 1、准备算法服务
 
 在目标 Linux 检查 `uv --version`，缺少时按 [uv 官方安装说明](https://docs.astral.sh/uv/getting-started/installation/)准备工具，然后在仓库根目录执行：
 
@@ -30,11 +30,11 @@ LLM_REASONING_EFFORT=
 已有部署若只配置密钥，升级后需要显式补充开关。启用后本次业务输入会发送到云端，
 是否启用按数据合规要求决定。
 
-## 2. 准备独立模型推理服务
+## 2、准备独立模型推理服务
 
 先通过 `nvidia-smi` 确认设备及驱动可见。参考 [vLLM GPU 安装说明](https://docs.vllm.ai/en/latest/getting_started/installation/gpu/)和 [Qwen3.5 部署配方](https://github.com/vllm-project/recipes/blob/main/Qwen/Qwen3.5.md)，在业务项目之外安装适配目标 GPU 的固定版本，并准备兼容权重。显存、量化、上下文、张量并行参数需按服务器确定。
 
-Qwen3.5-9B 的 GGUF 权重可用仓库脚本在业务环境下载，不需要 GPU：`uv run --locked python -m scripts.models.download_qwen35_gguf`。它把 `.gguf` 与 `config.json`、tokenizer 组装到同一目录；GGUF 的 `VLLM_MODEL_PATH` 必须指向 `.gguf` 文件而不是目录，详见 [Docker 生产部署 · 准备权重](docker.md#2-准备权重)。
+Qwen3.5-9B 的 GGUF 权重可用仓库脚本在业务环境下载，不需要 GPU：`uv run --locked python -m scripts.models.download_qwen35_gguf`。它把 `.gguf` 与 `config.json`、tokenizer 组装到同一目录；GGUF 的 `VLLM_MODEL_PATH` 必须指向 `.gguf` 文件而不是目录，详见 [Docker 生产部署 · 准备权重](docker.md#2准备权重)。
 
 算法服务的 RapidOCR ONNX 模型同样可以预置：`uv run --locked python -m scripts.models.download_ocr_models --root <目录>`，再把 `OCR_MODEL_ROOT` 指向该目录。离线主机可先在有网环境下载后拷贝整个目录，用 `--check` 校验；不预置时首次真实识别才会联网下载。
 
@@ -60,7 +60,7 @@ bash scripts/prod/start-vllm.sh \
 
 此 Qwen3.5 示例使用 [官方关闭思考配置](https://github.com/vllm-project/recipes/blob/main/Qwen/Qwen3.5.md#configuration-tips)，需匹配所安装 vLLM 版本。默认监听 `127.0.0.1:8001`、模型名称 `highway-agent`。额外 CLI 参数原样传递；修改端口或 `--served-model-name` 后必须同步修改业务 `.env`。已有部署从旧模型名切换时，需重启模型推理服务并同步业务 `.env` 的 `LLM_MODEL`，否则 `/ready` 和推理会因模型名不匹配失败。不要使用 `--api-key` 传入真实密钥。
 
-## 3. 启动及托管算法服务
+## 3、启动及托管算法服务
 
 ```bash
 bash scripts/prod/start-api.sh
@@ -108,7 +108,7 @@ journalctl -u agent-service -n 100 --no-pager
 
 模型推理服务可晚于算法服务就绪，`/health` 仍检查进程存活，`/ready` 返回模型可用状态。默认仅绑定回环地址；如算法服务和模型推理服务分机部署，配置模型监听地址、网络访问限制及业务 `LLM_BASE_URL`，外部业务入口按部署平台配置鉴权和 TLS。
 
-## 4. 真实验收
+## 4、真实验收
 
 算法服务与模型推理服务均运行后，在拥有 NVIDIA 设备的部署主机执行：
 

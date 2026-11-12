@@ -2,7 +2,7 @@
 
 本目录保存 AI 根据当前实现归纳、但尚未获得用户批准的接口契约。
 
-## 当前评审稿（0.1.0-review.2）
+## 1、当前评审稿（0.1.0-review.2）
 
 [fastapi.openapi.json](fastapi.openapi.json) 是当前应用 15 个 HTTP 操作的完整 OpenAPI 3.1
 草案，由 `scripts/docs/openapi_contract.py` 从 `app.main:app` 生成并补充。便于阅读的
@@ -20,14 +20,14 @@
 草案由 `scripts/docs/openapi_contract.py` 生成，不要手工修改 JSON。需要调整说明或
 Schema 时修改该脚本后重新导出，使变更可审查、可复现。
 
-## 需要用户确认的事项
+## 2、需要用户确认的事项
 
-### 1. 是否确认完整 OpenAPI 基线
+### 2.1、是否确认完整 OpenAPI 基线
 
 确认后，`interfaces/drafts/fastapi.openapi.json` 提升为
 `interfaces/openapi/fastapi.openapi.json`，作为接口唯一权威来源。
 
-### 2. 是否确认以下 9 个 `pending-review` 操作
+### 2.2、是否确认以下 9 个 `pending-review` 操作
 
 | 操作 | 需要确认的内容 |
 | --- | --- |
@@ -41,14 +41,14 @@ Schema 时修改该脚本后重新导出，使变更可审查、可复现。
 | `GET /ocr/sheet/{form}` | `field`、`name`、`rect`、`behavior`、`kind` |
 | `POST /wbs/draft` | `units` 递归节点、`count`、`drawings` 和桥梁可选字段 |
 
-### 3. 是否确认统一错误响应
+### 2.3、是否确认统一错误响应
 
 - 422：请求校验失败为 `detail: [{type, loc, msg}]`；输入/上下文超限为 `detail: "..."`。
 - 400/404/502/503/504：`detail: "..."`。
 - 是否允许 422 这一种状态同时承载两种 `detail` 形态；若不允许，需要拆分状态码或包装，
   这属于契约变更，必须另行批准。
 
-### 4. 是否确认响应包装差异
+### 2.4、是否确认响应包装差异
 
 - `/agents/*` 直接返回业务对象。
 - OCR/WBS 返回 `{"status":200,"data":...}`。
@@ -56,12 +56,12 @@ Schema 时修改该脚本后重新导出，使变更可审查、可复现。
 
 当前草案如实记录现有差异，没有统一包装。若要求统一，属于破坏性契约变更。
 
-### 5. 是否确认未实现的接口不在本次范围
+### 2.5、是否确认未实现的接口不在本次范围
 
 草案没有描述认证、用户/会话 CRUD、审批、订单修改、通知发送、异步任务、分页、文件上传、
 流式聊天等未实现能力。
 
-## 批准方式
+## 3、批准方式
 
 请明确回复上述事项的批准或修改意见。示例：
 
@@ -83,7 +83,7 @@ Schema 时修改该脚本后重新导出，使变更可审查、可复现。
 用户未回复、未明确批准或仅要求继续开发，均不代表同意修改契约。未获批准时保留现有契约，
 可以继续处理不依赖该变更的其他任务。
 
-## 重新生成
+## 4、重新生成
 
 ```zsh
 uv run --locked python -m scripts.docs.export_openapi
